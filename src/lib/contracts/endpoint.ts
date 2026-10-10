@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /**
  * Who may call an endpoint.
@@ -8,7 +8,7 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  * - `public`: anyone. The handler must scope data by something else (for example a view token)
  *   and must never return personal contact data.
  */
-export type EndpointAccess = 'actor' | 'public';
+type EndpointAccess = 'actor' | 'public';
 
 /**
  * One HTTP endpoint, described once and shared by:
@@ -35,16 +35,14 @@ export function defineEndpoint<const T extends EndpointDefinition>(definition: T
 }
 
 /** Path params as a caller provides them. */
-export type EndpointParamsInput<E> = E extends { params: infer S extends z.ZodType }
+type EndpointParamsInput<E> = E extends { params: infer S extends z.ZodType }
   ? z.input<S>
   : undefined;
 /** Query as a caller provides it (numbers may still be strings, single values may be arrays). */
-export type EndpointQueryInput<E> = E extends { query: infer S extends z.ZodType }
+type EndpointQueryInput<E> = E extends { query: infer S extends z.ZodType }
   ? z.input<S>
   : undefined;
-export type EndpointBodyInput<E> = E extends { body: infer S extends z.ZodType }
-  ? z.input<S>
-  : undefined;
+type EndpointBodyInput<E> = E extends { body: infer S extends z.ZodType } ? z.input<S> : undefined;
 
 /** Parsed (validated, defaulted) values a route handler receives. */
 export type EndpointParams<E> = E extends { params: infer S extends z.ZodType }

@@ -69,7 +69,6 @@ export async function getMemberPoints(
     findTransactionsPage(
       scope,
       { ...base, ...period, status: query.status },
-      { sort: 'workDate', order: 'desc' },
       pageOffset(query.page, query.pageSize),
     ),
     sumActiveAmount(scope, base),

@@ -6,7 +6,7 @@ import 'server-only';
  * Never log personal data (phone numbers, emails) — log ids instead.
  */
 
-type Level = 'debug' | 'info' | 'warn' | 'error';
+type Level = 'warn' | 'error';
 type Context = Record<string, unknown>;
 
 function serialize(value: unknown): unknown {
@@ -20,17 +20,14 @@ function write(level: Level, message: string, context: Context = {}): void {
   const fields = Object.fromEntries(
     Object.entries(context).map(([key, value]) => [key, serialize(value)]),
   );
-  const sink = level === 'debug' ? console.log : console[level];
   if (process.env.NODE_ENV === 'production') {
-    sink(JSON.stringify({ level, time: new Date().toISOString(), message, ...fields }));
+    console[level](JSON.stringify({ level, time: new Date().toISOString(), message, ...fields }));
   } else {
-    sink(`[${level}] ${message}`, Object.keys(fields).length > 0 ? fields : '');
+    console[level](`[${level}] ${message}`, Object.keys(fields).length > 0 ? fields : '');
   }
 }
 
 export const logger = {
-  debug: (message: string, context?: Context) => write('debug', message, context),
-  info: (message: string, context?: Context) => write('info', message, context),
   warn: (message: string, context?: Context) => write('warn', message, context),
   error: (message: string, context?: Context) => write('error', message, context),
 };

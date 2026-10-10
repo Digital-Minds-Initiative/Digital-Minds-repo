@@ -46,7 +46,7 @@ export function clubIdsWithLedCommittees(actor: Actor): string[] {
   );
 }
 
-export function isOfficerOf(actor: Actor, clubId: string): boolean {
+function isOfficerOf(actor: Actor, clubId: string): boolean {
   return actor.memberships.some(
     (membership) => membership.clubId === clubId && membership.role === 'CLUB_OFFICER',
   );

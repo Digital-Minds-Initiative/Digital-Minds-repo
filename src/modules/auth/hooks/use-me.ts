@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/api-client';
 
 import { meEndpoint } from '../contracts';
 
-export const meQueryKey = ['me'] as const;
+const meQueryKey = ['me'] as const;
 
 /** The signed-in user and their access. Errors with ApiError(401) when nobody is signed in. */
 export function useMe() {

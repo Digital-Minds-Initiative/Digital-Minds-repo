@@ -31,7 +31,7 @@ export function mockError(code: ErrorCode, message: string = code): MockError {
   return new MockError(code, message);
 }
 
-export interface MockRequestContext<E> {
+interface MockRequestContext<E> {
   params: EndpointParams<E>;
   query: EndpointQuery<E>;
   body: EndpointBody<E>;

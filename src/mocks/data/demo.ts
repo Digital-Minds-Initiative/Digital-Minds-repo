@@ -10,7 +10,7 @@
 
 export type DemoClubKey = 'computing' | 'tuwaiq';
 
-export interface DemoCommittee {
+interface DemoCommittee {
   key: string;
   name: string;
   description: string;
@@ -57,7 +57,7 @@ export const demoClubs: readonly DemoClub[] = [
 export type DemoPersona =
   'admin' | 'officer' | 'lead' | 'mixed' | 'member' | 'unregistered' | 'removed' | 'no-access';
 
-export interface DemoMembership {
+interface DemoMembership {
   club: DemoClubKey;
   /** One of the club's membership type names. */
   type: string;

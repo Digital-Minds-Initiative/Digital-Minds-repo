@@ -12,6 +12,7 @@ Digital Minds — platform for the tech student clubs at Umm Al-Qura University.
 pnpm dev                    # app on :3000 (DB via `docker compose up -d`)
 pnpm typecheck              # next typegen + tsc
 pnpm lint                   # ESLint incl. architecture boundaries (slow-ish: type-aware)
+pnpm knip                   # unused files, exports, dependencies (CI runs it; config: knip.jsonc)
 pnpm test                   # unit tests (no DB)
 pnpm test:integration       # needs Docker DB; uses digital_minds_test (auto-created, wiped)
 pnpm build                  # production build

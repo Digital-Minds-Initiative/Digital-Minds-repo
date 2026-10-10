@@ -41,7 +41,7 @@ import {
  *   export const GET = defineRoute(listMembersEndpoint, ({ actor, query }) => listMembers(actor, query));
  */
 
-export interface HandlerContext<E extends EndpointDefinition> {
+interface HandlerContext<E extends EndpointDefinition> {
   actor: E['access'] extends 'actor' ? Actor : null;
   params: EndpointParams<E>;
   query: EndpointQuery<E>;
@@ -51,7 +51,7 @@ export interface HandlerContext<E extends EndpointDefinition> {
 }
 
 /** Return `withStatus(503, data)` from a handler to override the endpoint's success status. */
-export class WithStatus<T> {
+class WithStatus<T> {
   constructor(
     readonly status: number,
     readonly data: T,
@@ -65,7 +65,7 @@ export function withStatus<T>(status: number, data: T): WithStatus<T> {
 type HandlerReturn<E extends EndpointDefinition> =
   EndpointResult<E> | WithStatus<EndpointResult<E>>;
 
-export type RouteHandler<E extends EndpointDefinition> = (
+type RouteHandler<E extends EndpointDefinition> = (
   context: HandlerContext<E>,
 ) => Promise<HandlerReturn<E>>;
 

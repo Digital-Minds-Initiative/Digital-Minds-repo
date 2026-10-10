@@ -22,7 +22,7 @@ import type { MemberSortField, MemberStatus } from '../contracts';
 // ─── Read model ──────────────────────────────────────────────
 
 /** `nested` limits the member's committee list to committees the actor may see. */
-export function memberSelect(nested: CommitteeMembershipScope) {
+function memberSelect(nested: CommitteeMembershipScope) {
   return {
     id: true,
     role: true,

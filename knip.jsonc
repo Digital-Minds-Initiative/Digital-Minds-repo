@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    // Public API by design: phase-one contracts are written before their routes (and will be
+    // shared with the mobile app), UI primitives export their full Radix surface, and
+    // i18n/navigation is the documented replacement for next/link and next/navigation.
+    "src/modules/*/contracts.ts",
+    "src/components/ui/*.tsx",
+    "src/i18n/navigation.ts",
+    // Wired through the `server-only` alias in vitest.config.ts, which knip does not follow.
+    "tests/setup/empty-module.ts",
+  ],
+  // knip lists the Prisma schema as a project file; it is read by the Prisma CLI, not imported.
+  "ignore": ["prisma/schema.prisma"],
+  // Imported by the generated Prisma client (src/server/db/generated), which knip ignores.
+  "ignoreDependencies": ["@prisma/client"],
+}

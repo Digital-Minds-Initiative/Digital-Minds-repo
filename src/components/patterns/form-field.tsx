@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 /** Spread these onto the control so it is labelled and announces its errors. */
-export interface FieldControlProps {
+interface FieldControlProps {
   id: string;
   'aria-invalid': boolean | undefined;
   'aria-describedby': string | undefined;
@@ -107,7 +107,7 @@ export function FormField<TValues extends FieldValues, TName extends FieldPath<T
  * Translates a validation error. Contracts use message keys for custom rules (`date_in_future`);
  * built-in Zod checks are translated by issue code (`too_small`, `invalid_format`, …).
  */
-export function useValidationMessage(): (error: { type?: string; message?: string }) => string {
+function useValidationMessage(): (error: { type?: string; message?: string }) => string {
   const t = useTranslations('common.validation');
   type Key = Parameters<typeof t>[0];
   return (error) => {

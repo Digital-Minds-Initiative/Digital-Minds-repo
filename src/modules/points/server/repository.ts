@@ -11,7 +11,7 @@ import { ConflictError } from '@/server/errors';
  * scope from src/server/authz and ANDs it into the query.
  */
 
-export const transactionSelect = {
+const transactionSelect = {
   id: true,
   amount: true,
   reason: true,
@@ -42,11 +42,9 @@ export type TransactionRow = Prisma.PointTransactionGetPayload<{
 export interface TransactionFilters {
   memberId?: string;
   committeeIds?: string[];
-  clubId?: string;
   status?: 'active' | 'cancelled' | 'all';
   from?: string;
   to?: string;
-  search?: string;
 }
 
 function transactionWhere(
@@ -57,7 +55,6 @@ function transactionWhere(
   if (filters.memberId)
     conditions.push({ committeeMembership: { membershipId: filters.memberId } });
   if (filters.committeeIds?.length) conditions.push({ committeeId: { in: filters.committeeIds } });
-  if (filters.clubId) conditions.push({ clubId: filters.clubId });
   if (filters.status === 'active') conditions.push({ status: 'ACTIVE' });
   if (filters.status === 'cancelled') conditions.push({ status: 'CANCELLED' });
   if (filters.from || filters.to) {
@@ -68,8 +65,6 @@ function transactionWhere(
       },
     });
   }
-  if (filters.search)
-    conditions.push({ reason: { contains: filters.search, mode: 'insensitive' } });
   return { AND: conditions };
 }
 
@@ -97,10 +92,10 @@ export async function findTransaction(
   });
 }
 
+/** Newest work date first. */
 export async function findTransactionsPage(
   scope: PointTransactionScope,
   filters: TransactionFilters,
-  order: { sort: 'workDate' | 'createdAt' | 'amount'; order: 'asc' | 'desc' },
   page: { skip: number; take: number },
 ): Promise<{ rows: TransactionRow[]; total: number }> {
   const where = transactionWhere(scope, filters);
@@ -111,7 +106,7 @@ export async function findTransactionsPage(
     db.pointTransaction.findMany({
       where,
       select: transactionSelect,
-      orderBy: [{ [order.sort]: order.order }, { createdAt: 'desc' }, { id: 'asc' }],
+      orderBy: [{ workDate: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
       ...page,
     }),
   ]);

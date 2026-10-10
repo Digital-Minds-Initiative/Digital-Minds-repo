@@ -201,6 +201,7 @@ Restart `pnpm dev` after changing it. Pick an account from **«حساب التج
 | `pnpm start`            | Serves the production build (needs `DEV_ACTOR_SWITCHER=false`).                                     |
 | `pnpm lint`             | ESLint, including the architecture boundary rules. `pnpm lint:fix` fixes what it can.               |
 | `pnpm format`           | Formats everything with Prettier. `pnpm format:check` only checks.                                  |
+| `pnpm knip`             | Finds unused files, exports and dependencies (configured in `knip.jsonc`; runs in CI).              |
 | `pnpm typecheck`        | Generates Next.js route types, then runs the TypeScript compiler.                                   |
 | `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                 |
 | `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).      |
@@ -279,7 +280,7 @@ ESLint enforces 1–6 where possible (boundary rules, `server-only`, Tailwind cl
 
 Short version (full walkthrough with code in [docs/architecture.md → Adding a feature module](docs/architecture.md#adding-a-feature-module)):
 
-- [ ] Create `src/modules/<name>/` with `contracts.ts`, `index.ts`, `server/{index,service,repository,policies}.ts`, `components/`, `hooks/`, `mocks/index.ts`, `messages/ar.json`.
+- [ ] Create `src/modules/<name>/` with `contracts.ts`, `server/{index,service,repository,policies}.ts`, `mocks/index.ts`, and — once it has UI — `index.ts`, `components/`, `hooks/`, `messages/ar.json`.
 - [ ] Define endpoints in `contracts.ts` with `defineEndpoint` (Zod for params, query, body, response).
 - [ ] Add any new scope or role predicate to `src/server/authz` (with unit tests), and module rules to `server/policies.ts`.
 - [ ] Repository functions take a scope; services take the `Actor` first.

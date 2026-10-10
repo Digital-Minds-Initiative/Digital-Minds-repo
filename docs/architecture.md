@@ -66,7 +66,7 @@ Code is organised by feature. A module owns its contracts, server logic, UI, moc
 ```text
 src/modules/members/
   contracts.ts        Zod schemas + endpoint definitions + types (shared by server, browser, later mobile)
-  index.ts            public UI surface: components and hooks
+  index.ts            public UI surface: components and hooks (only once the module has UI)
   server/
     index.ts          public server surface: service functions (server-only)
     service.ts        business logic — every function takes the Actor first

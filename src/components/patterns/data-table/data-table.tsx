@@ -34,7 +34,7 @@ const EMPTY_SELECTION: RowSelectionState = {};
 const EMPTY_VISIBILITY: ColumnVisibilityState = {};
 const SELECT_COLUMN_ID = '__select';
 
-export interface DataTableProps<TData extends RowData> {
+interface DataTableProps<TData extends RowData> {
   /** Stable (module-level or memoised) column definitions. Build them with createDataTableColumnHelper. */
   columns: ReadonlyArray<DataTableColumn<TData>>;
   /** The current page of rows, exactly as the API returned it. */

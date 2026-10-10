@@ -1,11 +1,5 @@
-export { DataTable, type DataTableProps } from './data-table';
-export {
-  createDataTableColumnHelper,
-  dataTableFeatures,
-  type DataTableColumn,
-  type DataTableColumnMeta,
-  type DataTableFeatures,
-} from './features';
+export { DataTable } from './data-table';
+export { createDataTableColumnHelper, type DataTableColumn } from './features';
 export type {
   ColumnVisibilityState,
   OnChangeFn,

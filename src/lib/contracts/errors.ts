@@ -8,7 +8,7 @@ import { z } from 'zod';
  * `code` is stable and meant for programs (the UI translates it); `message` is English and meant
  * for developers. `issues` is present only for VALIDATION_FAILED.
  */
-export const errorCodes = [
+const errorCodes = [
   'BAD_REQUEST',
   'UNAUTHENTICATED',
   'FORBIDDEN',
@@ -18,7 +18,7 @@ export const errorCodes = [
   'INTERNAL',
 ] as const;
 
-export const errorCodeSchema = z.enum(errorCodes);
+const errorCodeSchema = z.enum(errorCodes);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
 export const httpStatusByErrorCode: Record<ErrorCode, number> = {
@@ -31,7 +31,7 @@ export const httpStatusByErrorCode: Record<ErrorCode, number> = {
   INTERNAL: 500,
 };
 
-export const validationIssueSchema = z.object({
+const validationIssueSchema = z.object({
   /** First segment is where the problem is (`params`, `query` or `body`), then the field path. */
   path: z.array(z.union([z.string(), z.number()])),
   /** Machine-readable: a Zod issue code (`too_small`, …) or a domain code (`email_domain_not_allowed`). */

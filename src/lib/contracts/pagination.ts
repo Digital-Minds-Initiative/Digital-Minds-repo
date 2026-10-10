@@ -10,12 +10,12 @@ import { queryInt } from './query';
  * (not instead of it) when an endless feed needs it.
  */
 
-export const PAGE_SIZE_DEFAULT = 20;
-export const PAGE_SIZE_MAX = 100;
+const PAGE_SIZE_DEFAULT = 20;
+const PAGE_SIZE_MAX = 100;
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
-export const sortOrderSchema = z.enum(['asc', 'desc']);
-export type SortOrder = z.infer<typeof sortOrderSchema>;
+const sortOrderSchema = z.enum(['asc', 'desc']);
+type SortOrder = z.infer<typeof sortOrderSchema>;
 
 /** Spread into a list query object: `z.object({ ...paginationShape, ... })`. */
 export const paginationShape = {

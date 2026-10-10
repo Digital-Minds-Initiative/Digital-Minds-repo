@@ -13,7 +13,7 @@ import { generateDemoTransactions } from './data/points';
  * integration tests.
  */
 
-export interface MockUser {
+interface MockUser {
   id: string;
   key: string;
   publicId: string;
@@ -29,20 +29,20 @@ export interface MockUser {
   persona: DemoPersona;
 }
 
-export interface MockClub {
+interface MockClub {
   id: string;
   key: DemoClubKey;
   slug: string;
   name: string;
 }
 
-export interface MockCommittee {
+interface MockCommittee {
   id: string;
   clubId: string;
   name: string;
 }
 
-export interface MockMembershipType {
+interface MockMembershipType {
   id: string;
   clubId: string;
   name: string;
@@ -60,7 +60,7 @@ export interface MockMembership {
   committees: Array<{ committeeId: string; role: 'MEMBER' | 'LEAD'; removed: boolean }>;
 }
 
-export interface MockTransaction {
+interface MockTransaction {
   id: string;
   membershipId: string;
   clubId: string;

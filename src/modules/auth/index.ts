@@ -2,4 +2,4 @@
 // Contracts: ./contracts.ts · Server: ./server/index.ts · Mocks: ./mocks/index.ts
 export { AccountOverview } from './components/account-overview';
 export { UserMenu } from './components/user-menu';
-export { meQueryKey, useMe } from './hooks/use-me';
+export { useMe } from './hooks/use-me';
