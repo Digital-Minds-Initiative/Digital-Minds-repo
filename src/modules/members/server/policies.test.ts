@@ -1,0 +1,116 @@
+import { describe, expect, it } from 'vitest';
+
+import { AuthzError, type Actor } from '@/server/authz';
+
+import {
+  assertCanAddMember,
+  assertCanChangeMembershipType,
+  assertCanEditMemberProfile,
+  assertCanRemoveFromClub,
+  assertCanRemoveFromCommittee,
+} from './policies';
+
+const CLUB = 'club-a';
+const OWN = 'committee-own';
+const OTHER = 'committee-other';
+
+const officer: Actor = {
+  userId: 'officer',
+  isFullAdmin: false,
+  memberships: [{ membershipId: 'm1', clubId: CLUB, role: 'CLUB_OFFICER', committees: [] }],
+};
+const lead: Actor = {
+  userId: 'lead',
+  isFullAdmin: false,
+  memberships: [
+    {
+      membershipId: 'm2',
+      clubId: CLUB,
+      role: 'MEMBER',
+      committees: [{ committeeMembershipId: 'cm', committeeId: OWN, role: 'LEAD' }],
+    },
+  ],
+};
+
+const newPerson = (committeeIds: string[]) => ({
+  clubId: CLUB,
+  committeeIds,
+  choosesMembershipType: false,
+  restoresRemovedMember: false,
+});
+
+describe('committee leads', () => {
+  it('can add people to their own committee', () => {
+    expect(() => assertCanAddMember(lead, newPerson([OWN]))).not.toThrow();
+  });
+
+  it('cannot add people to the club without their committee, or to another committee', () => {
+    expect(() => assertCanAddMember(lead, newPerson([]))).toThrow(AuthzError);
+    expect(() => assertCanAddMember(lead, newPerson([OTHER]))).toThrow(AuthzError);
+    expect(() => assertCanAddMember(lead, newPerson([OWN, OTHER]))).toThrow(AuthzError);
+  });
+
+  it('cannot choose a membership type or restore someone an officer removed', () => {
+    expect(() =>
+      assertCanAddMember(lead, { ...newPerson([OWN]), choosesMembershipType: true }),
+    ).toThrow(AuthzError);
+    expect(() =>
+      assertCanAddMember(lead, { ...newPerson([OWN]), restoresRemovedMember: true }),
+    ).toThrow(AuthzError);
+  });
+
+  it('can edit profiles of members in their committee only', () => {
+    expect(() =>
+      assertCanEditMemberProfile(lead, { clubId: CLUB, committeeIds: [OWN] }),
+    ).not.toThrow();
+    expect(() => assertCanEditMemberProfile(lead, { clubId: CLUB, committeeIds: [OTHER] })).toThrow(
+      AuthzError,
+    );
+  });
+
+  it('can remove members from their committee, but not another lead', () => {
+    const target = { clubId: CLUB, committeeId: OWN };
+    expect(() =>
+      assertCanRemoveFromCommittee(lead, { ...target, memberRole: 'MEMBER' }),
+    ).not.toThrow();
+    expect(() => assertCanRemoveFromCommittee(lead, { ...target, memberRole: 'LEAD' })).toThrow(
+      AuthzError,
+    );
+    expect(() =>
+      assertCanRemoveFromCommittee(lead, {
+        clubId: CLUB,
+        committeeId: OTHER,
+        memberRole: 'MEMBER',
+      }),
+    ).toThrow(AuthzError);
+  });
+
+  it('cannot do club-level actions', () => {
+    expect(() => assertCanRemoveFromClub(lead, CLUB)).toThrow(AuthzError);
+    expect(() => assertCanChangeMembershipType(lead, CLUB)).toThrow(AuthzError);
+  });
+});
+
+describe('club officers', () => {
+  it('can do everything inside their club', () => {
+    expect(() =>
+      assertCanAddMember(officer, {
+        ...newPerson([]),
+        choosesMembershipType: true,
+        restoresRemovedMember: true,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertCanRemoveFromCommittee(officer, { clubId: CLUB, committeeId: OWN, memberRole: 'LEAD' }),
+    ).not.toThrow();
+    expect(() => assertCanRemoveFromClub(officer, CLUB)).not.toThrow();
+    expect(() => assertCanChangeMembershipType(officer, CLUB)).not.toThrow();
+  });
+
+  it('cannot act in another club', () => {
+    expect(() => assertCanRemoveFromClub(officer, 'club-b')).toThrow(AuthzError);
+    expect(() => assertCanAddMember(officer, { ...newPerson([]), clubId: 'club-b' })).toThrow(
+      AuthzError,
+    );
+  });
+});

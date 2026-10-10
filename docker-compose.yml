@@ -1,0 +1,27 @@
+# Local development database. Production uses a managed PostgreSQL of the same major version.
+# Start: docker compose up -d    Stop: docker compose down    Wipe data: docker compose down -v
+name: digital-minds
+
+services:
+  db:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      # Local-only credentials. They must match DATABASE_URL / TEST_DATABASE_URL in .env.
+      POSTGRES_USER: dm
+      POSTGRES_PASSWORD: dm
+      POSTGRES_DB: digital_minds
+    ports:
+      # Change POSTGRES_PORT in .env if 5432 is already taken on your machine.
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # Named volume (not a folder in the repo), so nothing shows up in `git status`.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dm -d digital_minds']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

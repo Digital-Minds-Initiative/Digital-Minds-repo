@@ -1,0 +1,30 @@
+{
+  "dialog": {
+    "close": "إغلاق"
+  },
+  "toast": {
+    "close": "إغلاق الإشعار",
+    "region": "الإشعارات"
+  },
+  "confirmDialog": {
+    "confirm": "تأكيد",
+    "cancel": "إلغاء"
+  },
+  "dataTable": {
+    "selectAll": "تحديد كل صفوف هذه الصفحة",
+    "selectRow": "تحديد الصف",
+    "columns": "الأعمدة",
+    "toggleColumns": "الأعمدة الظاهرة",
+    "noResults": "لا توجد نتائج.",
+    "rowsPerPage": "صفوف في الصفحة",
+    "pageOf": "صفحة {page} من {pageCount}",
+    "total": "{total, plural, =0 {لا توجد نتائج} one {نتيجة واحدة} two {نتيجتان} few {# نتائج} many {# نتيجة} other {# نتيجة}}",
+    "firstPage": "الصفحة الأولى",
+    "previousPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية",
+    "lastPage": "الصفحة الأخيرة",
+    "bulkActions": "إجراءات على الصفوف المحددة",
+    "selected": "{count, plural, one {صف واحد محدد} two {صفّان محددان} few {# صفوف محددة} many {# صفاً محدداً} other {# صف محدد}}",
+    "clearSelection": "إلغاء التحديد"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "devSwitcher": {
+    "label": "حساب التجربة",
+    "signedOut": "بدون حساب",
+    "signOut": "الخروج من الحساب التجريبي",
+    "hint": "للتطوير فقط: يتطلب DEV_ACTOR_SWITCHER=true (أو وضع المحاكاة).",
+    "groups": {
+      "admins": "مسؤول عام",
+      "officers": "مدراء الشؤون",
+      "leads": "قادة اللجان",
+      "mixed": "أدوار مختلطة",
+      "members": "أعضاء"
+    }
+  },
+  "userMenu": {
+    "label": "الحساب",
+    "roles": "الأدوار",
+    "signOut": "تسجيل الخروج",
+    "signOutSoon": "تسجيل الخروج يصل مع نظام الدخول"
+  },
+  "roleSummary": {
+    "fullAdmin": "مسؤول عام",
+    "officerOf": "مدير شؤون {club}",
+    "leadOf": "قائد {committee}",
+    "memberOf": "عضو في {club}",
+    "removedFrom": "مُزال من {club}",
+    "none": "بدون عضويات"
+  },
+  "overview": {
+    "roles": "أدوارك",
+    "access": "نطاق صلاحياتك",
+    "memberships": "عضوياتك",
+    "membershipsEmpty": "لست عضواً في أي نادٍ حالياً.",
+    "clubs": "الأندية",
+    "committees": "اللجان",
+    "fullClub": "إدارة كاملة",
+    "throughCommittee": "عبر قيادة لجنة",
+    "nothing": "لا شيء",
+    "fullAdmin": "مسؤول عام على جميع الأندية",
+    "noRoles": "لا توجد أدوار إدارية",
+    "membersLink": "عرض الأعضاء"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "page": {
+    "title": "الأعضاء",
+    "description": "أعضاء الأندية واللجان ضمن نطاق صلاحياتك."
+  },
+  "table": {
+    "label": "جدول الأعضاء"
+  },
+  "columns": {
+    "member": "العضو",
+    "club": "النادي",
+    "membershipType": "نوع العضوية",
+    "role": "الصلاحية",
+    "committees": "اللجان",
+    "points": "النقاط",
+    "phone": "الجوال",
+    "college": "الكلية",
+    "major": "التخصص",
+    "level": "المستوى",
+    "status": "الحالة",
+    "joinedAt": "تاريخ الانضمام"
+  },
+  "filters": {
+    "search": "ابحث بالاسم أو البريد أو الجوال",
+    "club": "النادي",
+    "allClubs": "كل الأندية",
+    "committee": "اللجنة",
+    "allCommittees": "كل اللجان",
+    "status": "الحالة",
+    "statusActive": "الأعضاء الحاليون",
+    "statusRemoved": "الأعضاء المُزالون",
+    "statusAll": "الجميع"
+  },
+  "status": {
+    "registered": "مسجّل",
+    "notRegistered": "لم يسجّل بعد",
+    "removed": "مُزال"
+  },
+  "levelValue": "المستوى {level}",
+  "bulk": {
+    "copyEmails": "نسخ البريد الجامعي",
+    "copied": "{count, plural, one {تم نسخ عنوان بريد واحد} two {تم نسخ عنوانَي بريد} few {تم نسخ # عناوين بريد} many {تم نسخ # عنوان بريد} other {تم نسخ # عنوان بريد}}",
+    "copyFailed": "تعذّر النسخ إلى الحافظة"
+  },
+  "empty": {
+    "title": "لا يوجد أعضاء",
+    "filtered": "لا يوجد أعضاء يطابقون البحث أو عوامل التصفية."
+  },
+  "error": {
+    "title": "تعذّر تحميل الأعضاء"
+  },
+  "leadBadge": "قائد",
+  "none": "—"
+}

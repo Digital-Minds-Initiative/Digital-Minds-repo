@@ -1,0 +1,49 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Storybook decorators also use utility classes. */
+@source '../../.storybook';
+
+/*
+ * `dark:` follows our theme attribute, not the OS setting (the theme script already resolves
+ * "system" to light or dark). Prefer semantic tokens over `dark:` — they switch automatically.
+ */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tailwind's default border colour is currentColor; use the token instead. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  ::selection {
+    background-color: var(--color-primary-subtle);
+    color: var(--color-primary-subtle-fg);
+  }
+
+  :focus-visible {
+    outline-color: var(--color-ring);
+  }
+
+  /* Emails, phone numbers and ids stay left-to-right inside RTL text. */
+  bdi,
+  [dir='ltr'] {
+    unicode-bidi: isolate;
+  }
+}

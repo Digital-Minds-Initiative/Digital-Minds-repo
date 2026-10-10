@@ -1,0 +1,68 @@
+# ─── Dependencies ────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+
+# ─── Build output ────────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Generated code (recreated by `pnpm install`) ────────────
+src/server/db/generated/
+
+# ─── Tests and coverage ──────────────────────────────────────
+coverage/
+test-results/
+playwright-report/
+.vitest/
+.vitest-attachments/
+junit.xml
+*.lcov
+
+# ─── Storybook ───────────────────────────────────────────────
+storybook-static/
+debug-storybook.log
+
+# ─── Environment (only the documented example is committed) ──
+.env
+.env.*
+!.env.example
+
+# ─── Logs ────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Local database volumes (if you bind-mount instead of using the named volume) ──
+.docker/
+docker-data/
+pgdata/
+postgres-data/
+
+# ─── OS files ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editors (shared VS Code settings are committed) ─────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*~
+
+# ─── Claude Code (personal, never shared) ────────────────────
+.claude/settings.local.json
+CLAUDE.local.md
+
+# ─── Tool caches ─────────────────────────────────────────────
+.eslintcache
+.turbo/
+.vercel/

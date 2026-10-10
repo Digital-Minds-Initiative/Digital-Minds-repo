@@ -1,0 +1,218 @@
+// Digital Minds — phase one data model.
+// The reasoning behind the non-obvious parts is in docs/adr/0003-data-model.md and
+// docs/adr/0004-points-ledger.md. Read them before changing relations or delete behaviour.
+//
+// Hand-written CHECK constraints live in prisma/migrations/*_init/migration.sql
+// (Prisma does not model them, and never drops them).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/server/db/generated"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql" // the URL comes from prisma.config.ts
+}
+
+enum ClubRole {
+  MEMBER
+  CLUB_OFFICER
+}
+
+enum CommitteeRole {
+  MEMBER
+  LEAD
+}
+
+enum PointTransactionStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum PointRevisionAction {
+  UPDATED
+  CANCELLED
+}
+
+/// One account per person. Admins can create the row before the person registers;
+/// registration links to it by `uniEmail` and sets `registeredAt`.
+model User {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  /// Random, non-sequential id that is safe to expose in public links and cards.
+  publicId      String    @unique @default(cuid(2))
+  fullName      String
+  /// Arabic-normalised copy of fullName used for search (see src/lib/arabic.ts).
+  searchName    String
+  /// Always lower-case (CHECK constraint). The identity key for linking registration.
+  uniEmail      String    @unique
+  personalEmail String?
+  phone         String?
+  college       String?
+  major         String?
+  level         Int?      @db.SmallInt
+  isFullAdmin   Boolean   @default(false)
+  /// Null until the person registers themselves.
+  registeredAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships                Membership[]               @relation("MembershipUser")
+  removedMemberships         Membership[]               @relation("MembershipRemovedBy")
+  createdPointTransactions   PointTransaction[]         @relation("PointTransactionCreatedBy")
+  cancelledPointTransactions PointTransaction[]         @relation("PointTransactionCancelledBy")
+  pointRevisions             PointTransactionRevision[]
+}
+
+model Club {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  /// URL-safe stable key; also the future `data-brand` value for per-club theming.
+  slug        String    @unique
+  name        String    @unique
+  description String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  committees      Committee[]
+  membershipTypes MembershipType[]
+  memberships     Membership[]
+}
+
+model Committee {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  clubId             String    @db.Uuid
+  name               String
+  description        String?
+  /// Capability token for the public view-only link. Null = link disabled; rotating replaces it.
+  viewToken          String?   @unique
+  viewTokenRotatedAt DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  club                 Club                  @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  committeeMemberships CommitteeMembership[]
+
+  @@unique([clubId, name])
+  // Target of composite FKs that keep child rows inside the same club.
+  @@unique([id, clubId])
+}
+
+/// Descriptive membership levels defined and ordered by each club. Never used for permissions.
+model MembershipType {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  clubId    String   @db.Uuid
+  name      String
+  /// Display order inside the club, ascending.
+  order     Int      @db.SmallInt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  club        Club         @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  memberships Membership[]
+
+  @@unique([clubId, name])
+  @@unique([id, clubId])
+  @@index([clubId, order])
+}
+
+/// A person's membership in one club ("member" in the API). Soft-deleted via `removedAt`.
+model Membership {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  userId           String    @db.Uuid
+  clubId           String    @db.Uuid
+  membershipTypeId String    @db.Uuid
+  role             ClubRole  @default(MEMBER)
+  /// Set when the person is removed from the club. A removed membership grants nothing.
+  removedAt        DateTime?
+  removedById      String?   @db.Uuid
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user                 User                  @relation("MembershipUser", fields: [userId], references: [id], onDelete: Restrict)
+  club                 Club                  @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  /// Composite FK: the type must belong to the same club.
+  membershipType       MembershipType        @relation(fields: [membershipTypeId, clubId], references: [id, clubId], onDelete: Restrict)
+  removedBy            User?                 @relation("MembershipRemovedBy", fields: [removedById], references: [id], onDelete: Restrict)
+  committeeMemberships CommitteeMembership[]
+
+  @@unique([userId, clubId])
+  @@unique([id, clubId])
+  @@index([clubId, removedAt])
+  @@index([membershipTypeId])
+}
+
+/// Membership in one committee of the same club. Soft-deleted so points history survives.
+model CommitteeMembership {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  membershipId String        @db.Uuid
+  committeeId  String        @db.Uuid
+  /// Denormalised; the composite FKs guarantee membership and committee are in this club.
+  clubId       String        @db.Uuid
+  role         CommitteeRole @default(MEMBER)
+  removedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  membership        Membership         @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
+  committee         Committee          @relation(fields: [committeeId, clubId], references: [id, clubId], onDelete: Restrict)
+  pointTransactions PointTransaction[]
+
+  @@unique([membershipId, committeeId])
+  @@unique([id, committeeId, clubId])
+  @@index([committeeId, removedAt])
+  @@index([clubId])
+}
+
+/// Ledger entry. Never deleted: cancelling sets status CANCELLED and records a revision.
+model PointTransaction {
+  id                    String                 @id @default(uuid(7)) @db.Uuid
+  committeeMembershipId String                 @db.Uuid
+  /// Denormalised scope keys, FK-checked against the committee membership.
+  committeeId           String                 @db.Uuid
+  clubId                String                 @db.Uuid
+  /// Signed: positive adds, negative deducts. Never zero (CHECK constraint).
+  amount                Int
+  reason                String
+  /// Date of the activity (Asia/Riyadh calendar). Period filters use this, never createdAt.
+  workDate              DateTime               @db.Date
+  status                PointTransactionStatus @default(ACTIVE)
+  /// Groups the rows written by one bulk-create request.
+  batchId               String?                @db.Uuid
+  createdById           String                 @db.Uuid
+  cancelledAt           DateTime?
+  cancelledById         String?                @db.Uuid
+  cancellationReason    String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  committeeMembership CommitteeMembership        @relation(fields: [committeeMembershipId, committeeId, clubId], references: [id, committeeId, clubId], onDelete: Restrict)
+  createdBy           User                       @relation("PointTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  cancelledBy         User?                      @relation("PointTransactionCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  revisions           PointTransactionRevision[]
+
+  @@index([committeeMembershipId, status, workDate])
+  @@index([committeeId, status, workDate])
+  @@index([clubId, status, workDate])
+  @@index([batchId])
+}
+
+/// Immutable audit row for every edit or cancel, holding the values *before* the change.
+/// Append-only, so it has createdAt but no updatedAt.
+model PointTransactionRevision {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  transactionId    String                 @db.Uuid
+  action           PointRevisionAction
+  previousAmount   Int
+  previousReason   String
+  previousWorkDate DateTime               @db.Date
+  previousStatus   PointTransactionStatus
+  changedById      String                 @db.Uuid
+  createdAt        DateTime               @default(now())
+
+  transaction PointTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  changedBy   User             @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([transactionId, createdAt])
+}

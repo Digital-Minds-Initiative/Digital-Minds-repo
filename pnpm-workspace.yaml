@@ -1,0 +1,19 @@
+# pnpm reads project settings from this file (pnpm 11+). `.npmrc` is for registry auth only.
+# This is a single-package repo; there is no `packages:` list yet.
+
+# Fail installs on a Node/pnpm version outside package.json "engines".
+engineStrict: true
+
+# Supply-chain protection (pnpm default, stated here so nobody turns it off by accident):
+# newly published versions are not installed until they are a day old.
+minimumReleaseAge: 1440
+
+# Dependencies allowed to run install scripts. Everything else is blocked.
+# Only add a package here after checking what its script does.
+allowBuilds:
+  '@parcel/watcher': true # native file watcher binary
+  '@prisma/engines': true # downloads the Prisma schema engine used by migrations
+  '@swc/core': true # verifies the native SWC binary
+  esbuild: true # verifies the native esbuild binary
+  prisma: true # Prisma CLI setup
+  unrs-resolver: true # native module resolver used by ESLint's import plugin

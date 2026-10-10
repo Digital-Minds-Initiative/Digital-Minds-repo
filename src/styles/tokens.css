@@ -1,0 +1,288 @@
+/*
+ * Design tokens — three layers.
+ *
+ * 1. PRIMITIVES (`--palette-*`, `--size-*`, `--typeface-*`): raw values. They live outside
+ *    Tailwind's namespaces, so they never become utility classes. Components must not use them.
+ *
+ * 2. SEMANTIC (`--color-*`, `--radius-*`, `--shadow-*`, `--text-*`, `--font-*`): what a value is
+ *    FOR. They are Tailwind theme variables, so `bg-surface-1`, `text-fg-muted`, `border-border`,
+ *    `rounded-md` … exist. Tailwind's default palette is removed: only these colours exist.
+ *
+ * 3. COMPONENTS use semantic utilities only (enforced by ESLint).
+ *
+ * Theming = overriding SEMANTIC tokens under a selector:
+ *   [data-theme='dark']        → dark mode (below)
+ *   [data-brand='<club-slug>'] → per-club branding later (override --color-primary*, radii…)
+ */
+
+/* ─── 1. Primitives ──────────────────────────────────────────── */
+:root {
+  /* Neutral (cool grey) */
+  --palette-neutral-0: oklch(1 0 0);
+  --palette-neutral-25: oklch(0.985 0.002 260);
+  --palette-neutral-50: oklch(0.97 0.004 260);
+  --palette-neutral-100: oklch(0.94 0.006 260);
+  --palette-neutral-200: oklch(0.9 0.008 260);
+  --palette-neutral-300: oklch(0.83 0.012 260);
+  --palette-neutral-400: oklch(0.7 0.016 260);
+  --palette-neutral-500: oklch(0.56 0.018 260);
+  --palette-neutral-600: oklch(0.45 0.018 260);
+  --palette-neutral-700: oklch(0.37 0.016 260);
+  --palette-neutral-800: oklch(0.28 0.014 260);
+  --palette-neutral-850: oklch(0.235 0.012 260);
+  --palette-neutral-900: oklch(0.2 0.012 260);
+  --palette-neutral-950: oklch(0.16 0.01 260);
+  --palette-neutral-1000: oklch(0.13 0.008 260);
+
+  /* Brand (Digital Minds indigo) */
+  --palette-brand-50: oklch(0.97 0.02 268);
+  --palette-brand-100: oklch(0.93 0.04 268);
+  --palette-brand-200: oklch(0.87 0.07 268);
+  --palette-brand-300: oklch(0.78 0.11 268);
+  --palette-brand-400: oklch(0.68 0.16 268);
+  --palette-brand-500: oklch(0.58 0.2 268);
+  --palette-brand-600: oklch(0.51 0.21 268);
+  --palette-brand-700: oklch(0.44 0.19 268);
+  --palette-brand-800: oklch(0.37 0.15 268);
+  --palette-brand-900: oklch(0.3 0.11 268);
+  --palette-brand-950: oklch(0.22 0.08 268);
+
+  /* Status hues */
+  --palette-red-50: oklch(0.97 0.02 25);
+  --palette-red-100: oklch(0.93 0.05 25);
+  --palette-red-200: oklch(0.87 0.08 25);
+  --palette-red-400: oklch(0.7 0.17 25);
+  --palette-red-500: oklch(0.63 0.21 25);
+  --palette-red-600: oklch(0.55 0.22 25);
+  --palette-red-700: oklch(0.48 0.19 25);
+  --palette-red-950: oklch(0.25 0.08 25);
+
+  --palette-green-50: oklch(0.97 0.03 150);
+  --palette-green-100: oklch(0.93 0.06 150);
+  --palette-green-200: oklch(0.87 0.09 150);
+  --palette-green-400: oklch(0.73 0.15 150);
+  --palette-green-500: oklch(0.65 0.16 150);
+  --palette-green-600: oklch(0.55 0.15 150);
+  --palette-green-700: oklch(0.47 0.13 150);
+  --palette-green-950: oklch(0.24 0.05 150);
+
+  --palette-amber-50: oklch(0.98 0.03 80);
+  --palette-amber-100: oklch(0.95 0.07 80);
+  --palette-amber-200: oklch(0.9 0.11 80);
+  --palette-amber-400: oklch(0.82 0.15 80);
+  --palette-amber-500: oklch(0.77 0.16 75);
+  --palette-amber-600: oklch(0.67 0.16 70);
+  --palette-amber-700: oklch(0.52 0.13 65);
+  --palette-amber-950: oklch(0.27 0.06 65);
+
+  --palette-blue-50: oklch(0.97 0.02 240);
+  --palette-blue-100: oklch(0.93 0.04 240);
+  --palette-blue-200: oklch(0.87 0.07 240);
+  --palette-blue-400: oklch(0.7 0.14 240);
+  --palette-blue-500: oklch(0.62 0.17 240);
+  --palette-blue-600: oklch(0.54 0.18 240);
+  --palette-blue-700: oklch(0.47 0.16 240);
+  --palette-blue-950: oklch(0.24 0.07 240);
+
+  --palette-black-alpha-10: oklch(0 0 0 / 0.1);
+  --palette-black-alpha-20: oklch(0 0 0 / 0.2);
+  --palette-black-alpha-40: oklch(0 0 0 / 0.4);
+  --palette-black-alpha-60: oklch(0 0 0 / 0.6);
+
+  /* Type scale (rem) */
+  --size-font-1: 0.75rem;
+  --size-font-2: 0.875rem;
+  --size-font-3: 1rem;
+  --size-font-4: 1.125rem;
+  --size-font-5: 1.25rem;
+  --size-font-6: 1.5rem;
+  --size-font-7: 1.875rem;
+  --size-font-8: 2.25rem;
+  --size-font-9: 3rem;
+
+  /* Radii */
+  --size-radius-1: 0.125rem;
+  --size-radius-2: 0.25rem;
+  --size-radius-3: 0.375rem;
+  --size-radius-4: 0.5rem;
+  --size-radius-5: 0.75rem;
+  --size-radius-6: 1rem;
+
+  /* Spacing unit: Tailwind multiplies it (p-4 = 4 × unit) */
+  --size-space-unit: 0.25rem;
+
+  /*
+   * Typefaces. `--font-ibm-plex-sans-arabic` is set by next/font (src/styles/fonts.ts).
+   * To change the app font, change it there and here — components only see `font-sans`.
+   */
+  --typeface-arabic-sans:
+    var(--font-ibm-plex-sans-arabic), 'Segoe UI', Tahoma, system-ui, sans-serif;
+  --typeface-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+/* ─── 2. Semantic tokens (light theme defaults). `static`: always emitted as CSS variables. ─── */
+@theme static {
+  /* Remove Tailwind's defaults so only semantic tokens exist as utilities. */
+  --color-*: initial;
+  --font-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --text-*: initial;
+
+  /* Surfaces & text */
+  --color-bg: var(--palette-neutral-25);
+  --color-fg: var(--palette-neutral-950);
+  --color-fg-muted: var(--palette-neutral-600);
+  --color-fg-subtle: var(--palette-neutral-500);
+  --color-fg-inverse: var(--palette-neutral-0);
+  --color-surface-1: var(--palette-neutral-0);
+  --color-surface-2: var(--palette-neutral-50);
+  --color-surface-3: var(--palette-neutral-100);
+  --color-overlay: var(--palette-neutral-0);
+  --color-backdrop: var(--palette-black-alpha-40);
+  --color-border: var(--palette-neutral-200);
+  --color-border-strong: var(--palette-neutral-300);
+  --color-input: var(--palette-neutral-300);
+  --color-ring: var(--palette-brand-500);
+
+  /* Brand */
+  --color-primary: var(--palette-brand-600);
+  --color-primary-hover: var(--palette-brand-700);
+  --color-primary-fg: var(--palette-neutral-0);
+  --color-primary-subtle: var(--palette-brand-50);
+  --color-primary-subtle-fg: var(--palette-brand-700);
+
+  /* Status */
+  --color-danger: var(--palette-red-600);
+  --color-danger-hover: var(--palette-red-700);
+  --color-danger-fg: var(--palette-neutral-0);
+  --color-danger-subtle: var(--palette-red-50);
+  --color-danger-subtle-fg: var(--palette-red-700);
+  --color-success: var(--palette-green-600);
+  --color-success-fg: var(--palette-neutral-0);
+  --color-success-subtle: var(--palette-green-50);
+  --color-success-subtle-fg: var(--palette-green-700);
+  --color-warning: var(--palette-amber-500);
+  --color-warning-fg: var(--palette-neutral-1000);
+  --color-warning-subtle: var(--palette-amber-50);
+  --color-warning-subtle-fg: var(--palette-amber-700);
+  --color-info: var(--palette-blue-600);
+  --color-info-fg: var(--palette-neutral-0);
+  --color-info-subtle: var(--palette-blue-50);
+  --color-info-subtle-fg: var(--palette-blue-700);
+
+  /* Typography */
+  --font-sans: var(--typeface-arabic-sans);
+  --font-mono: var(--typeface-mono);
+  --text-xs: var(--size-font-1);
+  --text-xs--line-height: 1.6;
+  --text-sm: var(--size-font-2);
+  --text-sm--line-height: 1.65;
+  --text-base: var(--size-font-3);
+  --text-base--line-height: 1.7;
+  --text-lg: var(--size-font-4);
+  --text-lg--line-height: 1.6;
+  --text-xl: var(--size-font-5);
+  --text-xl--line-height: 1.5;
+  --text-2xl: var(--size-font-6);
+  --text-2xl--line-height: 1.4;
+  --text-3xl: var(--size-font-7);
+  --text-3xl--line-height: 1.3;
+  --text-4xl: var(--size-font-8);
+  --text-4xl--line-height: 1.25;
+  --text-5xl: var(--size-font-9);
+  --text-5xl--line-height: 1.15;
+
+  /* Shape & depth */
+  --spacing: var(--size-space-unit);
+  --radius-sm: var(--size-radius-2);
+  --radius-md: var(--size-radius-3);
+  --radius-lg: var(--size-radius-4);
+  --radius-xl: var(--size-radius-5);
+  --radius-2xl: var(--size-radius-6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px var(--palette-black-alpha-10);
+  --shadow-md:
+    0 4px 12px -2px var(--palette-black-alpha-10), 0 2px 4px -2px var(--palette-black-alpha-10);
+  --shadow-lg:
+    0 16px 32px -8px var(--palette-black-alpha-20), 0 4px 8px -4px var(--palette-black-alpha-10);
+
+  /* Motion (used with Radix data-[state] attributes) */
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-fade-out: fade-out 120ms ease-in;
+  --animate-pop-in: pop-in 150ms ease-out;
+  --animate-pop-out: pop-out 120ms ease-in;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+}
+
+/* ─── Themes: override SEMANTIC tokens only ──────────────────── */
+@layer base {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --color-bg: var(--palette-neutral-1000);
+    --color-fg: var(--palette-neutral-50);
+    --color-fg-muted: var(--palette-neutral-400);
+    --color-fg-subtle: var(--palette-neutral-500);
+    --color-fg-inverse: var(--palette-neutral-950);
+    --color-surface-1: var(--palette-neutral-950);
+    --color-surface-2: var(--palette-neutral-900);
+    --color-surface-3: var(--palette-neutral-850);
+    --color-overlay: var(--palette-neutral-900);
+    --color-backdrop: var(--palette-black-alpha-60);
+    --color-border: var(--palette-neutral-800);
+    --color-border-strong: var(--palette-neutral-700);
+    --color-input: var(--palette-neutral-700);
+    --color-ring: var(--palette-brand-400);
+
+    --color-primary: var(--palette-brand-500);
+    --color-primary-hover: var(--palette-brand-400);
+    --color-primary-fg: var(--palette-neutral-0);
+    --color-primary-subtle: var(--palette-brand-950);
+    --color-primary-subtle-fg: var(--palette-brand-200);
+
+    --color-danger: var(--palette-red-500);
+    --color-danger-hover: var(--palette-red-400);
+    --color-danger-subtle: var(--palette-red-950);
+    --color-danger-subtle-fg: var(--palette-red-200);
+    --color-success: var(--palette-green-500);
+    --color-success-subtle: var(--palette-green-950);
+    --color-success-subtle-fg: var(--palette-green-200);
+    --color-warning: var(--palette-amber-400);
+    --color-warning-subtle: var(--palette-amber-950);
+    --color-warning-subtle-fg: var(--palette-amber-200);
+    --color-info: var(--palette-blue-500);
+    --color-info-subtle: var(--palette-blue-950);
+    --color-info-subtle-fg: var(--palette-blue-200);
+
+    --shadow-sm: 0 1px 2px var(--palette-black-alpha-40);
+    --shadow-md: 0 4px 12px -2px var(--palette-black-alpha-40);
+    --shadow-lg: 0 16px 32px -8px var(--palette-black-alpha-60);
+  }
+
+  :root[data-theme='light'] {
+    color-scheme: light;
+  }
+}
