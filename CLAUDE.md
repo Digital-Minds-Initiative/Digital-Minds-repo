@@ -69,6 +69,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 - Unit tests next to the code (`*.test.ts[x]`); component tests start with `// @vitest-environment jsdom` and use `renderWithProviders` from `@tests/utils/render`.
 - Integration tests in `tests/integration/` run services/route handlers against a real DB. Each file starts from an empty DB (`beforeAll` truncate) and builds its own scenario.
 - `server-only` is aliased to an empty module in Vitest.
+- `tests/repo/` holds checks on repository config (run with `pnpm test`).
 
 ## Gotchas specific to this stack
 
@@ -79,6 +80,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 - **TanStack Table v9:** features are registered via `tableFeatures` in `components/patterns/data-table/features.ts`; build columns with `createDataTableColumnHelper<T>()`.
 - **Generic helpers** (`defineRoute`, `mockEndpoint`) use `NoInfer` so the endpoint alone decides types.
 - **ESLint on Windows:** `import/no-restricted-paths` globs must not start a segment with `*` (wrap new zones with the `glob()` helper in `eslint.config.mjs`).
+- **Node version:** set only in `.nvmrc` (fnm and CI read it). To change it, also update `engines` in `package.json` and the README Prerequisites; `tests/repo/toolchain-versions.test.ts` fails until all three match.
 - **pnpm 12:** settings live in `pnpm-workspace.yaml`; new packages younger than one day are refused; dependencies with install scripts must be added to `allowBuilds` deliberately.
 - **TypeScript 6** (not 7) and **ESLint 9** (not 10) on purpose — see ADR 0010.
 

@@ -31,29 +31,90 @@ This repository is the foundation: architecture, authorization, contracts for ev
 
 ## 1. Prerequisites
 
-| Tool    | Version                                            | Notes                                                             |
-| ------- | -------------------------------------------------- | ----------------------------------------------------------------- |
-| Node.js | **24.21.0** (any 24.x ≥ 24.21)                     | Pinned in `.nvmrc`. Older versions are refused by `pnpm install`. |
-| pnpm    | **12.10.1**                                        | Pinned in `package.json` (`packageManager`).                      |
-| Docker  | Docker Desktop 4.x / Docker Engine 29 with Compose | Runs the local PostgreSQL 18.                                     |
-| Git     | 2.4x or newer                                      |                                                                   |
+| Tool    | Version                                            | Pinned in                                    |
+| ------- | -------------------------------------------------- | -------------------------------------------- |
+| Node.js | **24.21.0**                                        | `.nvmrc` — the only place the version is set |
+| pnpm    | **12.10.1**                                        | `package.json` → `packageManager`            |
+| Docker  | Docker Desktop 4.x / Docker Engine 29 with Compose | Runs the local PostgreSQL 18.                |
+| Git     | 2.4x or newer                                      |                                              |
 
-**Install Node 24.21.0** with a version manager so you can switch per project:
+### Node.js: install it with fnm
 
-- macOS / Linux — [fnm](https://github.com/Schniz/fnm): `fnm install 24.21.0 && fnm use` (reads `.nvmrc`), or [nvm](https://github.com/nvm-sh/nvm): `nvm install && nvm use`.
-- Windows — [fnm](https://github.com/Schniz/fnm) (`winget install Schniz.fnm`, then `fnm install 24.21.0 && fnm use`) or the installer from [nodejs.org](https://nodejs.org/en/download).
-- Check: `node --version` → `v24.21.0`.
+Install Node through **[fnm](https://github.com/Schniz/fnm)** (Fast Node Manager), not the installer from nodejs.org. fnm reads the project's `.nvmrc` and switches to that version whenever you `cd` into the project, so everyone runs the same Node as CI and your other projects keep their own versions.
 
-**Install pnpm 12.10.1:**
+**Windows** (PowerShell; none of these steps need admin rights):
+
+1. Install fnm:
+
+   ```powershell
+   winget install Schniz.fnm
+   ```
+
+2. Load fnm in every new PowerShell window, switching Node automatically on `cd`:
+
+   ```powershell
+   if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force | Out-Null }
+   Add-Content $PROFILE 'fnm env --use-on-cd --version-file-strategy recursive --shell powershell | Out-String | Invoke-Expression'
+   ```
+
+   - If a new window then says _running scripts is disabled on this system_, allow your own scripts: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+   - Using Git Bash too? Add this line to `~/.bashrc`: `eval "$(fnm env --use-on-cd --version-file-strategy recursive --shell bash)"`.
+
+3. **Close every terminal and quit VS Code completely**, then reopen it. Terminals only see the new `PATH` after a full restart. Check with `fnm --version`.
+
+**macOS** (with [Homebrew](https://brew.sh)):
+
+1. Install fnm:
+
+   ```bash
+   brew install fnm
+   ```
+
+2. Load fnm in every new terminal, switching Node automatically on `cd`. zsh is the macOS default; for bash, use `--shell bash` and `~/.bash_profile` instead.
+
+   ```bash
+   echo 'eval "$(fnm env --use-on-cd --version-file-strategy recursive --shell zsh)"' >> ~/.zshrc
+   ```
+
+3. Open a new terminal and check with `fnm --version`.
+
+On Linux, install fnm with [its install script](https://github.com/Schniz/fnm#installation); the shell setup is the same as on macOS.
+
+**Install and use the project's Node version.** Run this inside the cloned repository (cloning is the first step of [Getting started](#2-getting-started)):
 
 ```bash
-npm install -g pnpm@12.10.1
-pnpm --version   # 12.10.1
+fnm install       # downloads the version in .nvmrc
+fnm use           # switches to it; after this, entering the folder switches for you
+node --version    # v24.21.0
 ```
 
-(If you already have pnpm 9.7 or newer, it switches to the pinned version automatically.)
+### pnpm
 
-**Install Docker:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows/macOS, or Docker Engine + the Compose plugin on Linux. Start it before the next step.
+```bash
+npm install --global pnpm@12.10.1
+pnpm --version    # 12.10.1
+```
+
+With fnm, global npm packages belong to the active Node version, so run this again after the project moves to a new Node version. If you already have pnpm 10 or newer, it reads `packageManager` and runs 12.10.1 inside this project on its own.
+
+### Why installs fail on older Node versions
+
+`pnpm install` stops before installing anything unless your Node version satisfies `engines` in `package.json`: `>=24.21.0 <25`, meaning the `.nvmrc` version or a newer release of the same major. `engineStrict: true` in `pnpm-workspace.yaml` makes this an error instead of a warning:
+
+```text
+ERR_PNPM_UNSUPPORTED_ENGINE  Unsupported engine … wanted: {"node":">=24.21.0 <25"} (current: {"node":"<your version>"})
+```
+
+This is deliberate:
+
+- **Dependencies need it.** jsdom 30, which the component tests run on, does not support Node 24 releases before 24.15.
+- **One version everywhere.** CI runs exactly the `.nvmrc` version. An install error now is cheaper than a bug that only happens on one laptop.
+
+To fix it, run `fnm use` in the project folder (or `fnm install` first if the version is missing), check `node --version`, and run `pnpm install` again.
+
+### Docker
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows/macOS, or Docker Engine + the Compose plugin on Linux. Start it before the next step.
 
 > **Windows:** clone the repository outside OneDrive (for example `C:\dev\digital-minds`). Syncing `node_modules` causes slow installs and file-lock errors.
 
@@ -64,6 +125,7 @@ pnpm --version   # 12.10.1
 ```bash
 git clone https://github.com/Digital-Minds-Initiative/Digital-Minds-repo.git digital-minds
 cd digital-minds
+fnm use --install-if-missing  # the Node version in .nvmrc (see Prerequisites)
 pnpm install
 cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
 docker compose up -d          # starts PostgreSQL 18 on localhost:5432
@@ -253,7 +315,8 @@ Short version (full walkthrough with code in [docs/architecture.md → Adding a 
 
 **`pnpm install` fails**
 
-- `ERR_PNPM_UNSUPPORTED_ENGINE`: your Node version is too old — install 24.21.0 (see Prerequisites).
+- `ERR_PNPM_UNSUPPORTED_ENGINE`: the active Node version does not match `.nvmrc`. Run `fnm use` in the project folder; see [Why installs fail on older Node versions](#why-installs-fail-on-older-node-versions).
+- `fnm` is not recognized, or `node --version` still shows another version in VS Code: quit VS Code completely and reopen it (its terminals keep the old `PATH`), and check that your shell profile has the `fnm env` line from [Prerequisites](#1-prerequisites).
 - `ERR_PNPM_NO_MATURE_MATCHING_VERSION`: you added a package version published less than a day ago (supply-chain protection). Use the previous version or wait a day.
 - `ERR_PNPM_IGNORED_BUILDS`: a new dependency wants to run an install script. Check what it does, then add it to `allowBuilds` in `pnpm-workspace.yaml`.
 

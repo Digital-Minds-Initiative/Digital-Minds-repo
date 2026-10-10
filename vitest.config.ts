@@ -27,7 +27,8 @@ export default defineConfig({
           name: 'unit',
           // Colocated with the code. Component tests opt into the DOM with
           // `// @vitest-environment jsdom` at the top of the file.
-          include: ['src/**/*.test.{ts,tsx}'],
+          // tests/repo/ checks repository config (for example, toolchain versions).
+          include: ['src/**/*.test.{ts,tsx}', 'tests/repo/**/*.test.ts'],
           environment: 'node',
           setupFiles: ['./tests/setup/unit.ts'],
         },
