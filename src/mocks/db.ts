@@ -1,4 +1,6 @@
 import { addDays, todayInAppTimeZone } from '@/lib/dates';
+import type { ClubRole, CommitteeRole } from '@/modules/members/contracts';
+import type { PointTransactionStatus } from '@/modules/points/contracts';
 
 import { demoClubs, demoKeys, demoPeople, type DemoClubKey, type DemoPersona } from './data/demo';
 import { demoId, demoPublicId } from './data/ids';
@@ -54,10 +56,10 @@ export interface MockMembership {
   userId: string;
   clubId: string;
   typeId: string;
-  role: 'MEMBER' | 'CLUB_OFFICER';
+  role: ClubRole;
   joinedAt: string;
   removedAt: string | null;
-  committees: Array<{ committeeId: string; role: 'MEMBER' | 'LEAD'; removed: boolean }>;
+  committees: Array<{ committeeId: string; role: CommitteeRole; removed: boolean }>;
 }
 
 interface MockTransaction {
@@ -66,7 +68,7 @@ interface MockTransaction {
   clubId: string;
   committeeId: string;
   amount: number;
-  status: 'ACTIVE' | 'CANCELLED';
+  status: PointTransactionStatus;
 }
 
 export interface MockDb {

@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useRouter } from '@/i18n/navigation';
+import { readCookie } from '@/lib/cookies';
 import { demoClubs, demoPeople, type DemoPerson } from '@/mocks/data/demo';
 import { DEV_ACTOR_COOKIE } from '@/modules/auth/contracts';
 
@@ -48,8 +49,7 @@ function groupOf(person: DemoPerson): Group {
 }
 
 function readActor(): string {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${DEV_ACTOR_COOKIE}=([^;]*)`));
-  return match?.[1] ? decodeURIComponent(match[1]) : '';
+  return readCookie(document.cookie, DEV_ACTOR_COOKIE) ?? '';
 }
 
 function subscribe(onChange: () => void): () => void {

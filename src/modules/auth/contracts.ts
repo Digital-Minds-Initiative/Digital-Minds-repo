@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
 import { defineEndpoint, idSchema } from '@/lib/contracts';
-import { clubRoleSchema, committeeRoleSchema } from '@/modules/permissions/contracts';
+import {
+  clubCommitteeRefSchema,
+  clubRefSchema,
+  committeeRefSchema,
+} from '@/modules/clubs/contracts';
+import { clubRoleSchema, committeeRoleSchema } from '@/modules/members/contracts';
 
 /*
  * Dev actor switcher (development and tests only). The value is a seeded user's university email.
@@ -11,10 +16,10 @@ export const DEV_ACTOR_COOKIE = 'dm-dev-actor';
 export const DEV_ACTOR_HEADER = 'x-dev-actor';
 
 const meMembershipSchema = z.object({
-  club: z.object({ id: idSchema, name: z.string(), slug: z.string() }),
+  club: clubRefSchema,
   role: clubRoleSchema,
   membershipType: z.object({ id: idSchema, name: z.string() }),
-  committees: z.array(z.object({ id: idSchema, name: z.string(), role: committeeRoleSchema })),
+  committees: z.array(committeeRefSchema.extend({ role: committeeRoleSchema })),
 });
 
 export const meSchema = z.object({
@@ -31,10 +36,8 @@ export const meSchema = z.object({
     canAccessDashboard: z.boolean(),
     /** Create and archive clubs, appoint officers (full admins). */
     canManageClubs: z.boolean(),
-    clubs: z.array(
-      z.object({ id: idSchema, name: z.string(), slug: z.string(), canManage: z.boolean() }),
-    ),
-    committees: z.array(z.object({ id: idSchema, clubId: idSchema, name: z.string() })),
+    clubs: z.array(clubRefSchema.extend({ canManage: z.boolean() })),
+    committees: z.array(clubCommitteeRefSchema),
   }),
 });
 export type Me = z.infer<typeof meSchema>;

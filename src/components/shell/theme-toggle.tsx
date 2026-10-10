@@ -14,14 +14,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { readCookie } from '@/lib/cookies';
 
 import { parseThemePreference, THEME_COOKIE, type ThemePreference } from './theme';
 
 const CHANGE_EVENT = 'dm-theme-change';
 
 function readPreference(): ThemePreference {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${THEME_COOKIE}=([^;]*)`));
-  return parseThemePreference(match?.[1]);
+  return parseThemePreference(readCookie(document.cookie, THEME_COOKIE));
 }
 
 function subscribe(onChange: () => void): () => void {

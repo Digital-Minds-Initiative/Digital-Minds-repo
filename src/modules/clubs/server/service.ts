@@ -2,7 +2,8 @@ import 'server-only';
 
 import { clubsScope, committeesScope, type Actor } from '@/server/authz';
 
-import { findClubRefs, findCommitteeRefs, type ClubRef, type CommitteeRef } from './repository';
+import type { ClubCommitteeRef, ClubRef } from '../contracts';
+import { findClubRefs, findCommitteeRefs } from './repository';
 
 /** Active clubs the actor can open in the dashboard. */
 export async function listAccessibleClubs(actor: Actor): Promise<ClubRef[]> {
@@ -10,6 +11,6 @@ export async function listAccessibleClubs(actor: Actor): Promise<ClubRef[]> {
 }
 
 /** Active committees the actor manages (all committees of their clubs, plus the ones they lead). */
-export async function listAccessibleCommittees(actor: Actor): Promise<CommitteeRef[]> {
+export async function listAccessibleCommittees(actor: Actor): Promise<ClubCommitteeRef[]> {
   return findCommitteeRefs(committeesScope(actor), { includeArchived: false });
 }

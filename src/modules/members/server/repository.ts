@@ -11,7 +11,13 @@ import { db } from '@/server/db/client';
 import { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
 
-import type { MemberSortField, MemberStatus } from '../contracts';
+import type {
+  ClubRole,
+  CreateMemberBody,
+  MemberSortField,
+  MemberStatus,
+  UpdateMemberBody,
+} from '../contracts';
 
 /*
  * Prisma access for members (club memberships). Reads and writes of scoped rows take a scope
@@ -58,7 +64,7 @@ export interface MemberFilters {
   clubId?: string;
   committeeIds?: string[];
   membershipTypeIds?: string[];
-  role?: 'MEMBER' | 'CLUB_OFFICER';
+  role?: ClubRole;
   registered?: boolean;
   status: MemberStatus;
 }
@@ -231,22 +237,12 @@ export async function findAccountByUniEmail(
 
 // ─── Writes ──────────────────────────────────────────────────
 
-export interface NewPerson {
-  uniEmail: string;
-  fullName: string;
-  personalEmail?: string;
-  phone?: string;
-  college?: string;
-  major?: string;
-  level?: number;
-}
-
 /**
  * Creates (or links) the account, creates or restores the club membership and adds the
  * committees — in one transaction. The caller has already authorised every part.
  */
 export async function saveNewMember(input: {
-  person: NewPerson;
+  person: CreateMemberBody['person'];
   existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
   clubId: string;
   membershipTypeId: string;
@@ -306,17 +302,6 @@ export async function saveNewMember(input: {
   }
 }
 
-export interface MemberChanges {
-  uniEmail?: string;
-  fullName?: string;
-  personalEmail?: string | null;
-  phone?: string | null;
-  college?: string | null;
-  major?: string | null;
-  level?: number | null;
-  membershipTypeId?: string;
-}
-
 /**
  * Profile fields are on the user (one account per person); the type is on the membership.
  * Both updates only match rows inside the actor's scope.
@@ -324,7 +309,7 @@ export interface MemberChanges {
 export async function saveMemberChanges(
   scope: MemberScope,
   memberId: string,
-  changes: MemberChanges,
+  changes: UpdateMemberBody,
 ): Promise<void> {
   const { membershipTypeId, ...profile } = changes;
   const userData: Prisma.UserUpdateManyMutationInput = {

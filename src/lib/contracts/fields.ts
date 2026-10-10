@@ -51,6 +51,13 @@ export const academicLevelSchema = z.number().int().min(1).max(12);
 export const shortTextSchema = z.string().trim().min(1).max(120);
 export const longTextSchema = z.string().trim().min(1).max(1000);
 
+/** For PATCH bodies whose fields are all optional: rejects an update that changes nothing. */
+export function requireAnyField<T extends z.ZodObject>(schema: T) {
+  return schema.refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: 'at_least_one_field',
+  });
+}
+
 /** Optional work-date period. Spread into a query object and add `refinePeriod`. */
 export const periodShape = {
   from: isoDateSchema.optional(),

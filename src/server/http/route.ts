@@ -5,11 +5,13 @@ import type { z } from 'zod';
 
 import {
   searchParamsToObject,
+  toValidationIssues,
   type EndpointBody,
   type EndpointDefinition,
   type EndpointParams,
   type EndpointQuery,
   type EndpointResult,
+  type InputLocation,
 } from '@/lib/contracts';
 import { resolveActor } from '@/server/actor';
 import type { Actor } from '@/server/authz';
@@ -20,14 +22,7 @@ import {
   ValidationError,
 } from '@/server/errors';
 
-import {
-  emptyResponse,
-  errorResponse,
-  jsonResponse,
-  ResponseContractError,
-  zodIssuesToValidationIssues,
-  type InputLocation,
-} from './responses';
+import { emptyResponse, errorResponse, jsonResponse, ResponseContractError } from './responses';
 
 /**
  * The one way to write a route handler. It:
@@ -131,7 +126,7 @@ function parseInput(
   if (!schema) return undefined;
   const result = schema.safeParse(input);
   if (!result.success) {
-    throw new ValidationError(zodIssuesToValidationIssues(result.error, location));
+    throw new ValidationError(toValidationIssues(result.error.issues, location));
   }
   return result.data;
 }

@@ -40,6 +40,25 @@ const validationIssueSchema = z.object({
 });
 export type ValidationIssue = z.infer<typeof validationIssueSchema>;
 
+/** Where invalid input was found; the first segment of every issue path. */
+export type InputLocation = 'params' | 'query' | 'body';
+
+/** Zod issues → API issues. Shared by the route wrapper and the MSW mocks so both answer alike. */
+export function toValidationIssues(
+  issues: ReadonlyArray<{ path: PropertyKey[]; code: string; message: string }>,
+  location: InputLocation,
+): ValidationIssue[] {
+  return issues.map((issue) => ({
+    path: [
+      location,
+      ...issue.path.map((segment) => (typeof segment === 'symbol' ? String(segment) : segment)),
+    ],
+    // Custom refinements use their message as a stable key (e.g. `date_in_future`).
+    code: issue.code === 'custom' ? issue.message : issue.code,
+    message: issue.message,
+  }));
+}
+
 export const errorEnvelopeSchema = z.object({
   error: z.object({
     code: errorCodeSchema,

@@ -5,7 +5,7 @@ import {
   committeeRoleSchema,
   type ClubRole as ContractClubRole,
   type CommitteeRole as ContractCommitteeRole,
-} from '@/modules/permissions/contracts';
+} from '@/modules/members/contracts';
 import { ClubRole, CommitteeRole } from '@/server/db/generated/enums';
 
 /*

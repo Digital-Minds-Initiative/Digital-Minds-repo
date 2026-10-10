@@ -6,6 +6,7 @@
 import nextEnv from '@next/env';
 import { PrismaPg } from '@prisma/adapter-pg';
 
+import { truncateAllTables } from './truncate';
 import { normalizeForSearch } from '../src/lib/arabic';
 import { addDays, dateOnlyToDate, todayInAppTimeZone } from '../src/lib/dates';
 import { isAllowedEmailDomain, parseEmailDomains } from '../src/lib/email-domains';
@@ -65,9 +66,7 @@ async function main(): Promise<void> {
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        'TRUNCATE TABLE "PointTransactionRevision", "PointTransaction", "CommitteeMembership", "Membership", "MembershipType", "Committee", "Club", "User" CASCADE',
-      );
+      await truncateAllTables(tx);
 
       await tx.club.createMany({
         data: demoClubs.map((club) => ({

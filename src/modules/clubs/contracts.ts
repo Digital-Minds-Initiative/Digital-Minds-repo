@@ -12,6 +12,7 @@ import {
   querySearch,
   queryBoolean,
   refinePeriod,
+  requireAnyField,
   shortTextSchema,
 } from '@/lib/contracts';
 
@@ -25,6 +26,17 @@ import {
  *   rotate / disable a view link ...... club officer of that club, full admin
  *   read a committee's view link ...... also that committee's lead (to share it)
  */
+
+// ─── References embedded in other modules' responses ─────────
+
+export const clubRefSchema = z.object({ id: idSchema, name: z.string(), slug: z.string() });
+export type ClubRef = z.infer<typeof clubRefSchema>;
+
+export const committeeRefSchema = z.object({ id: idSchema, name: z.string() });
+
+/** A committee together with its club, for lists that span clubs. */
+export const clubCommitteeRefSchema = committeeRefSchema.extend({ clubId: idSchema });
+export type ClubCommitteeRef = z.infer<typeof clubCommitteeRefSchema>;
 
 // ─── Clubs ───────────────────────────────────────────────────
 
@@ -84,16 +96,14 @@ export const updateClubEndpoint = defineEndpoint({
   path: '/api/v1/clubs/:clubId',
   access: 'actor',
   params: clubParamsSchema,
-  body: z
-    .object({
+  body: requireAnyField(
+    z.object({
       name: shortTextSchema.optional(),
       description: longTextSchema.nullable().optional(),
       /** Archiving makes the club read-only; full admins only. */
       archived: z.boolean().optional(),
-    })
-    .refine((body) => Object.values(body).some((value) => value !== undefined), {
-      message: 'at_least_one_field',
     }),
+  ),
   response: clubSchema,
 });
 
@@ -136,16 +146,14 @@ export const updateCommitteeEndpoint = defineEndpoint({
   path: '/api/v1/committees/:committeeId',
   access: 'actor',
   params: committeeParamsSchema,
-  body: z
-    .object({
+  body: requireAnyField(
+    z.object({
       name: shortTextSchema.optional(),
       description: longTextSchema.nullable().optional(),
       /** Archived committees are read-only and their public link stops working. */
       archived: z.boolean().optional(),
-    })
-    .refine((body) => Object.values(body).some((value) => value !== undefined), {
-      message: 'at_least_one_field',
     }),
+  ),
   response: committeeSchema,
 });
 

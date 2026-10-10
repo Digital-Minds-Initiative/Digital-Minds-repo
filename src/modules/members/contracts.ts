@@ -13,11 +13,12 @@ import {
   queryArray,
   queryBoolean,
   querySearch,
+  requireAnyField,
   shortTextSchema,
   sortShape,
   universityEmailSchema,
 } from '@/lib/contracts';
-import { clubRoleSchema, committeeRoleSchema } from '@/modules/permissions/contracts';
+import { clubRefSchema, committeeRefSchema } from '@/modules/clubs/contracts';
 
 /*
  * A "member" is a person's membership in ONE club. A person in two clubs is two members with
@@ -34,14 +35,18 @@ import { clubRoleSchema, committeeRoleSchema } from '@/modules/permissions/contr
  * Full admins can do everything everywhere.
  */
 
+// ─── Roles ───────────────────────────────────────────────────
+// Stored on the membership rows this module owns; granted through the permissions module.
+
+export const clubRoleSchema = z.enum(['MEMBER', 'CLUB_OFFICER']);
+export type ClubRole = z.infer<typeof clubRoleSchema>;
+
+export const committeeRoleSchema = z.enum(['MEMBER', 'LEAD']);
+export type CommitteeRole = z.infer<typeof committeeRoleSchema>;
+
 // ─── Read model ──────────────────────────────────────────────
 
-export const memberCommitteeSchema = z.object({
-  /** Committee id. */
-  id: idSchema,
-  name: z.string(),
-  role: committeeRoleSchema,
-});
+export const memberCommitteeSchema = committeeRefSchema.extend({ role: committeeRoleSchema });
 
 export const memberSchema = z.object({
   /** Membership id. */
@@ -58,7 +63,7 @@ export const memberSchema = z.object({
     /** False until the person signs up themselves (the account was created by an admin). */
     isRegistered: z.boolean(),
   }),
-  club: z.object({ id: idSchema, name: z.string(), slug: z.string() }),
+  club: clubRefSchema,
   membershipType: z.object({ id: idSchema, name: z.string(), order: z.number().int() }),
   role: clubRoleSchema,
   /** Active committee memberships — only the committees the caller is allowed to see. */
@@ -70,8 +75,8 @@ export const memberSchema = z.object({
 });
 export type Member = z.infer<typeof memberSchema>;
 
-const memberParamsSchema = z.object({ memberId: idSchema });
-const memberCommitteeParamsSchema = z.object({ memberId: idSchema, committeeId: idSchema });
+export const memberParamsSchema = z.object({ memberId: idSchema });
+export const memberCommitteeParamsSchema = z.object({ memberId: idSchema, committeeId: idSchema });
 
 // ─── List ────────────────────────────────────────────────────
 
@@ -165,8 +170,8 @@ export const createMemberEndpoint = defineEndpoint({
 
 // ─── Update ──────────────────────────────────────────────────
 
-export const updateMemberBodySchema = z
-  .object({
+export const updateMemberBodySchema = requireAnyField(
+  z.object({
     /** Only while the person has not registered (409 `uni_email_locked` afterwards). */
     uniEmail: universityEmailSchema.optional(),
     fullName: personNameSchema.optional(),
@@ -177,10 +182,8 @@ export const updateMemberBodySchema = z
     level: academicLevelSchema.nullable().optional(),
     /** Club officers and full admins only. */
     membershipTypeId: idSchema.optional(),
-  })
-  .refine((body) => Object.values(body).some((value) => value !== undefined), {
-    message: 'at_least_one_field',
-  });
+  }),
+);
 export type UpdateMemberBody = z.output<typeof updateMemberBodySchema>;
 
 /** Profile fields live on the person's single account, so an edit shows in every club. */

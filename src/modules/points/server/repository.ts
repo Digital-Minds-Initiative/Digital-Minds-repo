@@ -6,6 +6,8 @@ import { db } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError } from '@/server/errors';
 
+import type { PointStatusFilter, PointTransactionStatus } from '../contracts';
+
 /*
  * Prisma access for the points ledger. Every function that reads or writes scoped rows takes a
  * scope from src/server/authz and ANDs it into the query.
@@ -42,7 +44,7 @@ export type TransactionRow = Prisma.PointTransactionGetPayload<{
 export interface TransactionFilters {
   memberId?: string;
   committeeIds?: string[];
-  status?: 'active' | 'cancelled' | 'all';
+  status?: PointStatusFilter;
   from?: string;
   to?: string;
 }
@@ -251,7 +253,7 @@ interface RevisableTransaction {
   amount: number;
   reason: string;
   workDate: Date;
-  status: 'ACTIVE' | 'CANCELLED';
+  status: PointTransactionStatus;
   updatedAt: Date;
 }
 
