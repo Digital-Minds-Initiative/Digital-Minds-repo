@@ -1,5 +1,5 @@
-import { seamCells } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { seamCells } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * Where two colours meet, they trade cells through a 4x4 ordered (Bayer) dither — the

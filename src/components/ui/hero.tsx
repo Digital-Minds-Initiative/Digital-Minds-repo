@@ -1,8 +1,8 @@
 import type * as React from 'react';
 
+import { cn } from '@/client/lib/utils';
 import { SpecLabel } from '@/components/ui/spec-label';
 import { Tower } from '@/components/ui/tower';
-import { cn } from '@/lib/utils';
 
 /**
  * The landing composition: a whispered spec line, a two-tone serif headline, one

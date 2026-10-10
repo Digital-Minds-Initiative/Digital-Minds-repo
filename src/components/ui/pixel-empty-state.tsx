@@ -1,7 +1,7 @@
 import type * as React from 'react';
 
-import { glyphCells } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { glyphCells } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * An inviting first step for a screen's primary empty state: a faint cell grid

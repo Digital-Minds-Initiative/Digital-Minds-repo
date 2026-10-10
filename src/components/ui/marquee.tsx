@@ -1,6 +1,6 @@
 import Image from 'next/image';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /**
  * A slow strip of the clubs on the platform — real marks where supplied, plain

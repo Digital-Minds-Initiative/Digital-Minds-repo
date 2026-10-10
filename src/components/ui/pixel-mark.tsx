@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 
-import { glyphCells, type CellFinish, type GlyphName } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { glyphCells, type CellFinish, type GlyphName } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * One glyph on an 8x8 cell grid — the system's only motif. `plus` (Tech, default),

@@ -1,6 +1,6 @@
+import { cn } from '@/client/lib/utils';
 import { DitherSeam } from '@/components/ui/dither-seam';
 import { PixelMark } from '@/components/ui/pixel-mark';
-import { cn } from '@/lib/utils';
 
 /**
  * The face of the product: a lanyard badge with a dithered band, the club's real

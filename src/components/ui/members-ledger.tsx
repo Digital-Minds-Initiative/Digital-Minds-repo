@@ -1,5 +1,5 @@
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 
 /**
  * Members affairs: a searchable ledger with the same index-code rhythm as the

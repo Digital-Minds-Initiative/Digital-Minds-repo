@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PaperSheet } from '@/components/ui/paper-sheet';
 import { SpecLabel } from '@/components/ui/spec-label';
 import { StatusTag } from '@/components/ui/status-tag';
-import { cn } from '@/lib/utils';
 
 /**
  * Anyone can check a membership by its number — one field, one button, one honest

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
-import { attachStack } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { attachStack } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * Cards that stick and stack as you scroll — each new card lands on the last, the
