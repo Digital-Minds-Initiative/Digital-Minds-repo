@@ -144,7 +144,7 @@ Other things to try:
 
 ## 3. Seeded accounts
 
-`pnpm db:reset` (or `pnpm db:seed`) loads two clubs — **نادي الحاسبات** (committees: البرمجة، التصميم، الفعاليات، الإعلام) and **نادي طويق** (التطوير، المحتوى، العلاقات العامة) — 30 people and about 250 point transactions over the last six months, including deductions, edited and cancelled ones. The same accounts exist in [mock mode](#4-running-with-mocks-no-database). Data lives in `src/mocks/data/demo.ts`.
+`pnpm db:reset` (or `pnpm db:seed`) loads two clubs — **نادي الحاسبات** (committees: البرمجة، التصميم، الفعاليات، الإعلام) and **نادي طويق** (التطوير، المحتوى، العلاقات العامة) — 30 people and about 250 point transactions over the last six months, including deductions, edited and cancelled ones. The same accounts exist in [mock mode](#4-running-with-mocks-no-database). Data lives in `src/shared/demo/demo.ts`.
 
 | Persona                | Name                    | University email           | Role and scope                                                                                     |
 | ---------------------- | ----------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -188,7 +188,7 @@ Frontend work does not need PostgreSQL. Set one flag and every `/api/v1` request
 NEXT_PUBLIC_API_MOCKING=enabled
 ```
 
-Restart `pnpm dev` after changing it. Pick an account from **«حساب التجربة»** as usual. Mock handlers live next to each module (`src/modules/<module>/mocks/`) and every response is validated against the module's contract, so a mock cannot drift from the real API. The flag is ignored by production builds.
+Restart `pnpm dev` after changing it. Pick an account from **«حساب التجربة»** as usual. Mock handlers live with each client feature (`src/client/features/<module>/mocks/`) and every response is validated against the module's contract, so a mock cannot drift from the real API. The flag is ignored by production builds.
 
 ---
 
@@ -227,13 +227,12 @@ prisma/           Database schema, migrations and the seed script
 public/           Static files (including the MSW service worker)
 src/
   app/            Next.js routes: [locale]/ pages and api/v1/ route handlers (thin)
-  modules/        Feature modules: members, points, clubs, permissions, auth, system
-  server/         Server-only infrastructure: env, db, actor, authz, http wrapper
+  server/         Backend only: modules/<module>/ (service, repository, policies), authz, db, http, env
+  client/         Frontend only: features/<module>/ (components, hooks, messages, mocks), lib/, mocks/
+  shared/         Used by both: contracts/ (one file per module), lib/ (dates, phone…), demo/ (demo data)
   components/     Design system: ui/ primitives, patterns/, shell/ (layouts)
   styles/         Design tokens, global CSS and the app font
-  lib/            Framework-free code shared by client and server (contracts, API client, utils)
   i18n/           next-intl routing, request config and shared Arabic messages
-  mocks/          MSW setup and the demo dataset shared with the seed
 tests/            Integration tests, factories and test setup
 ```
 
@@ -252,8 +251,8 @@ Read **[docs/architecture.md](docs/architecture.md)** before your first task: la
    ```
 
 3. **Follow the module pattern** ([docs/architecture.md](docs/architecture.md)). Look at the members module — `GET /api/v1/members` is the reference implementation.
-4. **Contracts first:** add or update the endpoint in `src/modules/<module>/contracts.ts`. Backend and frontend then work against the same contract (frontend can start immediately with a mock).
-5. **Write tests:** unit tests next to the code; an integration test in `tests/integration/` for anything that reads or writes scoped data.
+4. **Contracts first:** add or update the endpoint in `src/shared/contracts/<module>.ts`. Backend and frontend then work against the same contract (frontend can start immediately with a mock).
+5. **Write tests:** unit tests in a `__tests__/` folder next to the code; an integration test in `tests/integration/` for anything that reads or writes scoped data.
 6. **Commit** with [Conventional Commits](https://www.conventionalcommits.org): `feat(members): add CSV import preview`, `fix(points): reject future work dates`. The commit hook formats, lints and checks the message.
 7. **Open a pull request to `main`** using the template; **link the ClickUp task** in it. The PR title must also be a Conventional Commit — it becomes the commit message.
 8. **Get one review**, make CI green, then **squash and merge**. Delete the branch and move the ClickUp task to _Done_.
@@ -265,7 +264,7 @@ Before pushing: `pnpm typecheck && pnpm lint && pnpm test` (and `pnpm test:integ
 ## 8. Rules that must never be broken
 
 1. **All scoped data goes through authz.** Every service function takes the `Actor` first; every query on scoped data uses a scope from `src/server/authz`. Data outside the actor's scope answers 404, never a leak.
-2. **No Prisma outside repositories** (`src/modules/<module>/server/repository.ts`).
+2. **No Prisma outside repositories** (`src/server/modules/<module>/repository.ts`).
 3. **No business logic in route handlers.** A handler is `defineRoute(contract, ({ actor, … }) => service(actor, …))`.
 4. **No raw colours outside `src/styles/tokens.css`.** Components use semantic tokens (`bg-surface-1`, `text-danger`…).
 5. **No hard-coded UI strings.** Text goes in `messages/ar.json` and is read with `useTranslations`.
@@ -280,13 +279,11 @@ ESLint enforces 1–6 where possible (boundary rules, `server-only`, Tailwind cl
 
 Short version (full walkthrough with code in [docs/architecture.md → Adding a feature module](docs/architecture.md#adding-a-feature-module)):
 
-- [ ] Create `src/modules/<name>/` with `contracts.ts`, `server/{index,service,repository,policies}.ts`, `mocks/index.ts`, and — once it has UI — `index.ts`, `components/`, `hooks/`, `messages/ar.json`.
-- [ ] Define endpoints in `contracts.ts` with `defineEndpoint` (Zod for params, query, body, response).
-- [ ] Add any new scope or role predicate to `src/server/authz` (with unit tests), and module rules to `server/policies.ts`.
-- [ ] Repository functions take a scope; services take the `Actor` first.
-- [ ] Route handlers in `src/app/api/v1/…/route.ts` using `defineRoute`.
-- [ ] Mock handlers with `mockEndpoint`, registered in `src/mocks/handlers.ts`.
-- [ ] Messages registered in `src/i18n/messages.ts`.
+- [ ] **Contract** (both sides agree first): `src/shared/contracts/<name>.ts` with `defineEndpoint` (Zod for params, query, body, response).
+- [ ] **Backend:** `src/server/modules/<name>/{index,service,repository,policies}.ts`. Repository functions take a scope; services take the `Actor` first. New scopes or role predicates go in `src/server/authz` (with unit tests).
+- [ ] **Backend:** route handlers in `src/app/api/v1/…/route.ts` using `defineRoute` and the module's `index.ts`.
+- [ ] **Frontend:** `src/client/features/<name>/` with `mocks/index.ts` (registered in `src/client/mocks/handlers.ts`), then `components/`, `hooks/`, `index.ts` and `messages/ar.json` (registered in `src/i18n/messages.ts`).
+- [ ] Unit tests in `__tests__/` next to the code.
 - [ ] Integration tests for the authorization rules; stories for any new UI pattern.
 
 ---

@@ -4,7 +4,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 
 | #                                              | Decision                                                          | Status                          |
 | ---------------------------------------------- | ----------------------------------------------------------------- | ------------------------------- |
-| [0001](0001-feature-modules-and-boundaries.md) | Feature modules with four public entry points, enforced by ESLint | Accepted                        |
+| [0001](0001-feature-modules-and-boundaries.md) | Feature modules with four public entry points, enforced by ESLint | Accepted (layout: see 0013)     |
 | [0002](0002-authorization-model.md)            | Actor + branded scopes; 404 outside scope, 403 for roles          | Accepted (role rules: see 0011) |
 | [0003](0003-data-model.md)                     | UUIDv7, composite foreign keys per club, no hard deletes          | Accepted (profiles: see 0012)   |
 | [0004](0004-points-ledger.md)                  | Append-only points ledger with revisions; balances computed       | Accepted                        |
@@ -16,6 +16,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0010](0010-toolchain-versions.md)             | Toolchain versions and the ones we deliberately held back         | Accepted                        |
 | [0011](0011-modules-own-their-policies.md)     | Modules own their policies; authz keeps the role predicates       | Accepted                        |
 | [0012](0012-member-profiles-per-club.md)       | Contact and study details per club; only the identity is shared   | Accepted                        |
+| [0013](0013-server-client-shared-layout.md)    | Separate server, client and shared code at the top of `src`       | Accepted                        |
 
 ## Writing a new ADR
 
