@@ -36,7 +36,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
    - visible but the role may not act → `AuthzError` (403, from `src/server/authz`);
    - conflicting state → `ConflictError(message, reason)` (409); unique-constraint violations already become 409 `already_exists` in the db client — don't catch P2002 in repositories;
    - business validation → `ValidationError` (422).
-6. **Only repositories use Prisma** (`modules/*/server/repository.ts`, plus `src/server/authz/actor-repository.ts`). Repository functions for scoped models take a branded scope (`MemberScope`, `PointTransactionScope`…) and combine it as `AND: [scope, filters]` — including writes (`updateMany` with the scope). Never build a scope by hand or cast to a scope type.
+6. **Only repositories use Prisma** (`modules/*/server/repository.ts`, plus `src/server/authz/actor-repository.ts`). Repository functions for scoped models take a branded scope (`MemberScope`, `PointTransactionScope`…) and combine it as `AND: [scope, filters]` — including writes: updates use `updateMany` with the scope, creates first check their parent rows through the scope in the same transaction. Prove it in `tests/integration/repositories/` (call the write with another club's scope; assert nothing changed). Never build a scope by hand or cast to a scope type.
 7. **Contracts first.** Every endpoint is a `defineEndpoint({...})` in the module's `contracts.ts` (Zod for params/query/body/response). Contracts import only `zod`, `@/lib/contracts` and other contracts — never Prisma or React. Response schemas are the whitelist of what leaves the server.
 8. **Authorization changes need integration tests** in `tests/integration/` proving both the error and that the database did not change. Use `tests/factories/scenario.ts`.
 
@@ -68,7 +68,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 ## Testing
 
 - Unit tests next to the code (`*.test.ts[x]`); component tests start with `// @vitest-environment jsdom` and use `renderWithProviders` from `@tests/utils/render`.
-- Integration tests in `tests/integration/` run services/route handlers against a real DB. Each file starts from an empty DB (`beforeAll` truncate) and builds its own scenario.
+- Integration tests in `tests/integration/` run services/route handlers against a real DB. Each file starts from an empty DB (`beforeAll` truncate) and builds its own scenario. `tests/integration/repositories/` may import repositories directly (an ESLint exception) to test the write scopes.
 - `server-only` is aliased to an empty module in Vitest.
 - `tests/repo/` holds checks on repository config (run with `pnpm test`).
 

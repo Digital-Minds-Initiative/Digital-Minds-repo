@@ -69,7 +69,30 @@ const NOT_DATA_ACCESS = [
   './src/server/*.ts',
 ];
 
-const boundaryZones = [
+/** One zone per module: outside code may use only its entry points (plus `extraEntries`). */
+const moduleZones = (/** @type {string[]} */ extraEntries = []) =>
+  modules.map((name) => ({
+    target: [
+      `./src/modules/!(${name})/**/*`,
+      './src/!(modules)/**/*',
+      './src/*.ts',
+      './tests/**/*',
+      './prisma/**/*',
+      './.storybook/**/*',
+    ],
+    from: `./src/modules/${name}`,
+    except: [
+      './index.ts',
+      './contracts.ts',
+      './server/index.ts',
+      './mocks/index.ts',
+      './messages',
+      ...extraEntries,
+    ],
+    message: `Use the "${name}" module through its entry points: index.ts (UI), contracts.ts, server/index.ts (server) or mocks/index.ts.`,
+  }));
+
+const layerZones = [
   {
     target: CLIENT_CODE,
     from: SERVER_CODE,
@@ -89,19 +112,6 @@ const boundaryZones = [
     message:
       'Route handlers only use src/server/http (defineRoute). Put logic in a module service.',
   },
-  ...modules.map((name) => ({
-    target: [
-      `./src/modules/!(${name})/**/*`,
-      './src/!(modules)/**/*',
-      './src/*.ts',
-      './tests/**/*',
-      './prisma/**/*',
-      './.storybook/**/*',
-    ],
-    from: `./src/modules/${name}`,
-    except: ['./index.ts', './contracts.ts', './server/index.ts', './mocks/index.ts', './messages'],
-    message: `Use the "${name}" module through its entry points: index.ts (UI), contracts.ts, server/index.ts (server) or mocks/index.ts.`,
-  })),
 ];
 
 /** Local rule: every server file imports 'server-only', so Next.js refuses to bundle it for the browser. */
@@ -205,7 +215,10 @@ export default defineConfig([
       'import/no-duplicates': ['error', { 'prefer-inline': true }],
       'import/first': 'error',
       'import/newline-after-import': 'error',
-      'import/no-restricted-paths': ['error', { zones: windowsSafe(boundaryZones) }],
+      'import/no-restricted-paths': [
+        'error',
+        { zones: windowsSafe([...layerZones, ...moduleZones()]) },
+      ],
 
       'no-restricted-imports': [
         'error',
@@ -276,6 +289,19 @@ export default defineConfig([
       'better-tailwindcss/no-duplicate-classes': 'error',
       'better-tailwindcss/no-deprecated-classes': 'error',
       'better-tailwindcss/no-restricted-classes': ['error', { restrict: restrictedClasses }],
+    },
+  },
+
+  {
+    name: 'digital-minds/repository-tests',
+    // Tests of the write scopes (the second line of defence) call repositories directly, because
+    // services always run a scoped read first and would hide a missing scope on the write.
+    files: ['tests/integration/repositories/**/*.ts'],
+    rules: {
+      'import/no-restricted-paths': [
+        'error',
+        { zones: windowsSafe([...layerZones, ...moduleZones(['./server/repository.ts'])]) },
+      ],
     },
   },
 

@@ -239,11 +239,12 @@ Themes override semantic tokens under a selector: `[data-theme='dark']` today, `
 
 ## Testing
 
-| Kind        | Where                             | Runs with               | Covers                                                                                                  |
-| ----------- | --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| Unit        | next to the code (`*.test.ts[x]`) | `pnpm test`             | pure logic, contracts, scopes and policies, route wrapper, API client (against MSW), components (jsdom) |
-| Integration | `tests/integration/`              | `pnpm test:integration` | services and route handlers against a real PostgreSQL (`digital_minds_test`)                            |
-| Repository  | `tests/repo/`                     | `pnpm test`             | config that must stay in step, e.g. `engines` and the README match the Node version in `.nvmrc`         |
+| Kind         | Where                             | Runs with               | Covers                                                                                                                                    |
+| ------------ | --------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit         | next to the code (`*.test.ts[x]`) | `pnpm test`             | pure logic, contracts, scopes and policies, route wrapper, API client (against MSW), components (jsdom)                                   |
+| Integration  | `tests/integration/`              | `pnpm test:integration` | services and route handlers against a real PostgreSQL (`digital_minds_test`)                                                              |
+| Write scopes | `tests/integration/repositories/` | `pnpm test:integration` | each repository write applies the scope itself (called directly with another club's scope); the only tests allowed to import repositories |
+| Repository   | `tests/repo/`                     | `pnpm test`             | config that must stay in step, e.g. `engines` and the README match the Node version in `.nvmrc`                                           |
 
 - Integration files start from an empty database and build their own small scenario with `tests/factories/scenario.ts` (independent of the demo seed). They prove the authorization guarantees: officers cannot cross clubs, leads cannot leave their committee, mixed roles are scoped per club, full admins see everything, removed memberships grant nothing — always checking both the error **and** that the database did not change.
 - The test database name must end in `_test`; the setup refuses anything else.

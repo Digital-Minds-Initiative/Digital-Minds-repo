@@ -4,7 +4,7 @@ import { dateOnlyToDate } from '@/lib/dates';
 import type { CommitteeMembershipScope, MemberScope, PointTransactionScope } from '@/server/authz';
 import { db } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
-import { ConflictError } from '@/server/errors';
+import { ConflictError, NotFoundError } from '@/server/errors';
 
 import type { PointStatusFilter, PointTransactionStatus } from '../contracts';
 
@@ -233,18 +233,39 @@ export async function findActiveCommitteeMembership(
 
 // ─── Writes ──────────────────────────────────────────────────
 
-export async function insertTransaction(data: {
-  committeeMembershipId: string;
-  committeeId: string;
-  clubId: string;
-  amount: number;
-  reason: string;
-  workDate: string;
-  createdById: string;
-}): Promise<TransactionRow> {
-  return db.pointTransaction.create({
-    data: { ...data, workDate: dateOnlyToDate(data.workDate) },
-    select: transactionSelect,
+/** Records a transaction for an active committee membership inside the actor's scope. */
+export async function insertTransaction(
+  scope: CommitteeMembershipScope,
+  data: {
+    committeeMembershipId: string;
+    committeeId: string;
+    clubId: string;
+    amount: number;
+    reason: string;
+    workDate: string;
+    createdById: string;
+  },
+): Promise<TransactionRow> {
+  return db.$transaction(async (tx) => {
+    const target = await tx.committeeMembership.count({
+      where: {
+        AND: [
+          scope,
+          {
+            id: data.committeeMembershipId,
+            committeeId: data.committeeId,
+            clubId: data.clubId,
+            removedAt: null,
+            membership: { removedAt: null },
+          },
+        ],
+      },
+    });
+    if (target !== 1) throw new NotFoundError('Committee member');
+    return tx.pointTransaction.create({
+      data: { ...data, workDate: dateOnlyToDate(data.workDate) },
+      select: transactionSelect,
+    });
   });
 }
 

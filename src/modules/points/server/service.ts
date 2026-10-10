@@ -91,7 +91,8 @@ export async function createPointTransaction(
   actor: Actor,
   body: CreatePointTransactionBody,
 ): Promise<PointTransaction> {
-  const target = await findActiveCommitteeMembership(committeeMembershipsScope(actor), {
+  const scope = committeeMembershipsScope(actor);
+  const target = await findActiveCommitteeMembership(scope, {
     memberId: body.memberId,
     committeeId: body.committeeId,
   });
@@ -103,7 +104,7 @@ export async function createPointTransaction(
   }
   assertWorkDateNotInFuture(body.workDate);
 
-  const row = await insertTransaction({
+  const row = await insertTransaction(scope, {
     committeeMembershipId: target.id,
     committeeId: target.committeeId,
     clubId: target.clubId,

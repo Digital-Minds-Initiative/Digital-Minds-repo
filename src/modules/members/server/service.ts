@@ -130,7 +130,12 @@ export async function createMember(actor: Actor, body: CreateMemberBody): Promis
     );
   }
 
-  const memberId = await saveNewMember({
+  const scopes = {
+    club: clubsScope(actor),
+    committees: committeesScope(actor),
+    members: membersScope(actor),
+  };
+  const memberId = await saveNewMember(scopes, {
     person: body.person,
     profile: body.profile,
     existing,
@@ -213,11 +218,14 @@ export async function addMemberToCommittee(
   if (committee.archived)
     throw new ConflictError('The committee is archived.', 'committee_archived');
 
-  await addToCommittee(membersScope(actor), {
-    memberId,
-    clubId: committee.clubId,
-    committeeId: committee.id,
-  });
+  await addToCommittee(
+    { members: membersScope(actor), committees: committeesScope(actor) },
+    {
+      memberId,
+      clubId: committee.clubId,
+      committeeId: committee.id,
+    },
+  );
   return getMember(actor, memberId);
 }
 

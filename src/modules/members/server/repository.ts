@@ -232,22 +232,40 @@ export async function findAccountByUniEmail(
 
 // ─── Writes ──────────────────────────────────────────────────
 
+/** What adding a member writes through: the club, its committees, and an existing membership. */
+export interface NewMemberScopes {
+  club: ClubScope;
+  committees: CommitteeScope;
+  members: MemberScope;
+}
+
 /**
  * Creates (or links) the account, creates or restores the club membership and adds the
- * committees — in one transaction. The caller has already authorised every part.
+ * committees — in one transaction. The service has authorised every part; the scopes are checked
+ * again here, so a service bug cannot write into a club, committee or membership out of reach.
  * The profile is this club's copy: written on a new or restored membership, never on the account.
  */
-export async function saveNewMember(input: {
-  person: CreateMemberBody['person'];
-  profile: CreateMemberBody['profile'];
-  existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
-  clubId: string;
-  membershipTypeId: string;
-  /** Change the type of an existing membership (only when the caller chose one explicitly). */
-  overrideType: boolean;
-  committeeIds: string[];
-}): Promise<string> {
+export async function saveNewMember(
+  scopes: NewMemberScopes,
+  input: {
+    person: CreateMemberBody['person'];
+    profile: CreateMemberBody['profile'];
+    existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
+    clubId: string;
+    membershipTypeId: string;
+    /** Change the type of an existing membership (only when the caller chose one explicitly). */
+    overrideType: boolean;
+    committeeIds: string[];
+  },
+): Promise<string> {
   return db.$transaction(async (tx) => {
+    const club = await tx.club.count({ where: { AND: [scopes.club, { id: input.clubId }] } });
+    if (club !== 1) throw new NotFoundError('Club');
+    const committees = await tx.committee.count({
+      where: { AND: [scopes.committees, { clubId: input.clubId, id: { in: input.committeeIds } }] },
+    });
+    if (committees !== input.committeeIds.length) throw new NotFoundError('Committee');
+
     const userId =
       input.existing?.userId ??
       (
@@ -277,19 +295,23 @@ export async function saveNewMember(input: {
       ).id;
     } else {
       membershipId = current.id;
-      if (current.removed || input.overrideType) {
-        await tx.membership.update({
-          where: { id: current.id },
-          data: {
-            ...(current.removed
-              ? { ...input.profile, removedAt: null, removedById: null, role: 'MEMBER' }
-              : {}),
-            ...(input.overrideType || current.removed
-              ? { membershipTypeId: input.membershipTypeId }
-              : {}),
-          },
-        });
-      }
+      const changes = current.removed
+        ? {
+            ...input.profile,
+            removedAt: null,
+            removedById: null,
+            role: 'MEMBER' as const,
+            membershipTypeId: input.membershipTypeId,
+          }
+        : input.overrideType
+          ? { membershipTypeId: input.membershipTypeId }
+          : null;
+      // Even when nothing on it changes, the membership must be one the actor can reach.
+      const reachable = { AND: [scopes.members, { id: current.id }] };
+      const count = changes
+        ? (await tx.membership.updateMany({ where: reachable, data: changes })).count
+        : await tx.membership.count({ where: reachable });
+      if (count !== 1) throw new NotFoundError('Member');
     }
 
     for (const committeeId of input.committeeIds) {
@@ -355,6 +377,7 @@ export async function removeFromClub(
       data: { removedAt: now, removedById, role: 'MEMBER' },
     });
     if (count === 0) return;
+    // Only reached when the scoped update above matched this membership.
     await tx.committeeMembership.updateMany({
       where: { membershipId: memberId, removedAt: null },
       data: { removedAt: now, role: 'MEMBER' },
@@ -362,17 +385,25 @@ export async function removeFromClub(
   });
 }
 
-/** Adds the member to the committee, or restores a removed committee membership. */
+/**
+ * Adds the member to the committee, or restores a removed committee membership. Both the member
+ * and the committee must be inside the actor's scopes (and in the same club).
+ */
 export async function addToCommittee(
-  scope: MemberScope,
+  scopes: { members: MemberScope; committees: CommitteeScope },
   target: { memberId: string; clubId: string; committeeId: string },
 ): Promise<void> {
   await db.$transaction(async (tx) => {
-    const member = await tx.membership.findFirst({
-      where: { AND: [scope, { id: target.memberId, removedAt: null }] },
-      select: { id: true },
+    const member = await tx.membership.count({
+      where: {
+        AND: [scopes.members, { id: target.memberId, clubId: target.clubId, removedAt: null }],
+      },
     });
-    if (!member) throw new NotFoundError('Member');
+    if (member !== 1) throw new NotFoundError('Member');
+    const committee = await tx.committee.count({
+      where: { AND: [scopes.committees, { id: target.committeeId, clubId: target.clubId }] },
+    });
+    if (committee !== 1) throw new NotFoundError('Committee');
     await tx.committeeMembership.upsert({
       where: {
         membershipId_committeeId: {
