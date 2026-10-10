@@ -1,5 +1,6 @@
-import { normalizeForSearch, toLatinDigits } from '@/lib/arabic';
+import { normalizeForSearch } from '@/lib/arabic';
 import { pageMeta } from '@/lib/contracts';
+import { phoneSearchDigits } from '@/lib/phone';
 import {
   canSeeCommittee,
   canSeeMembership,
@@ -58,7 +59,7 @@ export function listMemberFixtures(
   query: ListMembersQuery,
 ): ListMembersResponse {
   const search = query.q ? normalizeForSearch(query.q) : null;
-  const digits = query.q ? toLatinDigits(query.q).replace(/\D/g, '') : '';
+  const phoneDigits = query.q ? phoneSearchDigits(query.q) : null;
 
   const visible = db.memberships.filter((membership) => {
     if (!canSeeMembership(actor, membership)) return false;
@@ -86,7 +87,7 @@ export function listMemberFixtures(
       const matches =
         normalizeForSearch(user.fullName).includes(search) ||
         user.uniEmail.includes(search.toLowerCase()) ||
-        (digits.length >= 4 && (membership.profile.phone ?? '').includes(digits));
+        (phoneDigits !== null && (membership.profile.phone ?? '').includes(phoneDigits));
       if (!matches) return false;
     }
     return true;

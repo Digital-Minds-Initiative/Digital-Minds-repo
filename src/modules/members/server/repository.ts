@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { normalizeForSearch, toLatinDigits } from '@/lib/arabic';
+import { normalizeForSearch } from '@/lib/arabic';
+import { phoneSearchDigits } from '@/lib/phone';
 import type {
   ClubScope,
   CommitteeMembershipScope,
@@ -94,8 +95,8 @@ function memberWhere(
       { user: { searchName: { contains: normalizeForSearch(filters.search) } } },
       { user: { uniEmail: { contains: filters.search.toLowerCase() } } },
     ];
-    const digits = toLatinDigits(filters.search).replace(/\D/g, '');
-    if (digits.length >= 4) search.push({ phone: { contains: digits } });
+    const phoneDigits = phoneSearchDigits(filters.search);
+    if (phoneDigits) search.push({ phone: { contains: phoneDigits } });
     conditions.push({ OR: search });
   }
   return { AND: conditions };
