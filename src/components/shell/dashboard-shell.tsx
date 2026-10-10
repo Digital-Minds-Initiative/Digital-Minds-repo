@@ -6,12 +6,12 @@ import { useTranslations } from 'next-intl';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 
+import { useMe, UserMenu } from '@/client/features/auth';
+import { ApiError } from '@/client/lib/api-client';
 import { EmptyState } from '@/components/patterns/empty-state';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api-client';
-import { useMe, UserMenu } from '@/modules/auth';
 
 import { DashboardNav } from './dashboard-nav';
 import { Logo } from './logo';

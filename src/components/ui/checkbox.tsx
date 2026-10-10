@@ -4,7 +4,7 @@ import { Check, Minus } from 'lucide-react';
 import { Checkbox as CheckboxPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /** Supports `checked="indeterminate"` (used by DataTable's "select all"). */
 export function Checkbox({

@@ -1,6 +1,6 @@
 import type { LucideIcon, LucideProps } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /**
  * For icons that point somewhere (arrows, chevrons): pass the LTR icon and it mirrors in RTL.

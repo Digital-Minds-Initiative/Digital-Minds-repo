@@ -1,6 +1,6 @@
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /** Styled table elements. For data-driven tables use the DataTable pattern. */
 export function Table({ className, ...props }: React.ComponentProps<'table'>) {

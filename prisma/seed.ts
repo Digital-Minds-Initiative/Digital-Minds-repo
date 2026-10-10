@@ -1,5 +1,5 @@
 /*
- * Development seed: REPLACES all data with the demo dataset (src/mocks/data), the same one the
+ * Development seed: REPLACES all data with the demo dataset (src/shared/demo), the same one the
  * MSW mocks use, so the seeded accounts match the mock personas. Run with `pnpm db:seed`
  * (or `pnpm db:reset` to also re-apply migrations).
  */
@@ -7,19 +7,19 @@ import nextEnv from '@next/env';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 import { truncateAllTables } from './truncate';
-import { normalizeForSearch } from '../src/lib/arabic';
-import { addDays, dateOnlyToDate, todayInAppTimeZone } from '../src/lib/dates';
-import { isAllowedEmailDomain, parseEmailDomains } from '../src/lib/email-domains';
+import { PrismaClient, type Prisma } from '../src/server/db/generated/client';
 import {
   demoClubs,
   demoKeys,
   demoPeople,
   demoProfile,
   type DemoClubKey,
-} from '../src/mocks/data/demo';
-import { demoId, demoPublicId } from '../src/mocks/data/ids';
-import { generateDemoTransactions } from '../src/mocks/data/points';
-import { PrismaClient, type Prisma } from '../src/server/db/generated/client';
+} from '../src/shared/demo/demo';
+import { demoId, demoPublicId } from '../src/shared/demo/ids';
+import { generateDemoTransactions } from '../src/shared/demo/points';
+import { normalizeForSearch } from '../src/shared/lib/arabic';
+import { addDays, dateOnlyToDate, todayInAppTimeZone } from '../src/shared/lib/dates';
+import { isAllowedEmailDomain, parseEmailDomains } from '../src/shared/lib/email-domains';
 
 nextEnv.loadEnvConfig(process.cwd(), true, { info: () => {}, error: console.error });
 

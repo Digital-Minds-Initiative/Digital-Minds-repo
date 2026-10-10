@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { readCookie } from '@/lib/cookies';
+import { readCookie } from '@/shared/lib/cookies';
 
 import { parseThemePreference, THEME_COOKIE, type ThemePreference } from './theme';
 

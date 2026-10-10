@@ -2,9 +2,9 @@ import 'server-only';
 
 import type { z } from 'zod';
 
-import { httpStatusByErrorCode, type ErrorEnvelope } from '@/lib/contracts';
 import { AppError } from '@/server/errors';
 import { logger } from '@/server/logger';
+import { httpStatusByErrorCode, type ErrorEnvelope } from '@/shared/contracts/core';
 
 /** Responses carry personal data; nothing in between may cache them. */
 function baseHeaders(requestId: string): HeadersInit {

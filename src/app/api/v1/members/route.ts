@@ -1,6 +1,6 @@
-import { listMembersEndpoint } from '@/modules/members/contracts';
-import { listMembers } from '@/modules/members/server';
 import { defineRoute } from '@/server/http';
+import { listMembers } from '@/server/modules/members';
+import { listMembersEndpoint } from '@/shared/contracts/members';
 
 /*
  * THE REFERENCE ROUTE HANDLER — copy this shape for every endpoint:

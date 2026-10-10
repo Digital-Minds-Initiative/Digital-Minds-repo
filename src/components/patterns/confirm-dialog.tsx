@@ -4,9 +4,9 @@ import { useTranslations } from 'next-intl';
 import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 
+import { ApiError } from '@/client/lib/api-client';
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ApiError } from '@/lib/api-client';
-import { cn } from '@/lib/utils';
 
 export interface ConfirmDialogProps {
   open: boolean;

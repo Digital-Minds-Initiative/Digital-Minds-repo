@@ -7,7 +7,7 @@ import { ConflictError } from '../errors';
 import { Prisma, PrismaClient } from './generated/client';
 
 /**
- * The single Prisma client. Only repositories (`modules/<m>/server/repository.ts`) and the authz
+ * The single Prisma client. Only repositories (`src/server/modules/<m>/repository.ts`) and the authz
  * actor repository may import it — ESLint enforces this.
  */
 

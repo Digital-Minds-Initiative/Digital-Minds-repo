@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiError } from '@/lib/api-client';
+import { ApiError } from '@/client/lib/api-client';
 import { renderWithProviders } from '@tests/utils/render';
 
 import { ConfirmDialog } from './confirm-dialog';

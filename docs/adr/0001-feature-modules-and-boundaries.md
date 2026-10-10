@@ -1,6 +1,6 @@
 # 0001. Organise by feature module with four public entry points
 
-- Status: Accepted
+- Status: Accepted; the folder layout is superseded by [0013](0013-server-client-shared-layout.md)
 - Date: 2026-10-10
 
 ## Context

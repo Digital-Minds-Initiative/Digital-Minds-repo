@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
+import { MembersTable } from '@/client/features/members';
 import { PageHeader } from '@/components/patterns/page-header';
 import { resolveLocale } from '@/i18n/locale';
-import { MembersTable } from '@/modules/members';
 
 export async function generateMetadata({
   params,

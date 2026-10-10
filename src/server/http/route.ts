@@ -3,6 +3,14 @@ import 'server-only';
 import type { NextRequest } from 'next/server';
 import type { z } from 'zod';
 
+import { resolveActor } from '@/server/actor';
+import type { Actor } from '@/server/authz';
+import {
+  BadRequestError,
+  NotFoundError,
+  UnauthenticatedError,
+  ValidationError,
+} from '@/server/errors';
 import {
   searchParamsToObject,
   toValidationIssues,
@@ -12,15 +20,7 @@ import {
   type EndpointQuery,
   type EndpointResult,
   type InputLocation,
-} from '@/lib/contracts';
-import { resolveActor } from '@/server/actor';
-import type { Actor } from '@/server/authz';
-import {
-  BadRequestError,
-  NotFoundError,
-  UnauthenticatedError,
-  ValidationError,
-} from '@/server/errors';
+} from '@/shared/contracts/core';
 
 import { emptyResponse, errorResponse, jsonResponse, ResponseContractError } from './responses';
 

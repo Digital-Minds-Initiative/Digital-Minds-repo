@@ -1,14 +1,14 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { getMe } from '@/modules/auth/server';
-import { getMember, listMembers } from '@/modules/members/server';
+import type { Actor } from '@/server/authz';
+import { db } from '@/server/db/client';
+import { getMe } from '@/server/modules/auth';
+import { getMember, listMembers } from '@/server/modules/members';
 import {
   cancelPointTransaction,
   createPointTransaction,
   getMemberPoints,
-} from '@/modules/points/server';
-import type { Actor } from '@/server/authz';
-import { db } from '@/server/db/client';
+} from '@/server/modules/points';
 import {
   actorFor,
   buildScenario,

@@ -5,7 +5,7 @@ import { type z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { newPersonSchema, newProfileSchema } from '@/modules/members/contracts';
+import { newPersonSchema, newProfileSchema } from '@/shared/contracts/members';
 
 import { FormField } from './form-field';
 

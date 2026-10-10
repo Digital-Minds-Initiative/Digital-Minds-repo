@@ -37,23 +37,24 @@ How Digital Minds is put together, why, and how to extend it. Decisions and thei
    │    4. parse result with the contract   (unknown fields are dropped)
    │    5. errors → standard envelope       (403/404/409/422/500)
    ▼
- src/modules/members/server/service.ts   ← business rules; ALWAYS receives the Actor first
+ src/server/modules/members/service.ts  ← business rules; ALWAYS receives the Actor first
    │  membersScope(actor) … from src/server/authz   (who may see what)
    │  assertCanRemoveFromClub(actor, …) … policies   (who may do what)
    ▼
- src/modules/members/server/repository.ts  ← the ONLY place with Prisma; ALWAYS receives a scope
+ src/server/modules/members/repository.ts ← the ONLY place with Prisma; ALWAYS receives a scope
    │  where: { AND: [scope, filters] }
    ▼
  PostgreSQL (composite foreign keys keep every row inside its club)
 ```
 
-| Layer           | Folder                                        | May import                                                         | Must not                             |
-| --------------- | --------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
-| Pages & layouts | `src/app/[locale]`                            | module `index.ts`, `components/`, `lib/`, `i18n/`                  | server code, services, Prisma        |
-| Route handlers  | `src/app/api/v1`                              | `@/server/http`, module `contracts.ts` and `server/index.ts`       | Prisma, authz, logic                 |
-| Services        | `modules/*/server/service.ts`                 | own repository, `@/server/authz`, other modules' `server/index.ts` | Prisma                               |
-| Repositories    | `modules/*/server/repository.ts`              | `@/server/db`                                                      | run an unscoped query on scoped data |
-| Contracts       | `modules/*/contracts.ts`, `src/lib/contracts` | `zod`, other contracts                                             | React, server code, Prisma           |
+| Layer           | Folder                               | May import                                                                  | Must not                                  |
+| --------------- | ------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------- |
+| Pages & layouts | `src/app/[locale]`                   | `src/client` feature `index.ts`, `src/components`, `src/i18n`, `src/shared` | `src/server`, services, Prisma            |
+| Client code     | `src/client`, `src/components`       | `src/shared`, other features' `index.ts`                                    | `src/server`                              |
+| Route handlers  | `src/app/api/v1`                     | `@/server/http`, `src/server/modules/<m>/index.ts`, `src/shared/contracts`  | Prisma, authz, logic, `src/client`        |
+| Services        | `src/server/modules/*/service.ts`    | own repository, `@/server/authz`, other modules' `index.ts`, `src/shared`   | Prisma, `src/client`                      |
+| Repositories    | `src/server/modules/*/repository.ts` | `@/server/db`                                                               | run an unscoped query on scoped data      |
+| Shared          | `src/shared`                         | `zod`, other shared code                                                    | `src/server`, `src/client`, React, Prisma |
 
 ESLint enforces the import rules (`import/no-restricted-paths`); `import 'server-only'` in every server file makes Next.js refuse to bundle server code for the browser.
 
@@ -61,26 +62,39 @@ ESLint enforces the import rules (`import/no-restricted-paths`); `import 'server
 
 ## Feature modules
 
-Code is organised by feature. A module owns its contracts, server logic, UI, mocks and strings:
+The source tree is split by who runs the code ([ADR 0013](adr/0013-server-client-shared-layout.md)); inside each side, code is organised by feature. One feature — members — lives in three places:
 
 ```text
-src/modules/members/
-  contracts.ts        Zod schemas + endpoint definitions + types (shared by server, browser, later mobile)
-  index.ts            public UI surface: components and hooks (only once the module has UI)
-  server/
-    index.ts          public server surface: service functions (server-only)
-    service.ts        business logic — every function takes the Actor first
-    repository.ts     Prisma access — every scoped function takes a scope
-    policies.ts       what an actor may do in this module (built on the predicates in src/server/authz)
-    mappers.ts        database rows → contract types
-  components/         feature UI (MembersTable…)
-  hooks/              TanStack Query hooks built on the API client
-  mocks/
-    index.ts          MSW handlers + fixture builders (validated by the contracts)
-  messages/ar.json    this module's UI strings (namespace = module name)
+src/shared/contracts/members.ts     Zod schemas + endpoint definitions + types (server, browser, later mobile)
+
+src/server/modules/members/
+  index.ts          the module's entry point: service functions (server-only)
+  service.ts        business logic — every function takes the Actor first
+  repository.ts     Prisma access — every scoped function takes a scope
+  policies.ts       what an actor may do in this module (built on the predicates in src/server/authz)
+  mappers.ts        database rows → contract types
+  __tests__/        unit tests (policies)
+
+src/client/features/members/
+  index.ts          the feature's entry point: components and hooks
+  components/       feature UI (MembersTable…)
+  hooks/            TanStack Query hooks built on the API client
+  mocks/index.ts    MSW handlers + fixture builders (validated by the contracts)
+  messages/ar.json  this feature's UI strings (namespace = module name)
 ```
 
-**Public entry points.** Code outside a module may import only `contracts.ts`, `index.ts`, `server/index.ts` (server code only) and `mocks/index.ts`. Everything else is private. Four entry points instead of one barrel keep server code out of browser bundles and React out of server code ([ADR 0001](adr/0001-feature-modules-and-boundaries.md)). Extracting a package later (`@digital-minds/contracts` for the mobile app) is then a move, not a refactor.
+Around them:
+
+```text
+src/server/        env, db, http (defineRoute), authz, actor, logger — backend only
+src/client/        lib/ (api-client, query-client, public-env, cn), mocks/ (MSW setup) — frontend only
+src/shared/        contracts/ (one file per module, plus core/ helpers), lib/ (arabic, dates, phone,
+                   cookies, email-domains), demo/ (the demo dataset for the seed and the mocks)
+src/app/           [locale]/ pages, api/v1/ route handlers
+src/components/    the design system (ui/, patterns/, shell/); src/i18n, src/styles
+```
+
+**Entry points.** Other code may import a server module only through `src/server/modules/<m>/index.ts`, a client feature only through `src/client/features/<m>/index.ts`, its `mocks/index.ts` and `messages/`, and contracts from `src/shared/contracts/<m>.ts`. Everything else is private. `src/client` never imports `src/server` and the reverse; `src/shared` imports neither. Extracting a package later (`@digital-minds/contracts` for the mobile app) is a move of `src/shared/contracts`, not a refactor.
 
 **Cross-module calls** go through the other module's entry point, in one direction only (members → points; points never imports members).
 
@@ -110,7 +124,7 @@ export const listMembersEndpoint = defineEndpoint({
 ```
 
 - **Versioned REST** under `/api/v1`. Resources are plural nouns; a "member" is a membership (person × club) and its id is the membership id.
-- **Lists:** `?page=1&pageSize=20&sort=<field>&order=asc|desc&q=…&<filters>`; repeated keys for multi-value filters (`?committeeId=a&committeeId=b`). Responses: `{ items, page, pageSize, total, pageCount }`. Shared helpers in `src/lib/contracts`.
+- **Lists:** `?page=1&pageSize=20&sort=<field>&order=asc|desc&q=…&<filters>`; repeated keys for multi-value filters (`?committeeId=a&committeeId=b`). Responses: `{ items, page, pageSize, total, pageCount }`. Shared helpers in `src/shared/contracts/core`.
 - **Dates:** calendar dates as `YYYY-MM-DD` (Asia/Riyadh); instants as ISO 8601 UTC.
 - **Ids** are UUIDs and validated as such (malformed → 422, never a database error).
 - **Errors** always look like:
@@ -178,7 +192,7 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
 
-**Policies** (`modules/*/server/policies.ts`) answer "may this actor do X to this already-visible target". They are built on the role predicates in `src/server/authz/roles.ts` (`canManageClub`, `canManageCommittee`, `isLeadOf`, `ledCommitteeIds`) and throw `AuthzError` with the module's own `reason` ([ADR 0011](adr/0011-modules-own-their-policies.md)). Write a policy together with the service that calls it.
+**Policies** (`src/server/modules/*/policies.ts`) answer "may this actor do X to this already-visible target". They are built on the role predicates in `src/server/authz/roles.ts` (`canManageClub`, `canManageCommittee`, `isLeadOf`, `ledCommitteeIds`) and throw `AuthzError` with the module's own `reason` ([ADR 0011](adr/0011-modules-own-their-policies.md)). Write a policy together with the service that calls it.
 
 **The service pattern** for every write:
 
@@ -213,13 +227,13 @@ Change the schema with `pnpm db:migrate --name <change>`; review the generated S
 
 **Routing.** `src/app/[locale]/(public)` (landing, later login and the public committee view) and `src/app/[locale]/(dashboard)/dashboard/…` (admin area, wrapped in `DashboardShell`). Arabic is the default locale and has no URL prefix (`/dashboard`); English later becomes `/en/dashboard`. `src/proxy.ts` (Next.js 16's middleware) handles locale routing.
 
-**Data fetching.** Feature components use TanStack Query hooks (`modules/*/hooks`) built on `apiClient`. Query keys contain every server parameter. Lists keep their query in the URL, parsed with the same Zod schema as the API (`useMembersQueryState`), so pages are shareable and the back button works.
+**Data fetching.** Feature components use TanStack Query hooks (`src/client/features/*/hooks`) built on `apiClient`. Query keys contain every server parameter. Lists keep their query in the URL, parsed with the same Zod schema as the API (`useMembersQueryState`), so pages are shareable and the back button works.
 
 **Tables.** `components/patterns/data-table` wraps TanStack Table v9 in server-side mode: pagination, sorting (opt-in per column, matching the API's sort fields), row selection with bulk actions, column visibility. `MembersTable` is the reference.
 
 **Forms.** React Hook Form + `zodResolver(<contract schema>)` + `FormField` (labels, descriptions and translated errors wired for accessibility). Validate with the same schema the API uses.
 
-**i18n.** next-intl, typed: a missing or misspelled key is a type error. Shared namespaces live in `src/i18n/messages/ar/`, module namespaces in `src/modules/<module>/messages/ar.json`; both are registered in `src/i18n/messages.ts`. The `ar` locale formats numbers with Latin digits and dates in the Gregorian calendar; named formats are in `src/i18n/formats.ts`.
+**i18n.** next-intl, typed: a missing or misspelled key is a type error. Shared namespaces live in `src/i18n/messages/ar/`, feature namespaces in `src/client/features/<module>/messages/ar.json`; both are registered in `src/i18n/messages.ts`. The `ar` locale formats numbers with Latin digits and dates in the Gregorian calendar; named formats are in `src/i18n/formats.ts`.
 
 **RTL.** The document is `dir="rtl"`. Use logical utilities only (`ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`, `border-s`, `rounded-e`, `text-start`) — ESLint rejects physical ones. Icons that point (arrows, chevrons) go through `DirectionalIcon`, which mirrors them. Radix components follow the `DirectionProvider`. Emails and phone numbers are wrapped in `<bdi dir="ltr">`.
 
@@ -235,13 +249,13 @@ Themes override semantic tokens under a selector: `[data-theme='dark']` today, `
 
 ## Mocks
 
-`NEXT_PUBLIC_API_MOCKING=enabled` answers every `/api/v1` request in the browser with MSW ([ADR 0009](adr/0009-demo-dataset-and-mocks.md)). Each module has `mocks/index.ts` built with `mockEndpoint(contract, resolver)`, which validates the request and the response against the contract. The data comes from the same demo dataset as the database seed (`src/mocks/data`), so the same accounts work in both modes. Mock scoping imitates the real rules for a believable UI — it is not the security boundary; the integration tests are.
+`NEXT_PUBLIC_API_MOCKING=enabled` answers every `/api/v1` request in the browser with MSW ([ADR 0009](adr/0009-demo-dataset-and-mocks.md)). Each client feature has `mocks/index.ts` built with `mockEndpoint(contract, resolver)`, which validates the request and the response against the contract. The data comes from the same demo dataset as the database seed (`src/shared/demo`), so the same accounts work in both modes. Mock scoping imitates the real rules for a believable UI — it is not the security boundary; the integration tests are.
 
 ## Testing
 
 | Kind         | Where                             | Runs with               | Covers                                                                                                                                    |
 | ------------ | --------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit         | next to the code (`*.test.ts[x]`) | `pnpm test`             | pure logic, contracts, scopes and policies, route wrapper, API client (against MSW), components (jsdom)                                   |
+| Unit         | `__tests__/` next to the code     | `pnpm test`             | pure logic, contracts, scopes and policies, route wrapper, API client (against MSW), components (jsdom)                                   |
 | Integration  | `tests/integration/`              | `pnpm test:integration` | services and route handlers against a real PostgreSQL (`digital_minds_test`)                                                              |
 | Write scopes | `tests/integration/repositories/` | `pnpm test:integration` | each repository write applies the scope itself (called directly with another club's scope); the only tests allowed to import repositories |
 | Repository   | `tests/repo/`                     | `pnpm test`             | config that must stay in step, e.g. `engines` and the README match the Node version in `.nvmrc`                                           |
@@ -252,13 +266,13 @@ Themes override semantic tokens under a selector: `[data-theme='dark']` today, `
 
 ## Configuration
 
-Server settings are validated by `src/server/env.ts` when the server starts (`src/instrumentation.ts`); an invalid value stops the process with the variable's name. Browser settings (`NEXT_PUBLIC_*`) are validated in `src/lib/public-env.ts`. Every variable is documented in `.env.example`; keep them in sync. Tools outside Next.js (Prisma CLI, seed, Vitest) load `.env` files the same way through `@next/env`.
+Server settings are validated by `src/server/env.ts` when the server starts (`src/instrumentation.ts`); an invalid value stops the process with the variable's name. Browser settings (`NEXT_PUBLIC_*`) are validated in `src/client/lib/public-env.ts`. Every variable is documented in `.env.example`; keep them in sync. Tools outside Next.js (Prisma CLI, seed, Vitest) load `.env` files the same way through `@next/env`.
 
 ## Adding a feature module
 
-Example: an `events` module that lists a club's events.
+Example: an `events` module that lists a club's events. Backend steps (1–7) and frontend steps (8–11) can run in parallel once the contract (1) is merged.
 
-1. **Contracts** — `src/modules/events/contracts.ts`:
+1. **Contracts** — `src/shared/contracts/events.ts`:
 
    ```ts
    export const eventSchema = z.object({
@@ -280,29 +294,31 @@ Example: an `events` module that lists a club's events.
    });
    ```
 
+   Helpers come from `@/shared/contracts/core`; unit tests go in `src/shared/contracts/__tests__/events.test.ts`.
+
 2. **Schema** — add the model to `prisma/schema.prisma` (with `clubId`, indexes, `onDelete: Restrict`), run `pnpm db:migrate --name add_events`, review the SQL.
-3. **Authorization** — if the data is scoped, add `eventsScope(actor)` to `src/server/authz/scopes.ts` with unit tests in `authz.test.ts`. Put module rules in `server/policies.ts`.
-4. **Repository** — `server/repository.ts` (`import 'server-only'`; every scoped function takes the scope and ANDs it in).
-5. **Service** — `server/service.ts` (`listEvents(actor, query)`), exported from `server/index.ts`.
+3. **Authorization** — if the data is scoped, add `eventsScope(actor)` to `src/server/authz/scopes.ts` with unit tests in `src/server/authz/__tests__/authz.test.ts`. Put module rules in `src/server/modules/events/policies.ts`.
+4. **Repository** — `src/server/modules/events/repository.ts` (`import 'server-only'`; every scoped function takes the scope and ANDs it in, writes included).
+5. **Service** — `src/server/modules/events/service.ts` (`listEvents(actor, query)`), exported from `src/server/modules/events/index.ts`.
 6. **Route** — `src/app/api/v1/events/route.ts`: `export const GET = defineRoute(listEventsEndpoint, ({ actor, query }) => listEvents(actor, query));`
-7. **Integration tests** — `tests/integration/events/*.test.ts`: a scenario with two clubs, prove each role sees exactly its scope, including by direct id.
-8. **Mocks** — `mocks/index.ts` with `mockEndpoint(listEventsEndpoint, …)`, then add the handlers to `src/mocks/handlers.ts`.
-9. **UI** — `hooks/use-events.ts` (TanStack Query + `apiClient`), `components/events-table.tsx` (DataTable), exported from `index.ts`; a page in `src/app/[locale]/(dashboard)/dashboard/events/page.tsx`.
-10. **Strings** — `messages/ar.json`, registered in `src/i18n/messages.ts`.
-11. **Navigation** — add the item to `components/shell/dashboard-nav.tsx`.
+7. **Integration tests** — `tests/integration/events/*.test.ts`: a scenario with two clubs, prove each role sees exactly its scope, including by direct id; write-scope tests in `tests/integration/repositories/`.
+8. **Mocks** — `src/client/features/events/mocks/index.ts` with `mockEndpoint(listEventsEndpoint, …)`, then add the handlers to `src/client/mocks/handlers.ts`.
+9. **UI** — `src/client/features/events/hooks/use-events.ts` (TanStack Query + `apiClient`), `components/events-table.tsx` (DataTable), exported from `src/client/features/events/index.ts`; a page in `src/app/[locale]/(dashboard)/dashboard/events/page.tsx`.
+10. **Strings** — `src/client/features/events/messages/ar.json`, registered in `src/i18n/messages.ts`.
+11. **Navigation** — add the item to `src/components/shell/dashboard-nav.tsx`.
 12. **Check** — `pnpm typecheck && pnpm lint && pnpm test && pnpm test:integration`, and look at it in light/dark at mobile width.
 
 ## Adding an endpoint to an existing module
 
-1. Add the endpoint to `contracts.ts` (most phase-one contracts already exist — check first).
-2. Implement the service (Actor first) and any repository function (scope first).
+1. Add the endpoint to `src/shared/contracts/<module>.ts` (most phase-one contracts already exist — check first).
+2. Implement the service (Actor first) and any repository function (scope first) in `src/server/modules/<module>/`.
 3. Add the route file under `src/app/api/v1/…` with `defineRoute`.
 4. Write integration tests for who may and may not call it.
-5. Add a mock handler so the frontend can use it before the backend is merged.
+5. Add a mock handler in `src/client/features/<module>/mocks/index.ts` so the frontend can use it before the backend is merged.
 
 ## What comes next
 
 - **Auth task:** add the session lookup to `resolveActor` (`src/server/actor.ts`) and session checks to `src/proxy.ts`; registration links to the pre-created `User` by `uniEmail` and sets `registeredAt`. Add a Content-Security-Policy in `next.config.ts`.
-- **Mobile app:** move `src/lib/contracts` and every `modules/*/contracts.ts` into a shared package; the API is already versioned and token-agnostic.
-- **Public committee view:** implement the contracts in `clubs/contracts.ts` (token-scoped, no contact data, rate-limited).
+- **Mobile app:** move `src/shared/contracts` into a shared package; the API is already versioned and token-agnostic.
+- **Public committee view:** implement the contracts in `src/shared/contracts/clubs.ts` (token-scoped, no contact data, rate-limited).
 - **Audit log:** role grants and profile edits (points already have revisions).

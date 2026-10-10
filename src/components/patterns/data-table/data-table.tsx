@@ -13,6 +13,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useMemo, type ReactNode } from 'react';
 
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
 
 import { ColumnVisibilityMenu } from './column-visibility-menu';
 import { dataTableFeatures, type DataTableColumn } from './features';

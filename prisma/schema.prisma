@@ -44,7 +44,7 @@ model User {
   /// Random, non-sequential id that is safe to expose in public links and cards.
   publicId     String    @unique @default(cuid(2))
   fullName     String
-  /// Arabic-normalised copy of fullName used for search (see src/lib/arabic.ts).
+  /// Arabic-normalised copy of fullName used for search (see src/shared/lib/arabic.ts).
   searchName   String
   /// Always lower-case (CHECK constraint). The identity key for linking registration.
   uniEmail     String    @unique

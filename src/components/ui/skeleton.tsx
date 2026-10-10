@@ -1,6 +1,6 @@
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /** Loading placeholder. Give it the size of the content it stands in for. */
 export function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
