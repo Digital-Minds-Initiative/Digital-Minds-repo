@@ -114,12 +114,18 @@ export function defineRoute<E extends EndpointDefinition>(
     context: NextRouteContext,
   ): Promise<Response> {
     const requestId = crypto.randomUUID();
+    // Session cookies from resolving the actor (a refresh, or clearing a dead session). They are
+    // sent with errors too, so the browser's cookie never outlives the database row.
+    let sessionCookies: readonly string[] = [];
+    let response: Response;
     try {
       assertSameOrigin(request, env.APP_ORIGIN);
       if (endpoint.body) assertJsonContentType(request);
 
       // Public endpoints never see an actor, even when the caller is signed in.
-      const actor = endpoint.access === 'actor' ? await resolveActor(request) : null;
+      const resolved = endpoint.access === 'actor' ? await resolveActor(request) : null;
+      sessionCookies = resolved?.cookies ?? [];
+      const actor = resolved?.actor ?? null;
       if (endpoint.access === 'actor' && !actor) throw new UnauthenticatedError();
 
       const params = parseInput(endpoint.params, await context.params, 'params');
@@ -148,10 +154,12 @@ export function defineRoute<E extends EndpointDefinition>(
       } as HandlerContext<E>;
 
       const result = await handler(handlerContext);
-      return successResponse(endpoint, result, requestId);
+      response = successResponse(endpoint, result, requestId);
     } catch (error) {
-      return errorResponse(error, requestId);
+      response = errorResponse(error, requestId);
     }
+    for (const cookie of sessionCookies) response.headers.append('set-cookie', cookie);
+    return response;
   };
 }
 

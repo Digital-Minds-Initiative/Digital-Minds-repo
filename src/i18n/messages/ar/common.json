@@ -57,6 +57,10 @@
     "at_least_one_field": "عدّل حقلاً واحداً على الأقل",
     "period_end_before_start": "تاريخ النهاية يسبق تاريخ البداية",
     "email_domain_not_allowed": "استخدم بريدك الجامعي",
+    "invalid_code_format": "الرمز من ٦ أرقام",
+    "invalid_code": "الرمز غير صحيح",
+    "too_many_attempts": "محاولات خاطئة كثيرة. اطلب رمزاً جديداً",
+    "code_expired": "انتهت صلاحية الرمز. اطلب رمزاً جديداً",
     "invalid_slug": "استخدم أحرفاً إنجليزية صغيرة وأرقاماً وشرطات فقط",
     "duplicate_ids": "توجد عناصر مكررة"
   }

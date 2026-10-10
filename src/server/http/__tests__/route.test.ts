@@ -53,7 +53,7 @@ async function envelope(response: Response): Promise<ErrorEnvelope['error']> {
 
 describe('defineRoute', () => {
   beforeEach(() => {
-    vi.mocked(resolveActor).mockResolvedValue(actor);
+    vi.mocked(resolveActor).mockResolvedValue({ actor, cookies: [] });
   });
 
   it('passes the actor and parsed input to the handler, and strips unknown response fields', async () => {
@@ -71,7 +71,7 @@ describe('defineRoute', () => {
   });
 
   it('answers 401 when the endpoint needs an actor and there is none', async () => {
-    vi.mocked(resolveActor).mockResolvedValue(null);
+    vi.mocked(resolveActor).mockResolvedValue({ actor: null, cookies: [] });
     const response = await call(defineRoute(itemEndpoint, async () => ({ id: '', name: '' })));
     expect(response.status).toBe(401);
     expect((await envelope(response)).code).toBe('UNAUTHENTICATED');
