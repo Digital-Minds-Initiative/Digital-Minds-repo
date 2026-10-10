@@ -53,6 +53,10 @@ export default defineConfig({
           env: {
             DATABASE_URL: process.env.TEST_DATABASE_URL ?? '',
             DEV_ACTOR_SWITCHER: 'true',
+            // Requests in tests are built for http://localhost; emails stay in memory.
+            APP_ORIGIN: 'http://localhost',
+            CLIENT_IP_HEADER: 'x-forwarded-for',
+            RESEND_API_KEY: '',
           },
         },
       },
