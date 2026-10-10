@@ -7,7 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import { listMembersEndpoint, type ListMembersQuery } from '../contracts';
 
 /** Query keys for this module. Every server-side parameter is part of the key. */
-export const membersKeys = {
+const membersKeys = {
   all: ['members'] as const,
   list: (query: ListMembersQuery) => [...membersKeys.all, 'list', query] as const,
 };

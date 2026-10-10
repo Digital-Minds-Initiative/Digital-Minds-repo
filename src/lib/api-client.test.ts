@@ -25,8 +25,11 @@ describe('api client (against the MSW mocks)', () => {
     const page = await asOfficer.request(listMembersEndpoint, {
       query: { pageSize: 5, sort: 'joinedAt', order: 'desc' },
     });
-    expect(page.items.length).toBeLessThanOrEqual(5);
-    expect(page.page).toBe(1);
+    // The Computing officer sees the club's 18 active members in the demo data: a full page of 5.
+    expect(page.items).toHaveLength(5);
+    expect(page).toMatchObject({ page: 1, pageSize: 5, total: 18, pageCount: 4 });
+    const joined = page.items.map((member) => member.joinedAt);
+    expect(joined).toEqual([...joined].sort().reverse());
   });
 
   it('turns the error envelope into an ApiError', async () => {

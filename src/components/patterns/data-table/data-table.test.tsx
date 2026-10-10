@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
+import {
+  functionalUpdate,
+  type OnChangeFn,
+  type PaginationState,
+  type RowSelectionState,
+  type SortingState,
+  type Updater,
+} from '@tanstack/react-table';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import { renderWithProviders } from '@tests/utils/render';
 
@@ -24,23 +32,36 @@ const rows: Row[] = [
   { id: 'r2', name: 'فهد', points: 12 },
 ];
 
+/** Applies the updater the table last passed to an onChange callback. */
+function lastUpdate<T>(onChange: Mock<OnChangeFn<T>>, previous: T): T {
+  const updater: Updater<T> | undefined = onChange.mock.lastCall?.[0];
+  if (updater === undefined) throw new Error('onChange was not called');
+  return functionalUpdate(updater, previous);
+}
+
+const FIRST_PAGE: PaginationState = { pageIndex: 0, pageSize: 20 };
+
 function setup(overrides: Partial<Parameters<typeof DataTable<Row>>[0]> = {}) {
-  const props = {
-    label: 'جدول تجريبي',
-    columns,
-    data: rows,
-    getRowId: (row: Row) => row.id,
-    rowCount: 45,
-    pagination: { pageIndex: 0, pageSize: 20 },
-    onPaginationChange: vi.fn(),
-    sorting: [],
-    onSortingChange: vi.fn(),
-    rowSelection: {},
-    onRowSelectionChange: vi.fn(),
-    ...overrides,
+  const callbacks = {
+    onPaginationChange: vi.fn<OnChangeFn<PaginationState>>(),
+    onSortingChange: vi.fn<OnChangeFn<SortingState>>(),
+    onRowSelectionChange: vi.fn<OnChangeFn<RowSelectionState>>(),
   };
-  renderWithProviders(<DataTable {...props} />);
-  return props;
+  renderWithProviders(
+    <DataTable
+      label="جدول تجريبي"
+      columns={columns}
+      data={rows}
+      getRowId={(row) => row.id}
+      rowCount={45}
+      pagination={FIRST_PAGE}
+      sorting={[]}
+      rowSelection={{}}
+      {...callbacks}
+      {...overrides}
+    />,
+  );
+  return callbacks;
 }
 
 describe('DataTable', () => {
@@ -57,13 +78,13 @@ describe('DataTable', () => {
     const props = setup();
     expect(screen.queryByRole('button', { name: /النقاط/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /الاسم/ }));
-    expect(props.onSortingChange).toHaveBeenCalled();
+    expect(lastUpdate(props.onSortingChange, [])).toEqual([{ id: 'name', desc: false }]);
   });
 
   it('selects rows and the whole page', async () => {
     const props = setup();
     await userEvent.click(screen.getByRole('checkbox', { name: 'تحديد كل صفوف هذه الصفحة' }));
-    expect(props.onRowSelectionChange).toHaveBeenCalled();
+    expect(lastUpdate(props.onRowSelectionChange, {})).toEqual({ r1: true, r2: true });
   });
 
   it('shows bulk actions while rows are selected', () => {
@@ -78,7 +99,10 @@ describe('DataTable', () => {
   it('pages forward', async () => {
     const props = setup();
     await userEvent.click(screen.getByRole('button', { name: 'الصفحة التالية' }));
-    expect(props.onPaginationChange).toHaveBeenCalled();
+    expect(lastUpdate(props.onPaginationChange, FIRST_PAGE)).toEqual({
+      pageIndex: 1,
+      pageSize: 20,
+    });
   });
 
   it('shows the empty state when there are no rows', () => {

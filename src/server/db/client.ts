@@ -3,7 +3,8 @@ import 'server-only';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 import { env } from '../env';
-import { PrismaClient } from './generated/client';
+import { ConflictError } from '../errors';
+import { Prisma, PrismaClient } from './generated/client';
 
 /**
  * The single Prisma client. Only repositories (`modules/<m>/server/repository.ts`) and the authz
@@ -19,6 +20,22 @@ function createClient() {
   return new PrismaClient({
     adapter,
     log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+  }).$extends({
+    name: 'unique-violation-to-conflict',
+    query: {
+      // Every operation, in every repository and inside transactions: a unique-constraint
+      // violation (duplicate email, slug, name, a race between two requests) is a 409, not a 500.
+      async $allOperations({ args, query }) {
+        try {
+          return await query(args);
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            throw new ConflictError('A record with these values already exists.', 'already_exists');
+          }
+          throw error;
+        }
+      },
+    },
   });
 }
 

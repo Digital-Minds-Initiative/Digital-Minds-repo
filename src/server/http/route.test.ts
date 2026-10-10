@@ -11,7 +11,7 @@ import { defineRoute, withStatus } from './route';
 
 vi.mock('@/server/actor', () => ({ resolveActor: vi.fn() }));
 vi.mock('@/server/logger', () => ({
-  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { warn: vi.fn(), error: vi.fn() },
 }));
 
 const actor: Actor = { userId: 'user-1', isFullAdmin: false, memberships: [] };

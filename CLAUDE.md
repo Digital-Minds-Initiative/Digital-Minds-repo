@@ -12,6 +12,7 @@ Digital Minds — platform for the tech student clubs at Umm Al-Qura University.
 pnpm dev                    # app on :3000 (DB via `docker compose up -d`)
 pnpm typecheck              # next typegen + tsc
 pnpm lint                   # ESLint incl. architecture boundaries (slow-ish: type-aware)
+pnpm knip                   # unused files, exports, dependencies (CI runs it; config: knip.jsonc)
 pnpm test                   # unit tests (no DB)
 pnpm test:integration       # needs Docker DB; uses digital_minds_test (auto-created, wiped)
 pnpm build                  # production build
@@ -33,9 +34,9 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 5. **Services take the `Actor` as the first argument**, read through scopes, assert roles, then write through scoped repository functions:
    - outside scope → `NotFoundError` (404);
    - visible but the role may not act → `AuthzError` (403, from `src/server/authz`);
-   - conflicting state → `ConflictError(message, reason)` (409);
+   - conflicting state → `ConflictError(message, reason)` (409); unique-constraint violations already become 409 `already_exists` in the db client — don't catch P2002 in repositories;
    - business validation → `ValidationError` (422).
-6. **Only repositories use Prisma** (`modules/*/server/repository.ts`, plus `src/server/authz/actor-repository.ts`). Repository functions for scoped models take a branded scope (`MemberScope`, `PointTransactionScope`…) and combine it as `AND: [scope, filters]` — including writes (`updateMany` with the scope). Never build a scope by hand or cast to a scope type.
+6. **Only repositories use Prisma** (`modules/*/server/repository.ts`, plus `src/server/authz/actor-repository.ts`). Repository functions for scoped models take a branded scope (`MemberScope`, `PointTransactionScope`…) and combine it as `AND: [scope, filters]` — including writes: updates use `updateMany` with the scope, creates first check their parent rows through the scope in the same transaction. Prove it in `tests/integration/repositories/` (call the write with another club's scope; assert nothing changed). Never build a scope by hand or cast to a scope type.
 7. **Contracts first.** Every endpoint is a `defineEndpoint({...})` in the module's `contracts.ts` (Zod for params/query/body/response). Contracts import only `zod`, `@/lib/contracts` and other contracts — never Prisma or React. Response schemas are the whitelist of what leaves the server.
 8. **Authorization changes need integration tests** in `tests/integration/` proving both the error and that the database did not change. Use `tests/factories/scenario.ts`.
 
@@ -43,13 +44,13 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 
 - Full admin (`User.isFullAdmin`) → everything. Club officer (`Membership.role = CLUB_OFFICER`) → everything in that club. Committee lead (`CommitteeMembership.role = LEAD`) → that committee's members and points; may add people into their committee, edit their profiles, remove them from the committee (not other leads). Club-level actions stay with officers. Membership types never grant anything.
 - The Actor contains only _active_ memberships; removed rows grant nothing. Removing a member resets roles.
-- Scope builders and role predicates: `src/server/authz/{scopes,roles,assertions}.ts`. Module rules: `modules/*/server/policies.ts`.
+- Scope builders and role predicates: `src/server/authz/{scopes,roles}.ts`. Module rules, and the `reason` each 403 carries: `modules/*/server/policies.ts`, written with the service that calls them (ADR 0011).
 - Nested data must be scoped too (e.g. a member's committee list for a lead shows only the lead's committee).
 - The dev actor switcher (`dm-dev-actor` cookie / `X-Dev-Actor` header with a university email) works only in development with `DEV_ACTOR_SWITCHER=true`. Never weaken its guards.
 
 ## Data model
 
-`prisma/schema.prisma`. UUIDv7 ids; composite foreign keys keep `clubId` consistent from `Membership` down to `PointTransaction` — when creating rows, copy `clubId`/`committeeId` from the loaded parent. All FKs are `Restrict`; nothing with history is hard-deleted (soft delete with `removedAt`, archive with `archivedAt`). Points: never delete; cancel = status CANCELLED + revision; every edit writes a `PointTransactionRevision` with previous values in the same transaction. `workDate` is a calendar date in Asia/Riyadh (`src/lib/dates.ts`), never in the future. Write `User.searchName = normalizeForSearch(fullName)` whenever `fullName` is written. Hand-written CHECK constraints live in the init migration.
+`prisma/schema.prisma`. UUIDv7 ids; composite foreign keys keep `clubId` consistent from `Membership` down to `PointTransaction` — when creating rows, copy `clubId`/`committeeId` from the loaded parent. All FKs are `Restrict`; nothing with history is hard-deleted (soft delete with `removedAt`, archive with `archivedAt`). Points: never delete; cancel = status CANCELLED + revision; every edit writes a `PointTransactionRevision` with previous values in the same transaction. `workDate` is a calendar date in Asia/Riyadh (`src/lib/dates.ts`), never in the future. Write `User.searchName = normalizeForSearch(fullName)` whenever `fullName` is written. `User` holds only the shared identity (name, university email); contact and study details (phone, personal email, college, major, level) are per club on `Membership`, and nothing reads another club's copy (ADR 0012). Hand-written CHECK constraints live in the init migration.
 
 ## Frontend rules
 
@@ -67,7 +68,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 ## Testing
 
 - Unit tests next to the code (`*.test.ts[x]`); component tests start with `// @vitest-environment jsdom` and use `renderWithProviders` from `@tests/utils/render`.
-- Integration tests in `tests/integration/` run services/route handlers against a real DB. Each file starts from an empty DB (`beforeAll` truncate) and builds its own scenario.
+- Integration tests in `tests/integration/` run services/route handlers against a real DB. Each file starts from an empty DB (`beforeAll` truncate) and builds its own scenario. `tests/integration/repositories/` may import repositories directly (an ESLint exception) to test the write scopes.
 - `server-only` is aliased to an empty module in Vitest.
 - `tests/repo/` holds checks on repository config (run with `pnpm test`).
 

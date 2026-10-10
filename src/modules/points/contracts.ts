@@ -12,8 +12,10 @@ import {
   queryArray,
   querySearch,
   refinePeriod,
+  requireAnyField,
   sortShape,
 } from '@/lib/contracts';
+import { committeeRefSchema } from '@/modules/clubs/contracts';
 
 /*
  * Points are a ledger of transactions per member per committee.
@@ -33,6 +35,10 @@ export type PointTransactionStatus = z.infer<typeof pointTransactionStatusSchema
 
 export const pointRevisionActionSchema = z.enum(['UPDATED', 'CANCELLED']);
 
+/** Which transactions a list shows; balances always count ACTIVE ones only. */
+export const pointStatusFilterSchema = z.enum(['active', 'cancelled', 'all']);
+export type PointStatusFilter = z.infer<typeof pointStatusFilterSchema>;
+
 export const pointsAmountSchema = z
   .number()
   .int()
@@ -51,7 +57,7 @@ export const pointTransactionSchema = z.object({
   id: idSchema,
   /** The member (membership id) and their name. */
   member: personRefSchema,
-  committee: z.object({ id: idSchema, name: z.string() }),
+  committee: committeeRefSchema,
   amount: z.number().int(),
   reason: z.string(),
   workDate: isoDateSchema,
@@ -84,7 +90,7 @@ export const listPointTransactionsQuerySchema = z
     clubId: idSchema.optional(),
     committeeId: queryArray(idSchema).optional(),
     memberId: idSchema.optional(),
-    status: z.enum(['active', 'cancelled', 'all']).default('all'),
+    status: pointStatusFilterSchema.default('all'),
   })
   .superRefine(refinePeriod);
 export type ListPointTransactionsQuery = z.output<typeof listPointTransactionsQuerySchema>;
@@ -144,15 +150,13 @@ export const bulkCreatePointTransactionsEndpoint = defineEndpoint({
 // ─── Edit / cancel ───────────────────────────────────────────
 
 /** The member and committee cannot change; cancel and create a new transaction instead. */
-export const updatePointTransactionBodySchema = z
-  .object({
+export const updatePointTransactionBodySchema = requireAnyField(
+  z.object({
     amount: pointsAmountSchema.optional(),
     reason: pointsReasonSchema.optional(),
     workDate: workDateSchema.optional(),
-  })
-  .refine((body) => Object.values(body).some((value) => value !== undefined), {
-    message: 'at_least_one_field',
-  });
+  }),
+);
 export type UpdatePointTransactionBody = z.output<typeof updatePointTransactionBodySchema>;
 
 /** 409 `transaction_cancelled` for a cancelled transaction. */
@@ -208,7 +212,7 @@ export const memberPointsQuerySchema = z
     ...paginationShape,
     ...periodShape,
     committeeId: idSchema.optional(),
-    status: z.enum(['active', 'cancelled', 'all']).default('all'),
+    status: pointStatusFilterSchema.default('all'),
   })
   .superRefine(refinePeriod);
 export type MemberPointsQuery = z.output<typeof memberPointsQuerySchema>;
@@ -223,9 +227,7 @@ const balanceSchema = z.object({
 export const memberPointsSchema = z.object({
   member: personRefSchema,
   totals: balanceSchema,
-  byCommittee: z.array(
-    balanceSchema.extend({ committee: z.object({ id: idSchema, name: z.string() }) }),
-  ),
+  byCommittee: z.array(balanceSchema.extend({ committee: committeeRefSchema })),
   transactions: paginated(pointTransactionSchema),
 });
 export type MemberPoints = z.infer<typeof memberPointsSchema>;
@@ -256,6 +258,6 @@ export const getCommitteePointsSummaryEndpoint = defineEndpoint({
     })
     .superRefine(refinePeriod),
   response: paginated(balanceSchema.extend({ member: personRefSchema })).extend({
-    committee: z.object({ id: idSchema, name: z.string() }),
+    committee: committeeRefSchema,
   }),
 });

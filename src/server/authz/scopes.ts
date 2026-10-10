@@ -13,7 +13,7 @@ declare const scopeBrand: unique symbol;
  *
  * Combine a scope with filters using `AND: [scope, filters]` — never spread it or replace it.
  */
-export type Scope<TWhere> = TWhere & { readonly [scopeBrand]: true };
+type Scope<TWhere> = TWhere & { readonly [scopeBrand]: true };
 
 export type UserScope = Scope<Prisma.UserWhereInput>;
 export type ClubScope = Scope<Prisma.ClubWhereInput>;

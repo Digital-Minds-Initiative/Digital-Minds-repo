@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
 export interface ConfirmDialogProps {
@@ -18,7 +19,7 @@ export interface ConfirmDialogProps {
   variant?: 'default' | 'danger';
   /**
    * May return a promise: the button shows a spinner and the dialog stays open until it settles.
-   * If it rejects, the dialog stays open — report the error yourself (e.g. with a toast).
+   * If it rejects, the dialog stays open and shows the error (translated by its ApiError code).
    */
   onConfirm: () => void | Promise<void>;
 }
@@ -35,15 +36,18 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const t = useTranslations('ui.confirmDialog');
+  const tErrors = useTranslations('common.errors');
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
 
   async function confirm() {
     setPending(true);
+    setError(null);
     try {
       await onConfirm();
       onOpenChange(false);
-    } catch {
-      // Stays open; the caller reports the error.
+    } catch (caught) {
+      setError(caught);
     } finally {
       setPending(false);
     }
@@ -53,7 +57,9 @@ export function ConfirmDialog({
     <AlertDialogPrimitive.Root
       open={open}
       onOpenChange={(next) => {
-        if (!pending) onOpenChange(next);
+        if (pending) return;
+        setError(null);
+        onOpenChange(next);
       }}
     >
       <AlertDialogPrimitive.Portal>
@@ -74,6 +80,11 @@ export function ConfirmDialog({
               </AlertDialogPrimitive.Description>
             ) : null}
           </div>
+          {error ? (
+            <p role="alert" className="text-sm font-medium text-danger">
+              {tErrors(error instanceof ApiError ? error.code : 'INTERNAL')}
+            </p>
+          ) : null}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <AlertDialogPrimitive.Cancel asChild>
               <Button variant="outline" disabled={pending}>

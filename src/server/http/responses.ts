@@ -2,30 +2,13 @@ import 'server-only';
 
 import type { z } from 'zod';
 
-import { httpStatusByErrorCode, type ErrorEnvelope, type ValidationIssue } from '@/lib/contracts';
+import { httpStatusByErrorCode, type ErrorEnvelope } from '@/lib/contracts';
 import { AppError } from '@/server/errors';
 import { logger } from '@/server/logger';
-
-export type InputLocation = 'params' | 'query' | 'body';
 
 /** Responses carry personal data; nothing in between may cache them. */
 function baseHeaders(requestId: string): HeadersInit {
   return { 'x-request-id': requestId, 'cache-control': 'no-store' };
-}
-
-export function zodIssuesToValidationIssues(
-  error: z.ZodError,
-  location: InputLocation,
-): ValidationIssue[] {
-  return error.issues.map((issue) => ({
-    path: [
-      location,
-      ...issue.path.map((segment) => (typeof segment === 'symbol' ? String(segment) : segment)),
-    ],
-    // Custom refinements use their message as a stable key (e.g. `date_in_future`).
-    code: issue.code === 'custom' ? issue.message : issue.code,
-    message: issue.message,
-  }));
 }
 
 export function jsonResponse(body: unknown, status: number, requestId: string): Response {

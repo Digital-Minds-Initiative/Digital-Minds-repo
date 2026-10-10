@@ -33,17 +33,18 @@ async function createPerson(
   options: { admin?: boolean; registered?: boolean } = {},
 ) {
   sequence += 1;
-  return db.user.create({
+  const user = await db.user.create({
     data: {
       fullName,
       searchName: normalizeForSearch(fullName),
       uniEmail: `s9${String(sequence).padStart(8, '0')}@st.uqu.edu.sa`,
-      phone: `+9665000${String(sequence).padStart(5, '0')}`,
       isFullAdmin: options.admin ?? false,
       registeredAt: options.registered === false ? null : new Date(),
     },
     select: { id: true, uniEmail: true, fullName: true },
   });
+  // Contact details are per club (ADR 0012); join() copies this phone into each membership.
+  return { ...user, phone: `+9665000${String(sequence).padStart(5, '0')}` };
 }
 
 export async function buildScenario() {
@@ -81,14 +82,15 @@ export async function buildScenario() {
   const removedAt = new Date(Date.now() - 7 * 86_400_000);
 
   async function join(
-    userId: string,
+    person: { id: string; phone: string },
     club: { id: string },
     typeId: string,
     options: { officer?: boolean; removed?: boolean } = {},
   ) {
     const membership = await db.membership.create({
       data: {
-        userId,
+        userId: person.id,
+        phone: person.phone,
         clubId: club.id,
         membershipTypeId: typeId,
         role: options.officer ? 'CLUB_OFFICER' : 'MEMBER',
@@ -116,24 +118,24 @@ export async function buildScenario() {
   }
 
   const m = {
-    officerA: await join(users.officerA.id, clubA, typeA.id, { officer: true }),
-    officerB: await join(users.officerB.id, clubB, typeB.id, { officer: true }),
-    leadA1: await join(users.leadA1.id, clubA, typeA.id),
-    coLeadA1: await join(users.coLeadA1.id, clubA, typeA.id),
-    memberA1: await join(users.memberA1.id, clubA, typeA.id),
-    memberA2: await join(users.memberA2.id, clubA, typeA.id),
-    memberB1: await join(users.memberB1.id, clubB, typeB.id),
-    mixedA: await join(users.mixed.id, clubA, typeA.id, { officer: true }),
-    mixedB: await join(users.mixed.id, clubB, typeB.id),
-    bothClubsA: await join(users.bothClubs.id, clubA, typeA.id),
-    bothClubsB: await join(users.bothClubs.id, clubB, typeB.id),
-    removedOfficer: await join(users.removedOfficer.id, clubA, typeA.id, {
+    officerA: await join(users.officerA, clubA, typeA.id, { officer: true }),
+    officerB: await join(users.officerB, clubB, typeB.id, { officer: true }),
+    leadA1: await join(users.leadA1, clubA, typeA.id),
+    coLeadA1: await join(users.coLeadA1, clubA, typeA.id),
+    memberA1: await join(users.memberA1, clubA, typeA.id),
+    memberA2: await join(users.memberA2, clubA, typeA.id),
+    memberB1: await join(users.memberB1, clubB, typeB.id),
+    mixedA: await join(users.mixed, clubA, typeA.id, { officer: true }),
+    mixedB: await join(users.mixed, clubB, typeB.id),
+    bothClubsA: await join(users.bothClubs, clubA, typeA.id),
+    bothClubsB: await join(users.bothClubs, clubB, typeB.id),
+    removedOfficer: await join(users.removedOfficer, clubA, typeA.id, {
       officer: true,
       removed: true,
     }),
-    staleLead: await join(users.staleLead.id, clubA, typeA.id),
-    plain: await join(users.plain.id, clubA, typeA.id),
-    unregistered: await join(users.unregistered.id, clubA, typeA.id),
+    staleLead: await join(users.staleLead, clubA, typeA.id),
+    plain: await join(users.plain, clubA, typeA.id),
+    unregistered: await join(users.unregistered, clubA, typeA.id),
   };
 
   const cm = {

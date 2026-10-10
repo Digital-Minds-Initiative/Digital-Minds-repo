@@ -66,12 +66,12 @@ Code is organised by feature. A module owns its contracts, server logic, UI, moc
 ```text
 src/modules/members/
   contracts.ts        Zod schemas + endpoint definitions + types (shared by server, browser, later mobile)
-  index.ts            public UI surface: components and hooks
+  index.ts            public UI surface: components and hooks (only once the module has UI)
   server/
     index.ts          public server surface: service functions (server-only)
     service.ts        business logic — every function takes the Actor first
     repository.ts     Prisma access — every scoped function takes a scope
-    policies.ts       what an actor may do in this module (built on src/server/authz)
+    policies.ts       what an actor may do in this module (built on the predicates in src/server/authz)
     mappers.ts        database rows → contract types
   components/         feature UI (MembersTable…)
   hooks/              TanStack Query hooks built on the API client
@@ -90,8 +90,8 @@ Current modules:
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services (list/get/create/update/remove/committees), UI |
 | `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)          |
-| `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`, policies                       |
-| `permissions` | appointing officers and leads                                | contracts, policies                                                |
+| `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`                                 |
+| `permissions` | appointing officers and leads                                | contracts                                                          |
 | `auth`        | the signed-in actor (`/me`)                                  | contracts, service, user menu, overview                            |
 | `system`      | health                                                       | full endpoint                                                      |
 
@@ -127,15 +127,15 @@ export const listMembersEndpoint = defineEndpoint({
   }
   ```
 
-| Status | Code                | When                                                                                              |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------- |
-| 400    | `BAD_REQUEST`       | body is not JSON                                                                                  |
-| 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                   |
-| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule)          |
-| 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                 |
-| 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`…) |
-| 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`  |
-| 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                 |
+| Status | Code                | When                                                                                                                                                                                               |
+| ------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `BAD_REQUEST`       | body is not JSON                                                                                                                                                                                   |
+| 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                                                                                                                    |
+| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule)                                                                                                           |
+| 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                                                                                                                  |
+| 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`…); every unique-constraint violation is `already_exists`, mapped once in `src/server/db/client.ts` |
+| 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`                                                                                                   |
+| 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                                                                                                                  |
 
 - **Responses are parsed by their contract** before sending: fields not in the contract are dropped. This is the safety net for public endpoints, which must never return phone numbers or emails.
 - `code` is for programs; the UI translates it (`common.errors.<code>`). `message` is English, for developers. Custom validation messages are keys (`date_in_future`) translated under `common.validation`.
@@ -158,27 +158,27 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 
 **Permission matrix** (★ = full admin, O = officer of the club, L = lead of the committee):
 
-| Action                                          |  ★  |  O   |                      L                       |
-| ----------------------------------------------- | :-: | :--: | :------------------------------------------: |
-| Read members and their contact data             | all | club |           own committee's members            |
-| Add a person to the club                        |  ✓  |  ✓   | only into their own committee, default type  |
-| Edit profile fields (name, contact, college…)   |  ✓  |  ✓   |          members of their committee          |
-| Change membership type                          |  ✓  |  ✓   |                      —                       |
-| Add to / remove from a committee                |  ✓  |  ✓   | their committee (cannot remove another lead) |
-| Remove from the club / restore a removed member |  ✓  |  ✓   |                      —                       |
-| CSV import                                      |  ✓  |  ✓   |                      —                       |
-| Create / edit / cancel points                   |  ✓  |  ✓   |               their committee                |
-| Committees, membership types, club details      |  ✓  |  ✓   |                      —                       |
-| Rotate / disable a committee's view link        |  ✓  |  ✓   |               — (may read it)                |
-| Appoint / revoke committee leads                |  ✓  |  ✓   |                      —                       |
-| Appoint / revoke club officers                  |  ✓  |  —   |                      —                       |
-| Create / archive clubs                          |  ✓  |  —   |                      —                       |
+| Action                                          |  ★  |  O   |                                                 L                                                  |
+| ----------------------------------------------- | :-: | :--: | :------------------------------------------------------------------------------------------------: |
+| Read members and their contact data             | all | club |                                      own committee's members                                       |
+| Add a person to the club                        |  ✓  |  ✓   | only into their own committee, default type; not someone already in the club they cannot see (404) |
+| Edit profile fields (name, contact, college…)   |  ✓  |  ✓   |                                     members of their committee                                     |
+| Change membership type                          |  ✓  |  ✓   |                                                 —                                                  |
+| Add to / remove from a committee                |  ✓  |  ✓   |                            their committee (cannot remove another lead)                            |
+| Remove from the club / restore a removed member |  ✓  |  ✓   |                                                 —                                                  |
+| CSV import                                      |  ✓  |  ✓   |                                                 —                                                  |
+| Create / edit / cancel points                   |  ✓  |  ✓   |                                          their committee                                           |
+| Committees, membership types, club details      |  ✓  |  ✓   |                                                 —                                                  |
+| Rotate / disable a committee's view link        |  ✓  |  ✓   |                                          — (may read it)                                           |
+| Appoint / revoke committee leads                |  ✓  |  ✓   |                                                 —                                                  |
+| Appoint / revoke club officers                  |  ✓  |  —   |                                                 —                                                  |
+| Create / archive clubs                          |  ✓  |  —   |                                                 —                                                  |
 
-**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so an unscoped query does not compile. Always combine with `AND: [scope, filters]`. An actor without access gets `{ id: { in: [] } }` — fail closed.
+**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
 
-**Assertions** (`src/server/authz/assertions.ts`) answer "may this actor do X to this already-visible target": `assertCanManageClub`, `assertCanManageCommittee`, `assertCanManagePoints`, `assertCanAppointOfficers`, `assertCanAppointLeads`, `assertFullAdmin`. Module `policies.ts` maps module actions onto them.
+**Policies** (`modules/*/server/policies.ts`) answer "may this actor do X to this already-visible target". They are built on the role predicates in `src/server/authz/roles.ts` (`canManageClub`, `canManageCommittee`, `isLeadOf`, `ledCommitteeIds`) and throw `AuthzError` with the module's own `reason` ([ADR 0011](adr/0011-modules-own-their-policies.md)). Write a policy together with the service that calls it.
 
 **The service pattern** for every write:
 
@@ -198,9 +198,10 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 
 `prisma/schema.prisma` covers the whole phase. Highlights ([ADR 0003](adr/0003-data-model.md), [ADR 0004](adr/0004-points-ledger.md)):
 
-- `User` — one per person, `uniEmail` unique and lowercase (CHECK), `registeredAt` null until they sign up, random `publicId` for public pages, `searchName` for Arabic-aware search.
+- `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK), `registeredAt` null until they sign up, random `publicId` for public pages, `searchName` for Arabic-aware search.
 - `Club` → `Committee`, `MembershipType` (ordered per club).
-- `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
+- `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
+- `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
 - `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel).
 - **Composite foreign keys** carry `clubId` down the chain, so a committee membership or a point can never point into another club — even if application code has a bug.
 - **Nothing with history is hard-deleted.** All foreign keys are `Restrict`.
@@ -238,11 +239,12 @@ Themes override semantic tokens under a selector: `[data-theme='dark']` today, `
 
 ## Testing
 
-| Kind        | Where                             | Runs with               | Covers                                                                                                  |
-| ----------- | --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| Unit        | next to the code (`*.test.ts[x]`) | `pnpm test`             | pure logic, contracts, scopes and policies, route wrapper, API client (against MSW), components (jsdom) |
-| Integration | `tests/integration/`              | `pnpm test:integration` | services and route handlers against a real PostgreSQL (`digital_minds_test`)                            |
-| Repository  | `tests/repo/`                     | `pnpm test`             | config that must stay in step, e.g. `engines` and the README match the Node version in `.nvmrc`         |
+| Kind         | Where                             | Runs with               | Covers                                                                                                                                    |
+| ------------ | --------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit         | next to the code (`*.test.ts[x]`) | `pnpm test`             | pure logic, contracts, scopes and policies, route wrapper, API client (against MSW), components (jsdom)                                   |
+| Integration  | `tests/integration/`              | `pnpm test:integration` | services and route handlers against a real PostgreSQL (`digital_minds_test`)                                                              |
+| Write scopes | `tests/integration/repositories/` | `pnpm test:integration` | each repository write applies the scope itself (called directly with another club's scope); the only tests allowed to import repositories |
+| Repository   | `tests/repo/`                     | `pnpm test`             | config that must stay in step, e.g. `engines` and the README match the Node version in `.nvmrc`                                           |
 
 - Integration files start from an empty database and build their own small scenario with `tests/factories/scenario.ts` (independent of the demo seed). They prove the authorization guarantees: officers cannot cross clubs, leads cannot leave their committee, mixed roles are scoped per club, full admins see everything, removed memberships grant nothing — always checking both the error **and** that the database did not change.
 - The test database name must end in `_test`; the setup refuses anything else.

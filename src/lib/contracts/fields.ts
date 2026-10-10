@@ -26,7 +26,8 @@ export const pastOrTodayDateSchema = isoDateSchema.refine((value) => !isFutureDa
 
 /**
  * University email: trimmed and lower-cased. Whether the domain is allowed depends on the
- * ALLOWED_EMAIL_DOMAINS setting, so that check runs on the server (`assertAllowedEmailDomain`).
+ * ALLOWED_EMAIL_DOMAINS setting, so that check runs on the server (`assertUniversityEmail` in
+ * src/server/email-policy.ts).
  */
 export const universityEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
 
@@ -50,6 +51,13 @@ export const academicLevelSchema = z.number().int().min(1).max(12);
 
 export const shortTextSchema = z.string().trim().min(1).max(120);
 export const longTextSchema = z.string().trim().min(1).max(1000);
+
+/** For PATCH bodies whose fields are all optional: rejects an update that changes nothing. */
+export function requireAnyField<T extends z.ZodObject>(schema: T) {
+  return schema.refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: 'at_least_one_field',
+  });
+}
 
 /** Optional work-date period. Spread into a query object and add `refinePeriod`. */
 export const periodShape = {

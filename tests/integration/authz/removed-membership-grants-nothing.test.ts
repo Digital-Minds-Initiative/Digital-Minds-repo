@@ -97,11 +97,12 @@ describe('removed memberships', () => {
       const readded = await createMember(officerA, {
         clubId: s.clubA.id,
         person: { uniEmail: s.users.coLeadA1.uniEmail, fullName: s.users.coLeadA1.fullName },
+        profile: {},
         committeeIds: [s.committees.a1.id],
       });
-      expect(readded.outcome).toBe('reactivated');
-      expect(readded.member.role).toBe('MEMBER');
-      expect(readded.member.committees).toEqual([
+      expect(readded.id).toBe(s.memberships.coLeadA1);
+      expect(readded.role).toBe('MEMBER');
+      expect(readded.committees).toEqual([
         expect.objectContaining({ id: s.committees.a1.id, role: 'MEMBER' }),
       ]);
     });

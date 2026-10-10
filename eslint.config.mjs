@@ -15,6 +15,7 @@ import storybook from 'eslint-plugin-storybook';
  *   2. Modules are used only through their public entry points.
  *   3. Only repositories touch the database; route handlers only use the http wrapper.
  *   4. No raw colours and no physical-direction (left/right) Tailwind classes.
+ *   5. No Server Actions; no casts to scope types; contracts import only zod and other contracts.
  */
 
 const modules = readdirSync('src/modules', { withFileTypes: true })
@@ -64,12 +65,36 @@ const NOT_DATA_ACCESS = [
   './src/*.ts',
   './src/modules/*/!(server)/**/*',
   './src/modules/*/*.ts',
-  './src/modules/*/server/!(repository).ts',
+  // At any depth under server/: a helper in server/sub/ is not a repository either.
+  './src/modules/*/server/**/!(repository).ts',
   './src/server/!(db|authz)/**/*',
   './src/server/*.ts',
 ];
 
-const boundaryZones = [
+/** One zone per module: outside code may use only its entry points (plus `extraEntries`). */
+const moduleZones = (/** @type {string[]} */ extraEntries = []) =>
+  modules.map((name) => ({
+    target: [
+      `./src/modules/!(${name})/**/*`,
+      './src/!(modules)/**/*',
+      './src/*.ts',
+      './tests/**/*',
+      './prisma/**/*',
+      './.storybook/**/*',
+    ],
+    from: `./src/modules/${name}`,
+    except: [
+      './index.ts',
+      './contracts.ts',
+      './server/index.ts',
+      './mocks/index.ts',
+      './messages',
+      ...extraEntries,
+    ],
+    message: `Use the "${name}" module through its entry points: index.ts (UI), contracts.ts, server/index.ts (server) or mocks/index.ts.`,
+  }));
+
+const layerZones = [
   {
     target: CLIENT_CODE,
     from: SERVER_CODE,
@@ -83,26 +108,70 @@ const boundaryZones = [
       'Only repositories (src/modules/<module>/server/repository.ts) may access the database.',
   },
   {
+    // authz builds scopes from the generated Prisma types; only the actor repository queries.
+    target: './src/server/authz/**/!(actor-repository).ts',
+    from: './src/server/db',
+    except: ['./generated'],
+    message:
+      'In src/server/authz only actor-repository.ts may query the database (types from ./generated are fine).',
+  },
+  {
     target: './src/app/api/**/*',
     from: './src/server',
     except: ['./http'],
     message:
       'Route handlers only use src/server/http (defineRoute). Put logic in a module service.',
   },
-  ...modules.map((name) => ({
-    target: [
-      `./src/modules/!(${name})/**/*`,
-      './src/!(modules)/**/*',
-      './src/*.ts',
-      './tests/**/*',
-      './prisma/**/*',
-      './.storybook/**/*',
-    ],
-    from: `./src/modules/${name}`,
-    except: ['./index.ts', './contracts.ts', './server/index.ts', './mocks/index.ts', './messages'],
-    message: `Use the "${name}" module through its entry points: index.ts (UI), contracts.ts, server/index.ts (server) or mocks/index.ts.`,
-  })),
 ];
+
+const RESTRICTED_IMPORT_PATHS = [
+  { name: 'next/link', message: 'Use Link from @/i18n/navigation (locale-aware).' },
+  {
+    name: 'next/navigation',
+    importNames: ['useRouter', 'usePathname', 'redirect', 'permanentRedirect'],
+    message: 'Use the locale-aware versions from @/i18n/navigation.',
+  },
+  {
+    name: '@prisma/client',
+    message: 'Use the generated client (src/server/db) from a repository.',
+  },
+];
+
+/** Contracts may import zod, @/lib/contracts and other modules' contracts — nothing else. */
+const CONTRACT_IMPORT_PATTERNS = [
+  {
+    regex: '^(react|react-dom|next)(/|$)|^@/(components|server|i18n)(/|$)|^@prisma/',
+    message: 'Contracts are plain Zod: no React, Next.js, Prisma, server or UI code.',
+  },
+  {
+    regex: '^@/modules/[^/]+(/(?!contracts$).*)?$',
+    message: "Contracts may import another module's contracts.ts only.",
+  },
+];
+
+/** Raw colours in inline styles bypass the design tokens. */
+const RAW_COLOUR_STYLE = {
+  selector:
+    "JSXAttribute[name.name='style'] Property > Literal[value=/#[0-9a-fA-F]{3,8}|rgba?\\(|hsla?\\(|oklch\\(/]",
+  message: 'Use semantic tokens (Tailwind classes) instead of raw colours in styles.',
+};
+
+/** All UI data goes through /api/v1 (ADR 0006). */
+const SERVER_ACTION = {
+  selector: "ExpressionStatement[directive='use server']",
+  message: 'No Server Actions: UI data goes through /api/v1 route handlers (docs/adr/0006).',
+};
+
+/** Scopes come only from src/server/authz/scopes.ts; a cast would forge one. */
+const SCOPE_CASTS = ['TSAsExpression', 'TSTypeAssertion']
+  .flatMap((node) => [
+    `${node} > TSTypeReference[typeName.name=/Scope$/]`,
+    `${node} > TSTypeReference[typeName.right.name=/Scope$/]`,
+  ])
+  .map((selector) => ({
+    selector,
+    message: 'Never cast to a scope type: build scopes with the functions in src/server/authz.',
+  }));
 
 /** Local rule: every server file imports 'server-only', so Next.js refuses to bundle it for the browser. */
 const localPlugin = {
@@ -205,34 +274,32 @@ export default defineConfig([
       'import/no-duplicates': ['error', { 'prefer-inline': true }],
       'import/first': 'error',
       'import/newline-after-import': 'error',
-      'import/no-restricted-paths': ['error', { zones: windowsSafe(boundaryZones) }],
-
-      'no-restricted-imports': [
+      'import/no-restricted-paths': [
         'error',
-        {
-          paths: [
-            { name: 'next/link', message: 'Use Link from @/i18n/navigation (locale-aware).' },
-            {
-              name: 'next/navigation',
-              importNames: ['useRouter', 'usePathname', 'redirect', 'permanentRedirect'],
-              message: 'Use the locale-aware versions from @/i18n/navigation.',
-            },
-            {
-              name: '@prisma/client',
-              message: 'Use the generated client (src/server/db) from a repository.',
-            },
-          ],
-        },
+        { zones: windowsSafe([...layerZones, ...moduleZones()]) },
       ],
 
-      // Raw colours in inline styles bypass the design tokens.
-      'no-restricted-syntax': [
+      'no-restricted-imports': ['error', { paths: RESTRICTED_IMPORT_PATHS }],
+      'no-restricted-syntax': ['error', RAW_COLOUR_STYLE, SERVER_ACTION, ...SCOPE_CASTS],
+    },
+  },
+
+  {
+    name: 'digital-minds/scopes',
+    // The one place that creates scopes (by casting a where clause to its branded type).
+    files: ['src/server/authz/scopes.ts'],
+    rules: { 'no-restricted-syntax': ['error', RAW_COLOUR_STYLE, SERVER_ACTION] },
+  },
+
+  {
+    name: 'digital-minds/contracts',
+    // Contracts are shared with the browser and, later, the mobile app: zod, @/lib/contracts and
+    // other modules' contracts only.
+    files: ['src/modules/*/contracts.ts', 'src/lib/contracts/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
         'error',
-        {
-          selector:
-            "JSXAttribute[name.name='style'] Property > Literal[value=/#[0-9a-fA-F]{3,8}|rgba?\\(|hsla?\\(|oklch\\(/]",
-          message: 'Use semantic tokens (Tailwind classes) instead of raw colours in styles.',
-        },
+        { paths: RESTRICTED_IMPORT_PATHS, patterns: CONTRACT_IMPORT_PATTERNS },
       ],
     },
   },
@@ -276,6 +343,19 @@ export default defineConfig([
       'better-tailwindcss/no-duplicate-classes': 'error',
       'better-tailwindcss/no-deprecated-classes': 'error',
       'better-tailwindcss/no-restricted-classes': ['error', { restrict: restrictedClasses }],
+    },
+  },
+
+  {
+    name: 'digital-minds/repository-tests',
+    // Tests of the write scopes (the second line of defence) call repositories directly, because
+    // services always run a scoped read first and would hide a missing scope on the write.
+    files: ['tests/integration/repositories/**/*.ts'],
+    rules: {
+      'import/no-restricted-paths': [
+        'error',
+        { zones: windowsSafe([...layerZones, ...moduleZones(['./server/repository.ts'])]) },
+      ],
     },
   },
 

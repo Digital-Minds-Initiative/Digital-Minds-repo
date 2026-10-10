@@ -8,9 +8,11 @@
  * pattern, so no real person's contact details appear in seed data.
  */
 
+import type { MemberProfile } from '@/modules/members/contracts';
+
 export type DemoClubKey = 'computing' | 'tuwaiq';
 
-export interface DemoCommittee {
+interface DemoCommittee {
   key: string;
   name: string;
   description: string;
@@ -57,7 +59,7 @@ export const demoClubs: readonly DemoClub[] = [
 export type DemoPersona =
   'admin' | 'officer' | 'lead' | 'mixed' | 'member' | 'unregistered' | 'removed' | 'no-access';
 
-export interface DemoMembership {
+interface DemoMembership {
   club: DemoClubKey;
   /** One of the club's membership type names. */
   type: string;
@@ -535,6 +537,20 @@ export const demoPeople: readonly DemoPerson[] = [
     ],
   },
 ];
+
+/**
+ * A club's copy of the person's details (ADR 0012). The dataset lists them once per person, so
+ * every club a demo person belongs to starts with the same copy.
+ */
+export function demoProfile(person: DemoPerson): MemberProfile {
+  return {
+    personalEmail: person.personalEmail ?? null,
+    phone: person.phone ?? null,
+    college: person.college ?? null,
+    major: person.major ?? null,
+    level: person.level ?? null,
+  };
+}
 
 // ─── Stable ids shared by the seed and the mocks ─────────────
 

@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from 'msw';
 import {
   httpStatusByErrorCode,
   searchParamsToObject,
+  toValidationIssues,
   type EndpointBody,
   type EndpointDefinition,
   type EndpointParams,
@@ -31,7 +32,7 @@ export function mockError(code: ErrorCode, message: string = code): MockError {
   return new MockError(code, message);
 }
 
-export interface MockRequestContext<E> {
+interface MockRequestContext<E> {
   params: EndpointParams<E>;
   query: EndpointQuery<E>;
   body: EndpointBody<E>;
@@ -50,20 +51,6 @@ function errorResponse(code: ErrorCode, message: string, issues?: ValidationIssu
   return HttpResponse.json(body, { status: httpStatusByErrorCode[code] });
 }
 
-function toIssues(
-  location: 'params' | 'query' | 'body',
-  issues: ReadonlyArray<{ path: PropertyKey[]; code: string; message: string }>,
-): ValidationIssue[] {
-  return issues.map((issue) => ({
-    path: [
-      location,
-      ...issue.path.map((segment) => (typeof segment === 'symbol' ? String(segment) : segment)),
-    ],
-    code: issue.code === 'custom' ? issue.message : issue.code,
-    message: issue.message,
-  }));
-}
-
 export function mockEndpoint<E extends EndpointDefinition>(
   endpoint: E,
   // NoInfer: the endpoint alone decides E, so the resolver gets full contextual typing.
@@ -79,7 +66,7 @@ export function mockEndpoint<E extends EndpointDefinition>(
       return errorResponse(
         'VALIDATION_FAILED',
         'Invalid path parameters.',
-        toIssues('params', parsedParams.error.issues),
+        toValidationIssues(parsedParams.error.issues, 'params'),
       );
     }
     const parsedQuery = endpoint.query?.safeParse(
@@ -89,7 +76,7 @@ export function mockEndpoint<E extends EndpointDefinition>(
       return errorResponse(
         'VALIDATION_FAILED',
         'Invalid query.',
-        toIssues('query', parsedQuery.error.issues),
+        toValidationIssues(parsedQuery.error.issues, 'query'),
       );
     }
     let parsedBody: unknown;
@@ -99,7 +86,7 @@ export function mockEndpoint<E extends EndpointDefinition>(
         return errorResponse(
           'VALIDATION_FAILED',
           'Invalid body.',
-          toIssues('body', result.error.issues),
+          toValidationIssues(result.error.issues, 'body'),
         );
       }
       parsedBody = result.data;

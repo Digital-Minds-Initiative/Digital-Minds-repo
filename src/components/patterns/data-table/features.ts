@@ -11,7 +11,7 @@ import {
 } from '@tanstack/react-table';
 
 /** Extra per-column settings understood by DataTable. */
-export interface DataTableColumnMeta {
+interface DataTableColumnMeta {
   /** Label in the column-visibility menu (needed when the header is not plain text). */
   label?: string;
   headerClassName?: string;

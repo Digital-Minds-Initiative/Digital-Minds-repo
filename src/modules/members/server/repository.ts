@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { normalizeForSearch, toLatinDigits } from '@/lib/arabic';
+import { normalizeForSearch } from '@/lib/arabic';
+import { phoneSearchDigits } from '@/lib/phone';
 import type {
   ClubScope,
   CommitteeMembershipScope,
@@ -8,10 +9,16 @@ import type {
   MemberScope,
 } from '@/server/authz';
 import { db } from '@/server/db/client';
-import { Prisma } from '@/server/db/generated/client';
-import { ConflictError, NotFoundError } from '@/server/errors';
+import type { Prisma } from '@/server/db/generated/client';
+import { NotFoundError } from '@/server/errors';
 
-import type { MemberSortField, MemberStatus } from '../contracts';
+import type {
+  ClubRole,
+  CreateMemberBody,
+  MemberSortField,
+  MemberStatus,
+  UpdateMemberBody,
+} from '../contracts';
 
 /*
  * Prisma access for members (club memberships). Reads and writes of scoped rows take a scope
@@ -22,25 +29,19 @@ import type { MemberSortField, MemberStatus } from '../contracts';
 // ─── Read model ──────────────────────────────────────────────
 
 /** `nested` limits the member's committee list to committees the actor may see. */
-export function memberSelect(nested: CommitteeMembershipScope) {
+function memberSelect(nested: CommitteeMembershipScope) {
   return {
     id: true,
     role: true,
     createdAt: true,
     removedAt: true,
-    user: {
-      select: {
-        id: true,
-        fullName: true,
-        uniEmail: true,
-        personalEmail: true,
-        phone: true,
-        college: true,
-        major: true,
-        level: true,
-        registeredAt: true,
-      },
-    },
+    // This club's copy of the person's details (ADR 0012).
+    personalEmail: true,
+    phone: true,
+    college: true,
+    major: true,
+    level: true,
+    user: { select: { id: true, fullName: true, uniEmail: true, registeredAt: true } },
     club: { select: { id: true, name: true, slug: true } },
     membershipType: { select: { id: true, name: true, order: true } },
     committeeMemberships: {
@@ -58,7 +59,7 @@ export interface MemberFilters {
   clubId?: string;
   committeeIds?: string[];
   membershipTypeIds?: string[];
-  role?: 'MEMBER' | 'CLUB_OFFICER';
+  role?: ClubRole;
   registered?: boolean;
   status: MemberStatus;
 }
@@ -94,8 +95,8 @@ function memberWhere(
       { user: { searchName: { contains: normalizeForSearch(filters.search) } } },
       { user: { uniEmail: { contains: filters.search.toLowerCase() } } },
     ];
-    const digits = toLatinDigits(filters.search).replace(/\D/g, '');
-    if (digits.length >= 4) search.push({ user: { phone: { contains: digits } } });
+    const phoneDigits = phoneSearchDigits(filters.search);
+    if (phoneDigits) search.push({ phone: { contains: phoneDigits } });
     conditions.push({ OR: search });
   }
   return { AND: conditions };
@@ -231,126 +232,133 @@ export async function findAccountByUniEmail(
 
 // ─── Writes ──────────────────────────────────────────────────
 
-export interface NewPerson {
-  uniEmail: string;
-  fullName: string;
-  personalEmail?: string;
-  phone?: string;
-  college?: string;
-  major?: string;
-  level?: number;
+/** What adding a member writes through: the club, its committees, and an existing membership. */
+export interface NewMemberScopes {
+  club: ClubScope;
+  committees: CommitteeScope;
+  members: MemberScope;
 }
 
 /**
  * Creates (or links) the account, creates or restores the club membership and adds the
- * committees — in one transaction. The caller has already authorised every part.
+ * committees — in one transaction. The service has authorised every part; the scopes are checked
+ * again here, so a service bug cannot write into a club, committee or membership out of reach.
+ * The profile is this club's copy: written on a new or restored membership, never on the account.
  */
-export async function saveNewMember(input: {
-  person: NewPerson;
-  existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
-  clubId: string;
-  membershipTypeId: string;
-  /** Change the type of an existing membership (only when the caller chose one explicitly). */
-  overrideType: boolean;
-  committeeIds: string[];
-}): Promise<string> {
-  try {
-    return await db.$transaction(async (tx) => {
-      const userId =
-        input.existing?.userId ??
-        (
-          await tx.user.create({
-            data: {
-              ...input.person,
-              searchName: normalizeForSearch(input.person.fullName),
-            },
-            select: { id: true },
-          })
-        ).id;
-
-      const current = input.existing?.membership ?? null;
-      let membershipId: string;
-      if (!current) {
-        membershipId = (
-          await tx.membership.create({
-            data: { userId, clubId: input.clubId, membershipTypeId: input.membershipTypeId },
-            select: { id: true },
-          })
-        ).id;
-      } else {
-        membershipId = current.id;
-        if (current.removed || input.overrideType) {
-          await tx.membership.update({
-            where: { id: current.id },
-            data: {
-              ...(current.removed ? { removedAt: null, removedById: null, role: 'MEMBER' } : {}),
-              ...(input.overrideType || current.removed
-                ? { membershipTypeId: input.membershipTypeId }
-                : {}),
-            },
-          });
-        }
-      }
-
-      for (const committeeId of input.committeeIds) {
-        await tx.committeeMembership.upsert({
-          where: { membershipId_committeeId: { membershipId, committeeId } },
-          create: { membershipId, committeeId, clubId: input.clubId },
-          update: { removedAt: null },
-        });
-      }
-      return membershipId;
+export async function saveNewMember(
+  scopes: NewMemberScopes,
+  input: {
+    person: CreateMemberBody['person'];
+    profile: CreateMemberBody['profile'];
+    existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
+    clubId: string;
+    membershipTypeId: string;
+    /** Change the type of an existing membership (only when the caller chose one explicitly). */
+    overrideType: boolean;
+    committeeIds: string[];
+  },
+): Promise<string> {
+  return db.$transaction(async (tx) => {
+    const club = await tx.club.count({ where: { AND: [scopes.club, { id: input.clubId }] } });
+    if (club !== 1) throw new NotFoundError('Club');
+    const committees = await tx.committee.count({
+      where: { AND: [scopes.committees, { clubId: input.clubId, id: { in: input.committeeIds } }] },
     });
-  } catch (error) {
-    throw toConflict(error);
-  }
-}
+    if (committees !== input.committeeIds.length) throw new NotFoundError('Committee');
 
-export interface MemberChanges {
-  uniEmail?: string;
-  fullName?: string;
-  personalEmail?: string | null;
-  phone?: string | null;
-  college?: string | null;
-  major?: string | null;
-  level?: number | null;
-  membershipTypeId?: string;
+    const userId =
+      input.existing?.userId ??
+      (
+        await tx.user.create({
+          data: {
+            uniEmail: input.person.uniEmail,
+            fullName: input.person.fullName,
+            searchName: normalizeForSearch(input.person.fullName),
+          },
+          select: { id: true },
+        })
+      ).id;
+
+    const current = input.existing?.membership ?? null;
+    let membershipId: string;
+    if (!current) {
+      membershipId = (
+        await tx.membership.create({
+          data: {
+            ...input.profile,
+            userId,
+            clubId: input.clubId,
+            membershipTypeId: input.membershipTypeId,
+          },
+          select: { id: true },
+        })
+      ).id;
+    } else {
+      membershipId = current.id;
+      const changes = current.removed
+        ? {
+            ...input.profile,
+            removedAt: null,
+            removedById: null,
+            role: 'MEMBER' as const,
+            membershipTypeId: input.membershipTypeId,
+          }
+        : input.overrideType
+          ? { membershipTypeId: input.membershipTypeId }
+          : null;
+      // Even when nothing on it changes, the membership must be one the actor can reach.
+      const reachable = { AND: [scopes.members, { id: current.id }] };
+      const count = changes
+        ? (await tx.membership.updateMany({ where: reachable, data: changes })).count
+        : await tx.membership.count({ where: reachable });
+      if (count !== 1) throw new NotFoundError('Member');
+    }
+
+    for (const committeeId of input.committeeIds) {
+      await tx.committeeMembership.upsert({
+        where: { membershipId_committeeId: { membershipId, committeeId } },
+        create: { membershipId, committeeId, clubId: input.clubId },
+        update: { removedAt: null },
+      });
+    }
+    return membershipId;
+  });
 }
 
 /**
- * Profile fields are on the user (one account per person); the type is on the membership.
- * Both updates only match rows inside the actor's scope.
+ * The name and university email are on the shared account; contact and study details and the
+ * type are this club's membership (ADR 0012). Both updates only match rows inside the scope.
  */
 export async function saveMemberChanges(
   scope: MemberScope,
   memberId: string,
-  changes: MemberChanges,
+  changes: UpdateMemberBody,
 ): Promise<void> {
-  const { membershipTypeId, ...profile } = changes;
-  const userData: Prisma.UserUpdateManyMutationInput = {
-    ...profile,
-    ...(profile.fullName !== undefined ? { searchName: normalizeForSearch(profile.fullName) } : {}),
+  const { uniEmail, fullName, ...clubFields } = changes;
+  const account: Prisma.UserUpdateManyMutationInput = {
+    ...(uniEmail !== undefined ? { uniEmail } : {}),
+    ...(fullName !== undefined ? { fullName, searchName: normalizeForSearch(fullName) } : {}),
   };
-  try {
-    await db.$transaction(async (tx) => {
-      if (Object.keys(userData).length > 0) {
-        const { count } = await tx.user.updateMany({
-          where: { memberships: { some: { AND: [scope, { id: memberId, removedAt: null }] } } },
-          data: userData,
-        });
-        if (count !== 1) throw new NotFoundError('Member');
-      }
-      if (membershipTypeId !== undefined) {
-        const { count } = await tx.membership.updateMany({
-          where: { AND: [scope, { id: memberId, removedAt: null }] },
-          data: { membershipTypeId },
-        });
-        if (count !== 1) throw new NotFoundError('Member');
-      }
-    });
-  } catch (error) {
-    throw toConflict(error);
-  }
+  await db.$transaction(async (tx) => {
+    if (hasValues(account)) {
+      const { count } = await tx.user.updateMany({
+        where: { memberships: { some: { AND: [scope, { id: memberId, removedAt: null }] } } },
+        data: account,
+      });
+      if (count !== 1) throw new NotFoundError('Member');
+    }
+    if (hasValues(clubFields)) {
+      const { count } = await tx.membership.updateMany({
+        where: { AND: [scope, { id: memberId, removedAt: null }] },
+        data: clubFields,
+      });
+      if (count !== 1) throw new NotFoundError('Member');
+    }
+  });
+}
+
+function hasValues(data: object): boolean {
+  return Object.values(data).some((value) => value !== undefined);
 }
 
 /**
@@ -369,6 +377,7 @@ export async function removeFromClub(
       data: { removedAt: now, removedById, role: 'MEMBER' },
     });
     if (count === 0) return;
+    // Only reached when the scoped update above matched this membership.
     await tx.committeeMembership.updateMany({
       where: { membershipId: memberId, removedAt: null },
       data: { removedAt: now, role: 'MEMBER' },
@@ -376,17 +385,25 @@ export async function removeFromClub(
   });
 }
 
-/** Adds the member to the committee, or restores a removed committee membership. */
+/**
+ * Adds the member to the committee, or restores a removed committee membership. Both the member
+ * and the committee must be inside the actor's scopes (and in the same club).
+ */
 export async function addToCommittee(
-  scope: MemberScope,
+  scopes: { members: MemberScope; committees: CommitteeScope },
   target: { memberId: string; clubId: string; committeeId: string },
 ): Promise<void> {
   await db.$transaction(async (tx) => {
-    const member = await tx.membership.findFirst({
-      where: { AND: [scope, { id: target.memberId, removedAt: null }] },
-      select: { id: true },
+    const member = await tx.membership.count({
+      where: {
+        AND: [scopes.members, { id: target.memberId, clubId: target.clubId, removedAt: null }],
+      },
     });
-    if (!member) throw new NotFoundError('Member');
+    if (member !== 1) throw new NotFoundError('Member');
+    const committee = await tx.committee.count({
+      where: { AND: [scopes.committees, { id: target.committeeId, clubId: target.clubId }] },
+    });
+    if (committee !== 1) throw new NotFoundError('Committee');
     await tx.committeeMembership.upsert({
       where: {
         membershipId_committeeId: {
@@ -418,15 +435,4 @@ export async function removeFromCommittee(
     data: { removedAt: new Date(), role: 'MEMBER' },
   });
   if (count === 0) throw new NotFoundError('Committee member');
-}
-
-/** Unique-constraint violations (races, duplicate emails) become a 409 instead of a 500. */
-function toConflict(error: unknown): unknown {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-    return new ConflictError(
-      'That university email or membership already exists.',
-      'already_exists',
-    );
-  }
-  return error;
 }

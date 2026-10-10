@@ -3,7 +3,7 @@ import { setupWorker } from 'msw/browser';
 import { handlers } from './handlers';
 
 /** Browser mocking (NEXT_PUBLIC_API_MOCKING=enabled). Started by MockGate before the app renders. */
-export const worker = setupWorker(...handlers);
+const worker = setupWorker(...handlers);
 
 let starting: Promise<void> | null = null;
 

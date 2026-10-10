@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import type { Me } from '@/modules/auth/contracts';
 
-import type { ListMembersQuery, MemberStatus } from '../contracts';
+import { memberStatusSchema, type ListMembersQuery } from '../contracts';
 
 const ALL = 'all';
 const SEARCH_DEBOUNCE_MS = 300;
@@ -107,7 +107,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
 
       <Select
         value={query.status}
-        onValueChange={(value) => onChange({ status: value as MemberStatus })}
+        onValueChange={(value) => onChange({ status: memberStatusSchema.parse(value) })}
       >
         <SelectTrigger className="w-full sm:w-40" aria-label={t('status')}>
           <SelectValue />

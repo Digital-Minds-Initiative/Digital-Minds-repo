@@ -37,25 +37,22 @@ enum PointRevisionAction {
 
 /// One account per person. Admins can create the row before the person registers;
 /// registration links to it by `uniEmail` and sets `registeredAt`.
+/// It holds only what identifies the person to every club (name, university email). Contact and
+/// study details are kept per club, on Membership (docs/adr/0012-member-profiles-per-club.md).
 model User {
-  id            String    @id @default(uuid(7)) @db.Uuid
+  id           String    @id @default(uuid(7)) @db.Uuid
   /// Random, non-sequential id that is safe to expose in public links and cards.
-  publicId      String    @unique @default(cuid(2))
-  fullName      String
+  publicId     String    @unique @default(cuid(2))
+  fullName     String
   /// Arabic-normalised copy of fullName used for search (see src/lib/arabic.ts).
-  searchName    String
+  searchName   String
   /// Always lower-case (CHECK constraint). The identity key for linking registration.
-  uniEmail      String    @unique
-  personalEmail String?
-  phone         String?
-  college       String?
-  major         String?
-  level         Int?      @db.SmallInt
-  isFullAdmin   Boolean   @default(false)
+  uniEmail     String    @unique
+  isFullAdmin  Boolean   @default(false)
   /// Null until the person registers themselves.
-  registeredAt  DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  registeredAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   memberships                Membership[]               @relation("MembershipUser")
   removedMemberships         Membership[]               @relation("MembershipRemovedBy")
@@ -124,6 +121,12 @@ model Membership {
   clubId           String    @db.Uuid
   membershipTypeId String    @db.Uuid
   role             ClubRole  @default(MEMBER)
+  /// This club's copy of the person's contact and study details. Other clubs never see it.
+  personalEmail    String?
+  phone            String?
+  college          String?
+  major            String?
+  level            Int?      @db.SmallInt
   /// Set when the person is removed from the club. A removed membership grants nothing.
   removedAt        DateTime?
   removedById      String?   @db.Uuid

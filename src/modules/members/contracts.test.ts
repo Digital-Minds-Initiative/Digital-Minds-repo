@@ -40,17 +40,14 @@ describe('createMemberBodySchema', () => {
   it('normalises the person', () => {
     const parsed = createMemberBodySchema.parse({
       clubId: ID,
-      person: {
-        uniEmail: '  S443001102@ST.UQU.EDU.SA ',
-        fullName: ' سارة   القحطاني ',
-        phone: '0551234567',
-      },
+      person: { uniEmail: '  S443001102@ST.UQU.EDU.SA ', fullName: ' سارة   القحطاني ' },
+      profile: { phone: '0551234567' },
     });
-    expect(parsed.person).toMatchObject({
+    expect(parsed.person).toEqual({
       uniEmail: 's443001102@st.uqu.edu.sa',
       fullName: 'سارة القحطاني',
-      phone: '+966551234567',
     });
+    expect(parsed.profile).toEqual({ phone: '+966551234567' });
     expect(parsed.committeeIds).toEqual([]);
   });
 });

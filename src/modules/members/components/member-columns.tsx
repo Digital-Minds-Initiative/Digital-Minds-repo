@@ -94,7 +94,7 @@ export function useMemberColumns(): Array<DataTableColumn<Member>> {
         meta: { label: t('columns.points'), cellClassName: 'tabular-nums font-medium' },
         cell: ({ getValue }) => format.number(getValue(), 'integer'),
       }),
-      column.accessor((member) => member.user.phone, {
+      column.accessor((member) => member.profile.phone, {
         id: 'phone',
         header: t('columns.phone'),
         meta: { label: t('columns.phone') },
@@ -107,19 +107,19 @@ export function useMemberColumns(): Array<DataTableColumn<Member>> {
           );
         },
       }),
-      column.accessor((member) => member.user.college, {
+      column.accessor((member) => member.profile.college, {
         id: 'college',
         header: t('columns.college'),
         meta: { label: t('columns.college') },
         cell: ({ getValue }) => getValue() ?? t('none'),
       }),
-      column.accessor((member) => member.user.major, {
+      column.accessor((member) => member.profile.major, {
         id: 'major',
         header: t('columns.major'),
         meta: { label: t('columns.major') },
         cell: ({ getValue }) => getValue() ?? t('none'),
       }),
-      column.accessor((member) => member.user.level, {
+      column.accessor((member) => member.profile.level, {
         id: 'level',
         header: t('columns.level'),
         meta: { label: t('columns.level') },

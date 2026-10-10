@@ -1,6 +1,6 @@
 # 0003. UUIDv7 ids, composite foreign keys per club, nothing with history is deleted
 
-- Status: Accepted
+- Status: Accepted; contact and study details are kept per club since [0012](0012-member-profiles-per-club.md)
 - Date: 2026-10-10
 
 ## Context

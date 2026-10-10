@@ -5,11 +5,13 @@ import type { z } from 'zod';
 
 import {
   searchParamsToObject,
+  toValidationIssues,
   type EndpointBody,
   type EndpointDefinition,
   type EndpointParams,
   type EndpointQuery,
   type EndpointResult,
+  type InputLocation,
 } from '@/lib/contracts';
 import { resolveActor } from '@/server/actor';
 import type { Actor } from '@/server/authz';
@@ -20,14 +22,7 @@ import {
   ValidationError,
 } from '@/server/errors';
 
-import {
-  emptyResponse,
-  errorResponse,
-  jsonResponse,
-  ResponseContractError,
-  zodIssuesToValidationIssues,
-  type InputLocation,
-} from './responses';
+import { emptyResponse, errorResponse, jsonResponse, ResponseContractError } from './responses';
 
 /**
  * The one way to write a route handler. It:
@@ -41,7 +36,7 @@ import {
  *   export const GET = defineRoute(listMembersEndpoint, ({ actor, query }) => listMembers(actor, query));
  */
 
-export interface HandlerContext<E extends EndpointDefinition> {
+interface HandlerContext<E extends EndpointDefinition> {
   actor: E['access'] extends 'actor' ? Actor : null;
   params: EndpointParams<E>;
   query: EndpointQuery<E>;
@@ -51,7 +46,7 @@ export interface HandlerContext<E extends EndpointDefinition> {
 }
 
 /** Return `withStatus(503, data)` from a handler to override the endpoint's success status. */
-export class WithStatus<T> {
+class WithStatus<T> {
   constructor(
     readonly status: number,
     readonly data: T,
@@ -65,7 +60,7 @@ export function withStatus<T>(status: number, data: T): WithStatus<T> {
 type HandlerReturn<E extends EndpointDefinition> =
   EndpointResult<E> | WithStatus<EndpointResult<E>>;
 
-export type RouteHandler<E extends EndpointDefinition> = (
+type RouteHandler<E extends EndpointDefinition> = (
   context: HandlerContext<E>,
 ) => Promise<HandlerReturn<E>>;
 
@@ -131,7 +126,7 @@ function parseInput(
   if (!schema) return undefined;
   const result = schema.safeParse(input);
   if (!result.success) {
-    throw new ValidationError(zodIssuesToValidationIssues(result.error, location));
+    throw new ValidationError(toValidationIssues(result.error.issues, location));
   }
   return result.data;
 }

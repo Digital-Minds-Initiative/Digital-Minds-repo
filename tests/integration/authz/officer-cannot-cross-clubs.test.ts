@@ -79,6 +79,7 @@ describe('club officer scope', () => {
       createMember(officerA, {
         clubId: s.clubB.id,
         person: { uniEmail: 's900000999@st.uqu.edu.sa', fullName: 'شخص جديد' },
+        profile: {},
         committeeIds: [],
       }),
     );
@@ -134,6 +135,6 @@ describe('club officer scope', () => {
     expect(created.amount).toBe(5);
     await expect(
       updateMember(officerA, s.memberships.memberA2, { college: 'كلية الحاسبات' }),
-    ).resolves.toMatchObject({ user: { college: 'كلية الحاسبات' } });
+    ).resolves.toMatchObject({ profile: { college: 'كلية الحاسبات' } });
   });
 });

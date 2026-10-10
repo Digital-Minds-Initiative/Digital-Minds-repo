@@ -1,6 +1,5 @@
 import 'server-only';
 
-export { assertCanWritePoints } from './policies';
 export {
   cancelPointTransaction,
   createPointTransaction,

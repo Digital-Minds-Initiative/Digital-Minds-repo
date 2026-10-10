@@ -5,7 +5,7 @@
 
 export const THEME_COOKIE = 'dm-theme';
 
-export const themePreferences = ['light', 'dark', 'system'] as const;
+const themePreferences = ['light', 'dark', 'system'] as const;
 export type ThemePreference = (typeof themePreferences)[number];
 
 export function parseThemePreference(value: string | undefined | null): ThemePreference {

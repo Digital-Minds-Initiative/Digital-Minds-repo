@@ -13,11 +13,12 @@ import {
   queryArray,
   queryBoolean,
   querySearch,
+  requireAnyField,
   shortTextSchema,
   sortShape,
   universityEmailSchema,
 } from '@/lib/contracts';
-import { clubRoleSchema, committeeRoleSchema } from '@/modules/permissions/contracts';
+import { clubRefSchema, committeeRefSchema } from '@/modules/clubs/contracts';
 
 /*
  * A "member" is a person's membership in ONE club. A person in two clubs is two members with
@@ -34,31 +35,45 @@ import { clubRoleSchema, committeeRoleSchema } from '@/modules/permissions/contr
  * Full admins can do everything everywhere.
  */
 
+// ─── Roles ───────────────────────────────────────────────────
+// Stored on the membership rows this module owns; granted through the permissions module.
+
+export const clubRoleSchema = z.enum(['MEMBER', 'CLUB_OFFICER']);
+export type ClubRole = z.infer<typeof clubRoleSchema>;
+
+export const committeeRoleSchema = z.enum(['MEMBER', 'LEAD']);
+export type CommitteeRole = z.infer<typeof committeeRoleSchema>;
+
 // ─── Read model ──────────────────────────────────────────────
 
-export const memberCommitteeSchema = z.object({
-  /** Committee id. */
-  id: idSchema,
-  name: z.string(),
-  role: committeeRoleSchema,
+export const memberCommitteeSchema = committeeRefSchema.extend({ role: committeeRoleSchema });
+
+/**
+ * This club's record of the person's contact and study details. Every club keeps its own copy and
+ * never sees another club's (docs/adr/0012-member-profiles-per-club.md).
+ */
+export const memberProfileSchema = z.object({
+  personalEmail: z.string().nullable(),
+  phone: z.string().nullable(),
+  college: z.string().nullable(),
+  major: z.string().nullable(),
+  level: z.number().int().nullable(),
 });
+export type MemberProfile = z.infer<typeof memberProfileSchema>;
 
 export const memberSchema = z.object({
   /** Membership id. */
   id: idSchema,
+  /** The person's account: what identifies them to every club they belong to. */
   user: z.object({
     id: idSchema,
     fullName: z.string(),
     uniEmail: z.string(),
-    personalEmail: z.string().nullable(),
-    phone: z.string().nullable(),
-    college: z.string().nullable(),
-    major: z.string().nullable(),
-    level: z.number().int().nullable(),
     /** False until the person signs up themselves (the account was created by an admin). */
     isRegistered: z.boolean(),
   }),
-  club: z.object({ id: idSchema, name: z.string(), slug: z.string() }),
+  profile: memberProfileSchema,
+  club: clubRefSchema,
   membershipType: z.object({ id: idSchema, name: z.string(), order: z.number().int() }),
   role: clubRoleSchema,
   /** Active committee memberships — only the committees the caller is allowed to see. */
@@ -70,8 +85,8 @@ export const memberSchema = z.object({
 });
 export type Member = z.infer<typeof memberSchema>;
 
-const memberParamsSchema = z.object({ memberId: idSchema });
-const memberCommitteeParamsSchema = z.object({ memberId: idSchema, committeeId: idSchema });
+export const memberParamsSchema = z.object({ memberId: idSchema });
+export const memberCommitteeParamsSchema = z.object({ memberId: idSchema, committeeId: idSchema });
 
 // ─── List ────────────────────────────────────────────────────
 
@@ -118,9 +133,14 @@ export const getMemberEndpoint = defineEndpoint({
 
 // ─── Create ──────────────────────────────────────────────────
 
+/** The shared identity, matched by university email. */
 export const newPersonSchema = z.object({
   uniEmail: universityEmailSchema,
   fullName: personNameSchema,
+});
+
+/** This club's copy of the person's contact and study details. */
+export const newProfileSchema = z.object({
   personalEmail: personalEmailSchema.optional(),
   phone: phoneSchema.optional(),
   college: shortTextSchema.optional(),
@@ -131,10 +151,15 @@ export const newPersonSchema = z.object({
 export const createMemberBodySchema = z.object({
   clubId: idSchema,
   /**
-   * Matched by university email. A new email creates an unregistered account that the person
-   * claims when they sign up; an existing account is linked as-is (its profile is not overwritten).
+   * A new email creates an unregistered account that the person claims when they sign up; an
+   * existing account is linked and keeps its name.
    */
   person: newPersonSchema,
+  /**
+   * Saved when the person joins (or rejoins) this club. For someone already active in the club it
+   * is ignored — edit the member instead.
+   */
+  profile: newProfileSchema.default({}),
   /** Defaults to the club's first membership type. */
   membershipTypeId: idSchema.optional(),
   /** Committees to add the person to. A committee lead must pass only their own committee. */
@@ -142,34 +167,28 @@ export const createMemberBodySchema = z.object({
 });
 export type CreateMemberBody = z.output<typeof createMemberBodySchema>;
 
-export const createMemberOutcomeSchema = z.enum([
-  /** New account created and added to the club. */
-  'created',
-  /** Existing account, new to this club. */
-  'linked',
-  /** Was removed from this club before; membership restored without any previous roles. */
-  'reactivated',
-  /** Already an active member; only the requested committees were added. */
-  'existing',
-]);
-export type CreateMemberOutcome = z.infer<typeof createMemberOutcomeSchema>;
-
+/**
+ * 201 with the member — the same answer whether the email was new, already had an account, or was
+ * already in this club, so it never reveals which (docs/adr/0012-member-profiles-per-club.md).
+ */
 export const createMemberEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/members',
   access: 'actor',
   body: createMemberBodySchema,
-  response: z.object({ outcome: createMemberOutcomeSchema, member: memberSchema }),
+  response: memberSchema,
   successStatus: 201,
 });
 
 // ─── Update ──────────────────────────────────────────────────
 
-export const updateMemberBodySchema = z
-  .object({
+export const updateMemberBodySchema = requireAnyField(
+  z.object({
+    // Shared by every club the person belongs to.
     /** Only while the person has not registered (409 `uni_email_locked` afterwards). */
     uniEmail: universityEmailSchema.optional(),
     fullName: personNameSchema.optional(),
+    // This club's copy only.
     personalEmail: personalEmailSchema.nullable().optional(),
     phone: phoneSchema.nullable().optional(),
     college: shortTextSchema.nullable().optional(),
@@ -177,13 +196,14 @@ export const updateMemberBodySchema = z
     level: academicLevelSchema.nullable().optional(),
     /** Club officers and full admins only. */
     membershipTypeId: idSchema.optional(),
-  })
-  .refine((body) => Object.values(body).some((value) => value !== undefined), {
-    message: 'at_least_one_field',
-  });
+  }),
+);
 export type UpdateMemberBody = z.output<typeof updateMemberBodySchema>;
 
-/** Profile fields live on the person's single account, so an edit shows in every club. */
+/**
+ * The name and university email are the person's shared account, so editing them shows in every
+ * club. Contact and study details change only this club's copy.
+ */
 export const updateMemberEndpoint = defineEndpoint({
   method: 'PATCH',
   path: '/api/v1/members/:memberId',
@@ -257,10 +277,15 @@ export const memberImportBodySchema = z.object({
   committeeIds: z.array(idSchema).max(20).default([]),
 });
 
+/**
+ * `add` covers both a new email and an account that already exists in another club, so the
+ * preview never reveals which emails have accounts. `reactivate` and `existing` describe this
+ * club's own members, which the importing officer can see anyway.
+ */
 export const memberImportRowSchema = z.object({
   /** Line in the file (the header is line 1). */
   line: z.number().int().min(2),
-  status: z.enum(['create', 'link', 'reactivate', 'existing', 'invalid']),
+  status: z.enum(['add', 'reactivate', 'existing', 'invalid']),
   uniEmail: z.string().nullable(),
   fullName: z.string().nullable(),
   issues: z.array(z.object({ field: z.string(), code: z.string() })),
@@ -268,8 +293,7 @@ export const memberImportRowSchema = z.object({
 
 export const memberImportSummarySchema = z.object({
   total: z.number().int(),
-  create: z.number().int(),
-  link: z.number().int(),
+  add: z.number().int(),
   reactivate: z.number().int(),
   existing: z.number().int(),
   invalid: z.number().int(),

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { readCookie } from '@/lib/cookies';
 import { DEV_ACTOR_COOKIE, DEV_ACTOR_HEADER } from '@/modules/auth/contracts';
 import { findActorByUniEmail, type Actor } from '@/server/authz';
 import { env } from '@/server/env';
@@ -30,20 +31,4 @@ function readDevActorEmail(request: Request): string | null {
   if (header) return header.toLowerCase();
   const cookie = readCookie(request.headers.get('cookie'), DEV_ACTOR_COOKIE);
   return cookie ? cookie.trim().toLowerCase() : null;
-}
-
-function readCookie(header: string | null, name: string): string | null {
-  if (!header) return null;
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator === -1) continue;
-    if (part.slice(0, separator).trim() === name) {
-      try {
-        return decodeURIComponent(part.slice(separator + 1).trim());
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
 }

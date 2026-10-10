@@ -4,14 +4,16 @@ import { dateOnlyToDate } from '@/lib/dates';
 import type { CommitteeMembershipScope, MemberScope, PointTransactionScope } from '@/server/authz';
 import { db } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
-import { ConflictError } from '@/server/errors';
+import { ConflictError, NotFoundError } from '@/server/errors';
+
+import type { PointStatusFilter, PointTransactionStatus } from '../contracts';
 
 /*
  * Prisma access for the points ledger. Every function that reads or writes scoped rows takes a
  * scope from src/server/authz and ANDs it into the query.
  */
 
-export const transactionSelect = {
+const transactionSelect = {
   id: true,
   amount: true,
   reason: true,
@@ -42,11 +44,9 @@ export type TransactionRow = Prisma.PointTransactionGetPayload<{
 export interface TransactionFilters {
   memberId?: string;
   committeeIds?: string[];
-  clubId?: string;
-  status?: 'active' | 'cancelled' | 'all';
+  status?: PointStatusFilter;
   from?: string;
   to?: string;
-  search?: string;
 }
 
 function transactionWhere(
@@ -57,7 +57,6 @@ function transactionWhere(
   if (filters.memberId)
     conditions.push({ committeeMembership: { membershipId: filters.memberId } });
   if (filters.committeeIds?.length) conditions.push({ committeeId: { in: filters.committeeIds } });
-  if (filters.clubId) conditions.push({ clubId: filters.clubId });
   if (filters.status === 'active') conditions.push({ status: 'ACTIVE' });
   if (filters.status === 'cancelled') conditions.push({ status: 'CANCELLED' });
   if (filters.from || filters.to) {
@@ -68,8 +67,6 @@ function transactionWhere(
       },
     });
   }
-  if (filters.search)
-    conditions.push({ reason: { contains: filters.search, mode: 'insensitive' } });
   return { AND: conditions };
 }
 
@@ -97,10 +94,10 @@ export async function findTransaction(
   });
 }
 
+/** Newest work date first. */
 export async function findTransactionsPage(
   scope: PointTransactionScope,
   filters: TransactionFilters,
-  order: { sort: 'workDate' | 'createdAt' | 'amount'; order: 'asc' | 'desc' },
   page: { skip: number; take: number },
 ): Promise<{ rows: TransactionRow[]; total: number }> {
   const where = transactionWhere(scope, filters);
@@ -111,7 +108,7 @@ export async function findTransactionsPage(
     db.pointTransaction.findMany({
       where,
       select: transactionSelect,
-      orderBy: [{ [order.sort]: order.order }, { createdAt: 'desc' }, { id: 'asc' }],
+      orderBy: [{ workDate: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
       ...page,
     }),
   ]);
@@ -236,18 +233,39 @@ export async function findActiveCommitteeMembership(
 
 // ─── Writes ──────────────────────────────────────────────────
 
-export async function insertTransaction(data: {
-  committeeMembershipId: string;
-  committeeId: string;
-  clubId: string;
-  amount: number;
-  reason: string;
-  workDate: string;
-  createdById: string;
-}): Promise<TransactionRow> {
-  return db.pointTransaction.create({
-    data: { ...data, workDate: dateOnlyToDate(data.workDate) },
-    select: transactionSelect,
+/** Records a transaction for an active committee membership inside the actor's scope. */
+export async function insertTransaction(
+  scope: CommitteeMembershipScope,
+  data: {
+    committeeMembershipId: string;
+    committeeId: string;
+    clubId: string;
+    amount: number;
+    reason: string;
+    workDate: string;
+    createdById: string;
+  },
+): Promise<TransactionRow> {
+  return db.$transaction(async (tx) => {
+    const target = await tx.committeeMembership.count({
+      where: {
+        AND: [
+          scope,
+          {
+            id: data.committeeMembershipId,
+            committeeId: data.committeeId,
+            clubId: data.clubId,
+            removedAt: null,
+            membership: { removedAt: null },
+          },
+        ],
+      },
+    });
+    if (target !== 1) throw new NotFoundError('Committee member');
+    return tx.pointTransaction.create({
+      data: { ...data, workDate: dateOnlyToDate(data.workDate) },
+      select: transactionSelect,
+    });
   });
 }
 
@@ -256,7 +274,7 @@ interface RevisableTransaction {
   amount: number;
   reason: string;
   workDate: Date;
-  status: 'ACTIVE' | 'CANCELLED';
+  status: PointTransactionStatus;
   updatedAt: Date;
 }
 

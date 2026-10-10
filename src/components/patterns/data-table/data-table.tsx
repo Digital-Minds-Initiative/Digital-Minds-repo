@@ -34,7 +34,7 @@ const EMPTY_SELECTION: RowSelectionState = {};
 const EMPTY_VISIBILITY: ColumnVisibilityState = {};
 const SELECT_COLUMN_ID = '__select';
 
-export interface DataTableProps<TData extends RowData> {
+interface DataTableProps<TData extends RowData> {
   /** Stable (module-level or memoised) column definitions. Build them with createDataTableColumnHelper. */
   columns: ReadonlyArray<DataTableColumn<TData>>;
   /** The current page of rows, exactly as the API returned it. */
@@ -72,7 +72,7 @@ export interface DataTableProps<TData extends RowData> {
 
 /**
  * Server-side data table: pagination, sorting and filtering happen in the API; this component
- * renders a page and reports state changes. Keep its state in the URL (see useMembersTableState
+ * renders a page and reports state changes. Keep its state in the URL (see useMembersQueryState
  * for the pattern) so pages are shareable and the back button works.
  */
 export function DataTable<TData extends RowData>({

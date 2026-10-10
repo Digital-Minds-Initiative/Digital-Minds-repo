@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
 import { defineEndpoint, idSchema } from '@/lib/contracts';
+import { committeeRefSchema } from '@/modules/clubs/contracts';
+import {
+  clubRoleSchema,
+  committeeRoleSchema,
+  memberCommitteeParamsSchema,
+  memberParamsSchema,
+} from '@/modules/members/contracts';
 
 /*
  * Roles are granted manually and are hierarchical:
@@ -8,16 +15,8 @@ import { defineEndpoint, idSchema } from '@/lib/contracts';
  *   club officer (role on a club membership) → appoints committee leads in that club
  *   committee lead (role on a committee membership) → appoints nobody
  * The full-admin flag is not grantable through the API (seed / one-off script only).
+ * The role enums live with the membership rows that store them (members contracts).
  */
-
-export const clubRoleSchema = z.enum(['MEMBER', 'CLUB_OFFICER']);
-export type ClubRole = z.infer<typeof clubRoleSchema>;
-
-export const committeeRoleSchema = z.enum(['MEMBER', 'LEAD']);
-export type CommitteeRole = z.infer<typeof committeeRoleSchema>;
-
-const memberParamsSchema = z.object({ memberId: idSchema });
-const memberCommitteeParamsSchema = z.object({ memberId: idSchema, committeeId: idSchema });
 
 /** Appoint (CLUB_OFFICER) or revoke (MEMBER) a club officer. Full admins only. */
 export const setClubRoleEndpoint = defineEndpoint({
@@ -56,8 +55,6 @@ export const listClubPermissionsEndpoint = defineEndpoint({
   params: z.object({ clubId: idSchema }),
   response: z.object({
     officers: z.array(roleHolderSchema),
-    leads: z.array(
-      roleHolderSchema.extend({ committee: z.object({ id: idSchema, name: z.string() }) }),
-    ),
+    leads: z.array(roleHolderSchema.extend({ committee: committeeRefSchema })),
   }),
 });

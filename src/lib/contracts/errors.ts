@@ -8,7 +8,7 @@ import { z } from 'zod';
  * `code` is stable and meant for programs (the UI translates it); `message` is English and meant
  * for developers. `issues` is present only for VALIDATION_FAILED.
  */
-export const errorCodes = [
+const errorCodes = [
   'BAD_REQUEST',
   'UNAUTHENTICATED',
   'FORBIDDEN',
@@ -18,7 +18,7 @@ export const errorCodes = [
   'INTERNAL',
 ] as const;
 
-export const errorCodeSchema = z.enum(errorCodes);
+const errorCodeSchema = z.enum(errorCodes);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
 export const httpStatusByErrorCode: Record<ErrorCode, number> = {
@@ -31,7 +31,7 @@ export const httpStatusByErrorCode: Record<ErrorCode, number> = {
   INTERNAL: 500,
 };
 
-export const validationIssueSchema = z.object({
+const validationIssueSchema = z.object({
   /** First segment is where the problem is (`params`, `query` or `body`), then the field path. */
   path: z.array(z.union([z.string(), z.number()])),
   /** Machine-readable: a Zod issue code (`too_small`, …) or a domain code (`email_domain_not_allowed`). */
@@ -39,6 +39,25 @@ export const validationIssueSchema = z.object({
   message: z.string(),
 });
 export type ValidationIssue = z.infer<typeof validationIssueSchema>;
+
+/** Where invalid input was found; the first segment of every issue path. */
+export type InputLocation = 'params' | 'query' | 'body';
+
+/** Zod issues → API issues. Shared by the route wrapper and the MSW mocks so both answer alike. */
+export function toValidationIssues(
+  issues: ReadonlyArray<{ path: PropertyKey[]; code: string; message: string }>,
+  location: InputLocation,
+): ValidationIssue[] {
+  return issues.map((issue) => ({
+    path: [
+      location,
+      ...issue.path.map((segment) => (typeof segment === 'symbol' ? String(segment) : segment)),
+    ],
+    // Custom refinements use their message as a stable key (e.g. `date_in_future`).
+    code: issue.code === 'custom' ? issue.message : issue.code,
+    message: issue.message,
+  }));
+}
 
 export const errorEnvelopeSchema = z.object({
   error: z.object({

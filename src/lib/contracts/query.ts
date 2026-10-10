@@ -43,7 +43,7 @@ export function querySearch({ max = 100 }: { max?: number } = {}) {
 
 /**
  * Turns query values into URLSearchParams: arrays become repeated keys, undefined/null are
- * dropped. The inverse of what the server does in `src/server/http/search-params.ts`.
+ * dropped. The inverse of `searchParamsToObject` below.
  */
 export function toSearchParams(query: Record<string, unknown> | undefined): URLSearchParams {
   const params = new URLSearchParams();

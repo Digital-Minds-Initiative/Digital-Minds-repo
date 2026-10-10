@@ -5,7 +5,7 @@ import { DEV_ACTOR_COOKIE } from '@/modules/auth/contracts';
 import { getMemberEndpoint, listMembersEndpoint } from '../contracts';
 import { listMemberFixtures, toMemberFixture } from './fixtures';
 
-export { listMemberFixtures, toMemberFixture } from './fixtures';
+export { listMemberFixtures } from './fixtures';
 
 export const membersHandlers = [
   mockEndpoint(listMembersEndpoint, ({ cookies, query }) => {
