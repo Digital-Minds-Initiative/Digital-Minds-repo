@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
-import { attachCursor, attachDrag } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { attachCursor, attachDrag } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * An archive page: student work as loose pieces of paper you can pick up and

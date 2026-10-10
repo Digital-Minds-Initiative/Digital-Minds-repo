@@ -1,7 +1,7 @@
 import type * as React from 'react';
 
+import { cn } from '@/client/lib/utils';
 import { StatusTag, type StatusTagProps } from '@/components/ui/status-tag';
-import { cn } from '@/lib/utils';
 
 /**
  * Student projects as an editorial track list — index code, Arabic title, English

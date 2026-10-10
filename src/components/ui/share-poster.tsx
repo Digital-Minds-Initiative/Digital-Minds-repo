@@ -1,7 +1,7 @@
 import type * as React from 'react';
 
-import { wordCells } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { wordCells } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * The 4:5 export people post to LinkedIn/stories: a `deep` field, perforated pixel

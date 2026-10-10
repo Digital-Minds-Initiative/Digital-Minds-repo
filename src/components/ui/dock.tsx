@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
-import { attachDock, iconCells, type IconName } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { attachDock, iconCells, type IconName } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * Floating navigation for compact screens: a few pixel icons on a dark slab that

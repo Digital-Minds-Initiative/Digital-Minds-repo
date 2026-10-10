@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 
-import { punchMarks } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { punchMarks } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * The system's unit of student work: a sheet of tractor-feed paper. A punched strip

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
-import { countUp } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { countUp } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * A number people can compare, counted up once — states scale without adjectives.

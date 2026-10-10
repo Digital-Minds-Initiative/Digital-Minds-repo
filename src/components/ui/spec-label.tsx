@@ -1,6 +1,6 @@
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /**
  * Metadata set like an instrument panel: mono, upper-case Latin, an arrow, a code with

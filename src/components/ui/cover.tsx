@@ -1,5 +1,5 @@
-import { punchMarks } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+import { punchMarks } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * The OG-image composition: an overlapping sheet stack behind a two-tone wordmark.

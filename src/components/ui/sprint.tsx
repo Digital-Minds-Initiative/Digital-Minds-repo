@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 
+import { countUp } from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SpecLabel } from '@/components/ui/spec-label';
-import { countUp } from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
 
 /**
  * A commitment meter — weeks done, members in, one action to join. Dark `slab`

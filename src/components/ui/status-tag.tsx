@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /**
  * A word plus four cells that fill with progress — status is never colour alone.

@@ -8,8 +8,8 @@ import {
   SAMPLE_PAGES,
   type SamplePage,
   type TowerHandle,
-} from '@/lib/dm-engine';
-import { cn } from '@/lib/utils';
+} from '@/client/lib/dm-engine';
+import { cn } from '@/client/lib/utils';
 
 /**
  * Project pages receding in depth, one behind the next, idle-drifting forward until
