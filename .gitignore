@@ -58,6 +58,9 @@ desktop.ini
 *.swp
 *~
 
+# ─── Personal notes, e.g. docs/handoff.local.md (never shared) ──
+*.local.md
+
 # ─── Claude Code (personal, never shared) ────────────────────
 .claude/settings.local.json
 CLAUDE.local.md
