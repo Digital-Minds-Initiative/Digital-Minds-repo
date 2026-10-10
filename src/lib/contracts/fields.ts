@@ -26,7 +26,8 @@ export const pastOrTodayDateSchema = isoDateSchema.refine((value) => !isFutureDa
 
 /**
  * University email: trimmed and lower-cased. Whether the domain is allowed depends on the
- * ALLOWED_EMAIL_DOMAINS setting, so that check runs on the server (`assertAllowedEmailDomain`).
+ * ALLOWED_EMAIL_DOMAINS setting, so that check runs on the server (`assertUniversityEmail` in
+ * src/server/email-policy.ts).
  */
 export const universityEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
 

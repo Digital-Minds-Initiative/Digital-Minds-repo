@@ -174,7 +174,7 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 | Appoint / revoke club officers                  |  ✓  |  —   |                                                 —                                                  |
 | Create / archive clubs                          |  ✓  |  —   |                                                 —                                                  |
 
-**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so an unscoped query does not compile. Always combine with `AND: [scope, filters]`. An actor without access gets `{ id: { in: [] } }` — fail closed.
+**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
 

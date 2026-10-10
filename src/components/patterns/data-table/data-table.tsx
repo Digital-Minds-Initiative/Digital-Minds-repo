@@ -72,7 +72,7 @@ interface DataTableProps<TData extends RowData> {
 
 /**
  * Server-side data table: pagination, sorting and filtering happen in the API; this component
- * renders a page and reports state changes. Keep its state in the URL (see useMembersTableState
+ * renders a page and reports state changes. Keep its state in the URL (see useMembersQueryState
  * for the pattern) so pages are shareable and the back button works.
  */
 export function DataTable<TData extends RowData>({
