@@ -43,17 +43,13 @@ export function assertCanRemoveFromClub(actor: Actor, clubId: string): void {
 
 /**
  * Adding a person to the club. Officers: any committees, any type. Leads: only into committees
- * they lead (at least one), with the club's default type, and they cannot restore someone an
- * officer removed.
+ * they lead (at least one), with the club's default type. (People who already have a membership
+ * the lead cannot see — another committee's members, removed members — are a 404 in the
+ * service, not a 403 here, so the answer does not reveal that they exist.)
  */
 export function assertCanAddMember(
   actor: Actor,
-  target: {
-    clubId: string;
-    committeeIds: readonly string[];
-    choosesMembershipType: boolean;
-    restoresRemovedMember: boolean;
-  },
+  target: { clubId: string; committeeIds: readonly string[]; choosesMembershipType: boolean },
 ): void {
   if (canManageClub(actor, target.clubId)) return;
   const led = new Set(ledCommitteeIds(actor));
@@ -61,7 +57,6 @@ export function assertCanAddMember(
     throw new AuthzError('lead_can_only_add_to_own_committee');
   }
   if (target.choosesMembershipType) throw new AuthzError('membership_type_requires_officer');
-  if (target.restoresRemovedMember) throw new AuthzError('restoring_member_requires_officer');
 }
 
 export function assertCanAddToCommittee(actor: Actor, target: CommitteeTarget): void {

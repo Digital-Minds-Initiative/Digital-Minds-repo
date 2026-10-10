@@ -36,7 +36,6 @@ const newPerson = (committeeIds: string[]) => ({
   clubId: CLUB,
   committeeIds,
   choosesMembershipType: false,
-  restoresRemovedMember: false,
 });
 
 describe('committee leads', () => {
@@ -50,12 +49,9 @@ describe('committee leads', () => {
     expect(() => assertCanAddMember(lead, newPerson([OWN, OTHER]))).toThrow(AuthzError);
   });
 
-  it('cannot choose a membership type or restore someone an officer removed', () => {
+  it('cannot choose a membership type', () => {
     expect(() =>
       assertCanAddMember(lead, { ...newPerson([OWN]), choosesMembershipType: true }),
-    ).toThrow(AuthzError);
-    expect(() =>
-      assertCanAddMember(lead, { ...newPerson([OWN]), restoresRemovedMember: true }),
     ).toThrow(AuthzError);
   });
 
@@ -105,11 +101,7 @@ describe('committee leads', () => {
 describe('club officers', () => {
   it('can do everything inside their club', () => {
     expect(() =>
-      assertCanAddMember(officer, {
-        ...newPerson([]),
-        choosesMembershipType: true,
-        restoresRemovedMember: true,
-      }),
+      assertCanAddMember(officer, { ...newPerson([]), choosesMembershipType: true }),
     ).not.toThrow();
     expect(() =>
       assertCanRemoveFromCommittee(officer, { clubId: CLUB, committeeId: OWN, memberRole: 'LEAD' }),

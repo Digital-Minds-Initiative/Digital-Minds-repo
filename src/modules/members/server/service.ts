@@ -89,6 +89,10 @@ export async function getMember(actor: Actor, memberId: string): Promise<Member>
 /**
  * Adds a person to a club, matched by university email: creates an unregistered account if the
  * email is new, links the existing account otherwise, and adds the requested committees.
+ *
+ * Someone who already has a membership in this club (active or removed) can only be added by an
+ * actor who can see that membership; for anyone else it does not exist (404). So a lead cannot
+ * pull a member of another committee into theirs, or restore someone an officer removed.
  */
 export async function createMember(
   actor: Actor,
@@ -104,16 +108,16 @@ export async function createMember(
   if (committees.some((committee) => committee.archived)) {
     throw new ConflictError('One of the committees is archived.', 'committee_archived');
   }
-
-  assertUniversityEmail(body.person.uniEmail, ['body', 'person', 'uniEmail']);
-  const existing = await findAccountByUniEmail(body.person.uniEmail, club.id);
-
+  // Role checks come before the email is looked up, so a refusal never depends on who it is.
   assertCanAddMember(actor, {
     clubId: club.id,
     committeeIds,
     choosesMembershipType: body.membershipTypeId !== undefined,
-    restoresRemovedMember: existing?.membership?.removed === true,
   });
+
+  assertUniversityEmail(body.person.uniEmail, ['body', 'person', 'uniEmail']);
+  const existing = await findAccountByUniEmail(body.person.uniEmail, club.id);
+  if (existing?.membership) await loadVisibleMember(actor, existing.membership.id);
 
   if (
     body.membershipTypeId !== undefined &&

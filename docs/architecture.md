@@ -158,21 +158,21 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 
 **Permission matrix** (★ = full admin, O = officer of the club, L = lead of the committee):
 
-| Action                                          |  ★  |  O   |                      L                       |
-| ----------------------------------------------- | :-: | :--: | :------------------------------------------: |
-| Read members and their contact data             | all | club |           own committee's members            |
-| Add a person to the club                        |  ✓  |  ✓   | only into their own committee, default type  |
-| Edit profile fields (name, contact, college…)   |  ✓  |  ✓   |          members of their committee          |
-| Change membership type                          |  ✓  |  ✓   |                      —                       |
-| Add to / remove from a committee                |  ✓  |  ✓   | their committee (cannot remove another lead) |
-| Remove from the club / restore a removed member |  ✓  |  ✓   |                      —                       |
-| CSV import                                      |  ✓  |  ✓   |                      —                       |
-| Create / edit / cancel points                   |  ✓  |  ✓   |               their committee                |
-| Committees, membership types, club details      |  ✓  |  ✓   |                      —                       |
-| Rotate / disable a committee's view link        |  ✓  |  ✓   |               — (may read it)                |
-| Appoint / revoke committee leads                |  ✓  |  ✓   |                      —                       |
-| Appoint / revoke club officers                  |  ✓  |  —   |                      —                       |
-| Create / archive clubs                          |  ✓  |  —   |                      —                       |
+| Action                                          |  ★  |  O   |                                                 L                                                  |
+| ----------------------------------------------- | :-: | :--: | :------------------------------------------------------------------------------------------------: |
+| Read members and their contact data             | all | club |                                      own committee's members                                       |
+| Add a person to the club                        |  ✓  |  ✓   | only into their own committee, default type; not someone already in the club they cannot see (404) |
+| Edit profile fields (name, contact, college…)   |  ✓  |  ✓   |                                     members of their committee                                     |
+| Change membership type                          |  ✓  |  ✓   |                                                 —                                                  |
+| Add to / remove from a committee                |  ✓  |  ✓   |                            their committee (cannot remove another lead)                            |
+| Remove from the club / restore a removed member |  ✓  |  ✓   |                                                 —                                                  |
+| CSV import                                      |  ✓  |  ✓   |                                                 —                                                  |
+| Create / edit / cancel points                   |  ✓  |  ✓   |                                          their committee                                           |
+| Committees, membership types, club details      |  ✓  |  ✓   |                                                 —                                                  |
+| Rotate / disable a committee's view link        |  ✓  |  ✓   |                                          — (may read it)                                           |
+| Appoint / revoke committee leads                |  ✓  |  ✓   |                                                 —                                                  |
+| Appoint / revoke club officers                  |  ✓  |  —   |                                                 —                                                  |
+| Create / archive clubs                          |  ✓  |  —   |                                                 —                                                  |
 
 **Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so an unscoped query does not compile. Always combine with `AND: [scope, filters]`. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
