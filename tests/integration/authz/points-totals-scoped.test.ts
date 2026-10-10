@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { dateOnlyToDate } from '@/lib/dates';
-import { getMember, listMembers } from '@/modules/members/server';
 import { db } from '@/server/db/client';
+import { getMember, listMembers } from '@/server/modules/members';
+import { dateOnlyToDate } from '@/shared/lib/dates';
 import {
   actorFor,
   buildScenario,

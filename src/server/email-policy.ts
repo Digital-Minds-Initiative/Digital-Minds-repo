@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { isAllowedEmailDomain } from '@/lib/email-domains';
+import { isAllowedEmailDomain } from '@/shared/lib/email-domains';
 
 import { env } from './env';
 import { ValidationError } from './errors';

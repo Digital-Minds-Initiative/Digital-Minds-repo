@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { getMe } from '@/modules/auth/server';
-import { getMember, listMembers } from '@/modules/members/server';
-import { createPointTransaction } from '@/modules/points/server';
 import type { Actor } from '@/server/authz';
+import { getMe } from '@/server/modules/auth';
+import { getMember, listMembers } from '@/server/modules/members';
+import { createPointTransaction } from '@/server/modules/points';
 import {
   actorFor,
   buildScenario,

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 
+import { AccountOverview } from '@/client/features/auth';
 import { PageHeader } from '@/components/patterns/page-header';
 import { resolveLocale } from '@/i18n/locale';
-import { AccountOverview } from '@/modules/auth';
 
 export async function generateMetadata({
   params,

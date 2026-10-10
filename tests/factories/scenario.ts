@@ -1,9 +1,9 @@
-import { normalizeForSearch } from '@/lib/arabic';
-import { dateOnlyToDate, todayInAppTimeZone } from '@/lib/dates';
-import { listMembersQuerySchema } from '@/modules/members/contracts';
-import { memberPointsQuerySchema } from '@/modules/points/contracts';
 import { findActorByUserId, type Actor } from '@/server/authz';
 import { db } from '@/server/db/client';
+import { listMembersQuerySchema } from '@/shared/contracts/members';
+import { memberPointsQuerySchema } from '@/shared/contracts/points';
+import { normalizeForSearch } from '@/shared/lib/arabic';
+import { dateOnlyToDate, todayInAppTimeZone } from '@/shared/lib/dates';
 
 /*
  * A small, explicit world for integration tests (independent of the demo seed):

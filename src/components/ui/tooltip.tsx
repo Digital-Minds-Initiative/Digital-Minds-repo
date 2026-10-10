@@ -3,7 +3,7 @@
 import { Tooltip as TooltipPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /** One provider at the app root (AppProviders); Storybook adds its own. */
 export const TooltipProvider = TooltipPrimitive.Provider;

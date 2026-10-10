@@ -11,16 +11,21 @@ import storybook from 'eslint-plugin-storybook';
 
 /*
  * Architecture rules are enforced here, not just documented. See docs/architecture.md.
- *   1. Client code never imports server code (plus `import 'server-only'` in every server file).
- *   2. Modules are used only through their public entry points.
+ *   1. src/client never imports src/server and vice versa; both may import src/shared, which imports
+ *      neither (plus `import 'server-only'` in every server file).
+ *   2. Server modules and client features are used only through their entry points.
  *   3. Only repositories touch the database; route handlers only use the http wrapper.
  *   4. No raw colours and no physical-direction (left/right) Tailwind classes.
  *   5. No Server Actions; no casts to scope types; contracts import only zod and other contracts.
  */
 
-const modules = readdirSync('src/modules', { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name);
+/** @param {string} dir */
+const subfolders = (dir) =>
+  readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+const serverModules = subfolders('src/server/modules');
+const clientFeatures = subfolders('src/client/features');
 
 /**
  * Windows-safe glob. eslint-plugin-import resolves patterns to absolute paths; on Windows the
@@ -39,73 +44,86 @@ const windowsSafe = (zones) =>
 
 /** Code that can end up in the browser. */
 const CLIENT_CODE = [
-  './src/app/!(api)/**/*',
+  './src/client/**/*',
   './src/components/**/*',
-  './src/lib/**/*',
+  './src/app/!(api)/**/*',
   './src/i18n/**/*',
-  './src/mocks/**/*',
   './src/styles/**/*',
-  './src/modules/*/components/**/*',
-  './src/modules/*/hooks/**/*',
-  './src/modules/*/mocks/**/*',
-  './src/modules/*/contracts.ts',
-  './src/modules/*/index.ts',
   './.storybook/**/*',
 ];
 
-const SERVER_CODE = ['./src/server/**/*', './src/modules/*/server/**/*'];
+/** Code that runs only on the server. */
+const SERVER_CODE = ['./src/server/**/*', './src/app/api/**/*'];
 
-/** Everything except repositories, the db folder itself and authz may not touch the database. */
+/** Everything except repositories, the db folder itself and the authz actor repository. */
 const NOT_DATA_ACCESS = [
   './src/app/**/*',
+  './src/client/**/*',
   './src/components/**/*',
-  './src/lib/**/*',
+  './src/shared/**/*',
   './src/i18n/**/*',
-  './src/mocks/**/*',
   './src/*.ts',
-  './src/modules/*/!(server)/**/*',
-  './src/modules/*/*.ts',
-  // At any depth under server/: a helper in server/sub/ is not a repository either.
-  './src/modules/*/server/**/!(repository).ts',
-  './src/server/!(db|authz)/**/*',
+  // At any depth inside a module: a helper in modules/<m>/sub/ is not a repository either.
+  './src/server/modules/*/**/!(repository).ts',
+  './src/server/!(db|authz|modules)/**/*',
   './src/server/*.ts',
 ];
 
-/** One zone per module: outside code may use only its entry points (plus `extraEntries`). */
-const moduleZones = (/** @type {string[]} */ extraEntries = []) =>
-  modules.map((name) => ({
+/** One zone per server module: other code may use only its index.ts (plus `extraEntries`). */
+const serverModuleZones = (/** @type {string[]} */ extraEntries = []) =>
+  serverModules.map((name) => ({
     target: [
-      `./src/modules/!(${name})/**/*`,
-      './src/!(modules)/**/*',
-      './src/*.ts',
+      `./src/server/modules/!(${name})/**/*`,
+      './src/server/!(modules)/**/*',
+      './src/server/*.ts',
+      './src/app/**/*',
       './tests/**/*',
       './prisma/**/*',
+    ],
+    from: `./src/server/modules/${name}`,
+    except: ['./index.ts', ...extraEntries],
+    message: `Use the "${name}" server module through src/server/modules/${name}/index.ts.`,
+  }));
+
+/** One zone per client feature: other code may use only index.ts, mocks/index.ts and messages. */
+const clientFeatureZones = () =>
+  clientFeatures.map((name) => ({
+    target: [
+      `./src/client/features/!(${name})/**/*`,
+      './src/client/!(features)/**/*',
+      './src/components/**/*',
+      './src/app/**/*',
+      './src/i18n/**/*',
+      './tests/**/*',
       './.storybook/**/*',
     ],
-    from: `./src/modules/${name}`,
-    except: [
-      './index.ts',
-      './contracts.ts',
-      './server/index.ts',
-      './mocks/index.ts',
-      './messages',
-      ...extraEntries,
-    ],
-    message: `Use the "${name}" module through its entry points: index.ts (UI), contracts.ts, server/index.ts (server) or mocks/index.ts.`,
+    from: `./src/client/features/${name}`,
+    except: ['./index.ts', './mocks/index.ts', './messages'],
+    message: `Use the "${name}" feature through src/client/features/${name}/index.ts (or mocks/index.ts).`,
   }));
 
 const layerZones = [
   {
     target: CLIENT_CODE,
-    from: SERVER_CODE,
+    from: './src/server',
     message:
-      'Client code cannot import server code. Call the API through src/lib/api-client.ts instead.',
+      'Client code cannot import server code. Call the API through src/client/lib/api-client.ts instead.',
+  },
+  {
+    target: SERVER_CODE,
+    from: ['./src/client', './src/components'],
+    message: 'Server code cannot import client code. Share it through src/shared instead.',
+  },
+  {
+    target: './src/shared/**/*',
+    from: ['./src/server', './src/client', './src/components', './src/app', './src/i18n'],
+    message: 'src/shared is used by both sides, so it may import only zod and other shared code.',
   },
   {
     target: NOT_DATA_ACCESS,
     from: './src/server/db',
     message:
-      'Only repositories (src/modules/<module>/server/repository.ts) may access the database.',
+      'Only repositories (src/server/modules/<module>/repository.ts) may access the database.',
   },
   {
     // authz builds scopes from the generated Prisma types; only the actor repository queries.
@@ -118,9 +136,9 @@ const layerZones = [
   {
     target: './src/app/api/**/*',
     from: './src/server',
-    except: ['./http'],
+    except: ['./http', './modules'],
     message:
-      'Route handlers only use src/server/http (defineRoute). Put logic in a module service.',
+      'Route handlers only use src/server/http (defineRoute) and module services. Put logic in a service.',
   },
 ];
 
@@ -137,15 +155,15 @@ const RESTRICTED_IMPORT_PATHS = [
   },
 ];
 
-/** Contracts may import zod, @/lib/contracts and other modules' contracts — nothing else. */
+/** Contracts may import zod, other contracts and src/shared/lib — nothing else. */
 const CONTRACT_IMPORT_PATTERNS = [
   {
-    regex: '^(react|react-dom|next)(/|$)|^@/(components|server|i18n)(/|$)|^@prisma/',
+    regex: '^(react|react-dom|next)(/|$)|^@/(client|components|server|i18n|app)(/|$)|^@prisma/',
     message: 'Contracts are plain Zod: no React, Next.js, Prisma, server or UI code.',
   },
   {
-    regex: '^@/modules/[^/]+(/(?!contracts$).*)?$',
-    message: "Contracts may import another module's contracts.ts only.",
+    regex: '^@/shared/(?!contracts(/|$)|lib(/|$))',
+    message: 'Contracts may import other contracts and src/shared/lib only.',
   },
 ];
 
@@ -276,7 +294,7 @@ export default defineConfig([
       'import/newline-after-import': 'error',
       'import/no-restricted-paths': [
         'error',
-        { zones: windowsSafe([...layerZones, ...moduleZones()]) },
+        { zones: windowsSafe([...layerZones, ...serverModuleZones(), ...clientFeatureZones()]) },
       ],
 
       'no-restricted-imports': ['error', { paths: RESTRICTED_IMPORT_PATHS }],
@@ -293,9 +311,9 @@ export default defineConfig([
 
   {
     name: 'digital-minds/contracts',
-    // Contracts are shared with the browser and, later, the mobile app: zod, @/lib/contracts and
-    // other modules' contracts only.
-    files: ['src/modules/*/contracts.ts', 'src/lib/contracts/**/*.ts'],
+    // Contracts are shared with the browser and, later, the mobile app: zod, other contracts and
+    // src/shared/lib only.
+    files: ['src/shared/contracts/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -326,7 +344,7 @@ export default defineConfig([
 
   {
     name: 'digital-minds/server-only',
-    files: ['src/server/**/*.ts', 'src/modules/*/server/**/*.ts'],
+    files: ['src/server/**/*.ts'],
     ignores: ['src/server/db/generated/**', '**/*.test.ts'],
     plugins: { local: localPlugin },
     rules: { 'local/require-server-only': 'error' },
@@ -354,7 +372,13 @@ export default defineConfig([
     rules: {
       'import/no-restricted-paths': [
         'error',
-        { zones: windowsSafe([...layerZones, ...moduleZones(['./server/repository.ts'])]) },
+        {
+          zones: windowsSafe([
+            ...layerZones,
+            ...serverModuleZones(['./repository.ts']),
+            ...clientFeatureZones(),
+          ]),
+        },
       ],
     },
   },

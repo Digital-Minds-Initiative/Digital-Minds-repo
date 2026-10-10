@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;

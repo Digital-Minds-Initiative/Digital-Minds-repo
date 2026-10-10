@@ -4,9 +4,9 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { GET as getHealth } from '@/app/api/v1/health/route';
 import { GET as getMe } from '@/app/api/v1/me/route';
 import { GET as listMembers } from '@/app/api/v1/members/route';
-import type { ErrorEnvelope } from '@/lib/contracts';
-import { DEV_ACTOR_HEADER } from '@/modules/auth/contracts';
-import { memberSchema } from '@/modules/members/contracts';
+import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
+import type { ErrorEnvelope } from '@/shared/contracts/core';
+import { memberSchema } from '@/shared/contracts/members';
 import { buildScenario, type Scenario } from '@tests/factories/scenario';
 
 /** The reference endpoints, end to end through the real route handlers and the dev actor switcher. */

@@ -3,7 +3,7 @@
 import { Tabs as TabsPrimitive } from 'radix-ui';
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /** Arrow-key navigation follows the document direction (DirectionProvider in AppProviders). */
 export function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
