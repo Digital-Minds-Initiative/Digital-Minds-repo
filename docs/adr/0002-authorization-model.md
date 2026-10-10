@@ -1,6 +1,6 @@
 # 0002. Authorize with an Actor and branded scopes; 404 outside scope, 403 for roles
 
-- Status: Accepted
+- Status: Accepted; the "Role rules" bullet is superseded by [0011](0011-modules-own-their-policies.md)
 - Date: 2026-10-10
 
 ## Context

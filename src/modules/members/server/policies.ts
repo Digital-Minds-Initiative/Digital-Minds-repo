@@ -2,9 +2,8 @@ import 'server-only';
 
 import {
   AuthzError,
-  assertCanManageClub,
-  assertCanManageCommittee,
   canManageClub,
+  canManageCommittee,
   isLeadOf,
   ledCommitteeIds,
   type Actor,
@@ -25,36 +24,27 @@ export interface MemberTarget {
 }
 
 /** Name, contact details, college, major, level — and the university email before registration. */
-export function canEditMemberProfile(actor: Actor, member: MemberTarget): boolean {
-  return (
-    canManageClub(actor, member.clubId) ||
-    member.committeeIds.some((committeeId) => isLeadOf(actor, committeeId))
-  );
-}
-
 export function assertCanEditMemberProfile(actor: Actor, member: MemberTarget): void {
-  if (!canEditMemberProfile(actor, member)) throw new AuthzError('profile_edit_not_allowed');
+  const allowed =
+    canManageClub(actor, member.clubId) ||
+    member.committeeIds.some((committeeId) => isLeadOf(actor, committeeId));
+  if (!allowed) throw new AuthzError('profile_edit_not_allowed');
 }
 
 /** Membership types are club-level. */
 export function assertCanChangeMembershipType(actor: Actor, clubId: string): void {
-  assertCanManageClub(actor, clubId);
+  if (!canManageClub(actor, clubId)) throw new AuthzError('club_management_required');
 }
 
 /** Removing someone from the whole club stays with officers and above. */
 export function assertCanRemoveFromClub(actor: Actor, clubId: string): void {
-  assertCanManageClub(actor, clubId);
-}
-
-/** CSV import is club-level. */
-export function assertCanImportMembers(actor: Actor, clubId: string): void {
-  assertCanManageClub(actor, clubId);
+  if (!canManageClub(actor, clubId)) throw new AuthzError('club_management_required');
 }
 
 /**
  * Adding a person to the club. Officers: any committees, any type. Leads: only into committees
  * they lead (at least one), with the club's default type, and they cannot restore someone an
- * officer removed from the club.
+ * officer removed.
  */
 export function assertCanAddMember(
   actor: Actor,
@@ -75,7 +65,7 @@ export function assertCanAddMember(
 }
 
 export function assertCanAddToCommittee(actor: Actor, target: CommitteeTarget): void {
-  assertCanManageCommittee(actor, target);
+  if (!canManageCommittee(actor, target)) throw new AuthzError('committee_management_required');
 }
 
 /** A lead may remove members from their committee, but not another lead (that is a revocation). */
@@ -83,7 +73,7 @@ export function assertCanRemoveFromCommittee(
   actor: Actor,
   target: CommitteeTarget & { memberRole: CommitteeRole },
 ): void {
-  assertCanManageCommittee(actor, target);
+  if (!canManageCommittee(actor, target)) throw new AuthzError('committee_management_required');
   if (target.memberRole === 'LEAD' && !canManageClub(actor, target.clubId)) {
     throw new AuthzError('removing_a_lead_requires_officer');
   }

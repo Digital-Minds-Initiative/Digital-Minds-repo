@@ -43,7 +43,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 
 - Full admin (`User.isFullAdmin`) → everything. Club officer (`Membership.role = CLUB_OFFICER`) → everything in that club. Committee lead (`CommitteeMembership.role = LEAD`) → that committee's members and points; may add people into their committee, edit their profiles, remove them from the committee (not other leads). Club-level actions stay with officers. Membership types never grant anything.
 - The Actor contains only _active_ memberships; removed rows grant nothing. Removing a member resets roles.
-- Scope builders and role predicates: `src/server/authz/{scopes,roles,assertions}.ts`. Module rules: `modules/*/server/policies.ts`.
+- Scope builders and role predicates: `src/server/authz/{scopes,roles}.ts`. Module rules, and the `reason` each 403 carries: `modules/*/server/policies.ts`, written with the service that calls them (ADR 0011).
 - Nested data must be scoped too (e.g. a member's committee list for a lead shows only the lead's committee).
 - The dev actor switcher (`dm-dev-actor` cookie / `X-Dev-Actor` header with a university email) works only in development with `DEV_ACTOR_SWITCHER=true`. Never weaken its guards.
 

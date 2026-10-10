@@ -281,7 +281,7 @@ Short version (full walkthrough with code in [docs/architecture.md → Adding a 
 
 - [ ] Create `src/modules/<name>/` with `contracts.ts`, `index.ts`, `server/{index,service,repository,policies}.ts`, `components/`, `hooks/`, `mocks/index.ts`, `messages/ar.json`.
 - [ ] Define endpoints in `contracts.ts` with `defineEndpoint` (Zod for params, query, body, response).
-- [ ] Add any new scope or role rule to `src/server/authz` (with unit tests), and module rules to `server/policies.ts`.
+- [ ] Add any new scope or role predicate to `src/server/authz` (with unit tests), and module rules to `server/policies.ts`.
 - [ ] Repository functions take a scope; services take the `Actor` first.
 - [ ] Route handlers in `src/app/api/v1/…/route.ts` using `defineRoute`.
 - [ ] Mock handlers with `mockEndpoint`, registered in `src/mocks/handlers.ts`.

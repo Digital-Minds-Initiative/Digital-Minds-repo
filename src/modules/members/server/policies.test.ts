@@ -89,6 +89,17 @@ describe('committee leads', () => {
     expect(() => assertCanRemoveFromClub(lead, CLUB)).toThrow(AuthzError);
     expect(() => assertCanChangeMembershipType(lead, CLUB)).toThrow(AuthzError);
   });
+
+  it('are refused with a machine-readable reason', () => {
+    try {
+      assertCanRemoveFromCommittee(lead, { clubId: CLUB, committeeId: OWN, memberRole: 'LEAD' });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(AuthzError);
+      expect((error as AuthzError).code).toBe('FORBIDDEN');
+      expect((error as AuthzError).reason).toBe('removing_a_lead_requires_officer');
+    }
+  });
 });
 
 describe('club officers', () => {

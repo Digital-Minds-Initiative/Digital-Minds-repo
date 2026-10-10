@@ -71,7 +71,7 @@ src/modules/members/
     index.ts          public server surface: service functions (server-only)
     service.ts        business logic — every function takes the Actor first
     repository.ts     Prisma access — every scoped function takes a scope
-    policies.ts       what an actor may do in this module (built on src/server/authz)
+    policies.ts       what an actor may do in this module (built on the predicates in src/server/authz)
     mappers.ts        database rows → contract types
   components/         feature UI (MembersTable…)
   hooks/              TanStack Query hooks built on the API client
@@ -90,8 +90,8 @@ Current modules:
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services (list/get/create/update/remove/committees), UI |
 | `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)          |
-| `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`, policies                       |
-| `permissions` | appointing officers and leads                                | contracts, policies                                                |
+| `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`                                 |
+| `permissions` | appointing officers and leads                                | contracts                                                          |
 | `auth`        | the signed-in actor (`/me`)                                  | contracts, service, user menu, overview                            |
 | `system`      | health                                                       | full endpoint                                                      |
 
@@ -178,7 +178,7 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
 
-**Assertions** (`src/server/authz/assertions.ts`) answer "may this actor do X to this already-visible target": `assertCanManageClub`, `assertCanManageCommittee`, `assertCanManagePoints`, `assertCanAppointOfficers`, `assertCanAppointLeads`, `assertFullAdmin`. Module `policies.ts` maps module actions onto them.
+**Policies** (`modules/*/server/policies.ts`) answer "may this actor do X to this already-visible target". They are built on the role predicates in `src/server/authz/roles.ts` (`canManageClub`, `canManageCommittee`, `isLeadOf`, `ledCommitteeIds`) and throw `AuthzError` with the module's own `reason` ([ADR 0011](adr/0011-modules-own-their-policies.md)). Write a policy together with the service that calls it.
 
 **The service pattern** for every write:
 

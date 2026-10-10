@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  assertCanAppointLeads,
-  assertCanAppointOfficers,
-  assertCanManageClub,
-  assertCanManageCommittee,
-  assertCanManagePoints,
-  AuthzError,
+  canManageClub,
+  canManageCommittee,
   clubsScope,
   committeeMembershipsScope,
   committeesScope,
@@ -130,29 +126,20 @@ describe('role hierarchy', () => {
   const inB1 = { clubId: CLUB_B, committeeId: B1 };
 
   it('lets each level manage its own scope and everything below it', () => {
-    expect(() => assertCanManageClub(admin, CLUB_B)).not.toThrow();
-    expect(() => assertCanManagePoints(admin, inB1)).not.toThrow();
-    expect(() => assertCanManageClub(officerA, CLUB_A)).not.toThrow();
-    expect(() => assertCanManagePoints(officerA, inA2)).not.toThrow();
-    expect(() => assertCanManagePoints(leadA1, inA1)).not.toThrow();
-    expect(() => assertCanManageCommittee(leadA1, inA1)).not.toThrow();
+    expect(canManageClub(admin, CLUB_B)).toBe(true);
+    expect(canManageCommittee(admin, inB1)).toBe(true);
+    expect(canManageClub(officerA, CLUB_A)).toBe(true);
+    expect(canManageCommittee(officerA, inA2)).toBe(true);
+    expect(canManageCommittee(leadA1, inA1)).toBe(true);
   });
 
   it('stops at the edge of each scope', () => {
-    expect(() => assertCanManageClub(officerA, CLUB_B)).toThrow(AuthzError);
-    expect(() => assertCanManagePoints(officerA, inB1)).toThrow(AuthzError);
-    expect(() => assertCanManageClub(leadA1, CLUB_A)).toThrow(AuthzError);
-    expect(() => assertCanManagePoints(leadA1, inA2)).toThrow(AuthzError);
-    expect(() => assertCanManagePoints(mixed, inB1)).toThrow(AuthzError);
-    expect(() => assertCanManagePoints(plainMember, inA1)).toThrow(AuthzError);
-  });
-
-  it('only full admins appoint officers; officers (not leads) appoint leads', () => {
-    expect(() => assertCanAppointOfficers(admin)).not.toThrow();
-    expect(() => assertCanAppointOfficers(officerA)).toThrow(AuthzError);
-    expect(() => assertCanAppointLeads(officerA, CLUB_A)).not.toThrow();
-    expect(() => assertCanAppointLeads(officerA, CLUB_B)).toThrow(AuthzError);
-    expect(() => assertCanAppointLeads(leadA1, CLUB_A)).toThrow(AuthzError);
+    expect(canManageClub(officerA, CLUB_B)).toBe(false);
+    expect(canManageCommittee(officerA, inB1)).toBe(false);
+    expect(canManageClub(leadA1, CLUB_A)).toBe(false);
+    expect(canManageCommittee(leadA1, inA2)).toBe(false);
+    expect(canManageCommittee(mixed, inB1)).toBe(false);
+    expect(canManageCommittee(plainMember, inA1)).toBe(false);
   });
 
   it('opens the dashboard only to actors with a management role', () => {
@@ -161,16 +148,5 @@ describe('role hierarchy', () => {
     expect(hasDashboardAccess(leadA1)).toBe(true);
     expect(hasDashboardAccess(plainMember)).toBe(false);
     expect(hasDashboardAccess(nobody)).toBe(false);
-  });
-
-  it('reports a machine-readable reason', () => {
-    try {
-      assertCanAppointOfficers(officerA);
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toBeInstanceOf(AuthzError);
-      expect((error as AuthzError).reason).toBe('officer_appointment_requires_full_admin');
-      expect((error as AuthzError).code).toBe('FORBIDDEN');
-    }
   });
 });
