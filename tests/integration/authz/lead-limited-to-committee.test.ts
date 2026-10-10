@@ -73,6 +73,7 @@ describe('committee lead scope', () => {
       createMember(leadA1, {
         clubId: s.clubA.id,
         person: { uniEmail: 's900000777@st.uqu.edu.sa', fullName: 'شخص جديد' },
+        profile: {},
         committeeIds: [s.committees.a2.id],
       }),
     );
@@ -126,7 +127,7 @@ describe('committee lead scope', () => {
     await expect(
       updateMember(leadA1, s.memberships.memberA1, { major: 'علوم الحاسب' }),
     ).resolves.toMatchObject({
-      user: { major: 'علوم الحاسب' },
+      profile: { major: 'علوم الحاسب' },
     });
     const transaction = await createPointTransaction(leadA1, {
       memberId: s.memberships.memberA1,
@@ -143,16 +144,16 @@ describe('committee lead scope', () => {
     const added = await createMember(leadA1, {
       clubId: s.clubA.id,
       person: { uniEmail: 's900000555@st.uqu.edu.sa', fullName: 'طالب جديد' },
+      profile: {},
       committeeIds: [s.committees.a1.id],
     });
-    expect(added.outcome).toBe('created');
-    expect(added.member.committees.map((committee) => committee.id)).toEqual([s.committees.a1.id]);
+    expect(added.committees.map((committee) => committee.id)).toEqual([s.committees.a1.id]);
 
     // …and removes them from the committee (not from the club).
-    await removeMemberFromCommittee(leadA1, added.member.id, s.committees.a1.id);
-    const membership = await db.membership.findUniqueOrThrow({ where: { id: added.member.id } });
+    await removeMemberFromCommittee(leadA1, added.id, s.committees.a1.id);
+    const membership = await db.membership.findUniqueOrThrow({ where: { id: added.id } });
     expect(membership.removedAt).toBeNull();
-    await expectNotFound(getMember(leadA1, added.member.id));
+    await expectNotFound(getMember(leadA1, added.id));
   });
 
   it('cannot pull club members it cannot see into its committee by email (404)', async () => {
@@ -162,6 +163,7 @@ describe('committee lead scope', () => {
         createMember(leadA1, {
           clubId: s.clubA.id,
           person: { uniEmail: person.uniEmail, fullName: person.fullName },
+          profile: {},
           committeeIds: [s.committees.a1.id],
         }),
       );
@@ -182,8 +184,9 @@ describe('committee lead scope', () => {
     const added = await createMember(leadA1, {
       clubId: s.clubA.id,
       person: { uniEmail: s.users.memberA1.uniEmail, fullName: s.users.memberA1.fullName },
+      profile: {},
       committeeIds: [s.committees.a1.id],
     });
-    expect(added.member.id).toBe(s.memberships.memberA1);
+    expect(added.id).toBe(s.memberships.memberA1);
   });
 });

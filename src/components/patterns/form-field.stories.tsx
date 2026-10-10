@@ -5,12 +5,12 @@ import { type z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { newPersonSchema } from '@/modules/members/contracts';
+import { newPersonSchema, newProfileSchema } from '@/modules/members/contracts';
 
 import { FormField } from './form-field';
 
 // The form validates with the SAME contract the API uses.
-const schema = newPersonSchema.pick({ fullName: true, uniEmail: true, phone: true });
+const schema = newPersonSchema.extend(newProfileSchema.pick({ phone: true }).shape);
 type FormValues = z.input<typeof schema>;
 
 function PersonForm() {

@@ -34,19 +34,13 @@ function memberSelect(nested: CommitteeMembershipScope) {
     role: true,
     createdAt: true,
     removedAt: true,
-    user: {
-      select: {
-        id: true,
-        fullName: true,
-        uniEmail: true,
-        personalEmail: true,
-        phone: true,
-        college: true,
-        major: true,
-        level: true,
-        registeredAt: true,
-      },
-    },
+    // This club's copy of the person's details (ADR 0012).
+    personalEmail: true,
+    phone: true,
+    college: true,
+    major: true,
+    level: true,
+    user: { select: { id: true, fullName: true, uniEmail: true, registeredAt: true } },
     club: { select: { id: true, name: true, slug: true } },
     membershipType: { select: { id: true, name: true, order: true } },
     committeeMemberships: {
@@ -101,7 +95,7 @@ function memberWhere(
       { user: { uniEmail: { contains: filters.search.toLowerCase() } } },
     ];
     const digits = toLatinDigits(filters.search).replace(/\D/g, '');
-    if (digits.length >= 4) search.push({ user: { phone: { contains: digits } } });
+    if (digits.length >= 4) search.push({ phone: { contains: digits } });
     conditions.push({ OR: search });
   }
   return { AND: conditions };
@@ -240,9 +234,11 @@ export async function findAccountByUniEmail(
 /**
  * Creates (or links) the account, creates or restores the club membership and adds the
  * committees — in one transaction. The caller has already authorised every part.
+ * The profile is this club's copy: written on a new or restored membership, never on the account.
  */
 export async function saveNewMember(input: {
   person: CreateMemberBody['person'];
+  profile: CreateMemberBody['profile'];
   existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
   clubId: string;
   membershipTypeId: string;
@@ -256,7 +252,8 @@ export async function saveNewMember(input: {
       (
         await tx.user.create({
           data: {
-            ...input.person,
+            uniEmail: input.person.uniEmail,
+            fullName: input.person.fullName,
             searchName: normalizeForSearch(input.person.fullName),
           },
           select: { id: true },
@@ -268,7 +265,12 @@ export async function saveNewMember(input: {
     if (!current) {
       membershipId = (
         await tx.membership.create({
-          data: { userId, clubId: input.clubId, membershipTypeId: input.membershipTypeId },
+          data: {
+            ...input.profile,
+            userId,
+            clubId: input.clubId,
+            membershipTypeId: input.membershipTypeId,
+          },
           select: { id: true },
         })
       ).id;
@@ -278,7 +280,9 @@ export async function saveNewMember(input: {
         await tx.membership.update({
           where: { id: current.id },
           data: {
-            ...(current.removed ? { removedAt: null, removedById: null, role: 'MEMBER' } : {}),
+            ...(current.removed
+              ? { ...input.profile, removedAt: null, removedById: null, role: 'MEMBER' }
+              : {}),
             ...(input.overrideType || current.removed
               ? { membershipTypeId: input.membershipTypeId }
               : {}),
@@ -299,35 +303,39 @@ export async function saveNewMember(input: {
 }
 
 /**
- * Profile fields are on the user (one account per person); the type is on the membership.
- * Both updates only match rows inside the actor's scope.
+ * The name and university email are on the shared account; contact and study details and the
+ * type are this club's membership (ADR 0012). Both updates only match rows inside the scope.
  */
 export async function saveMemberChanges(
   scope: MemberScope,
   memberId: string,
   changes: UpdateMemberBody,
 ): Promise<void> {
-  const { membershipTypeId, ...profile } = changes;
-  const userData: Prisma.UserUpdateManyMutationInput = {
-    ...profile,
-    ...(profile.fullName !== undefined ? { searchName: normalizeForSearch(profile.fullName) } : {}),
+  const { uniEmail, fullName, ...clubFields } = changes;
+  const account: Prisma.UserUpdateManyMutationInput = {
+    ...(uniEmail !== undefined ? { uniEmail } : {}),
+    ...(fullName !== undefined ? { fullName, searchName: normalizeForSearch(fullName) } : {}),
   };
   await db.$transaction(async (tx) => {
-    if (Object.keys(userData).length > 0) {
+    if (hasValues(account)) {
       const { count } = await tx.user.updateMany({
         where: { memberships: { some: { AND: [scope, { id: memberId, removedAt: null }] } } },
-        data: userData,
+        data: account,
       });
       if (count !== 1) throw new NotFoundError('Member');
     }
-    if (membershipTypeId !== undefined) {
+    if (hasValues(clubFields)) {
       const { count } = await tx.membership.updateMany({
         where: { AND: [scope, { id: memberId, removedAt: null }] },
-        data: { membershipTypeId },
+        data: clubFields,
       });
       if (count !== 1) throw new NotFoundError('Member');
     }
   });
+}
+
+function hasValues(data: object): boolean {
+  return Object.values(data).some((value) => value !== undefined);
 }
 
 /**

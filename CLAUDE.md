@@ -50,7 +50,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 
 ## Data model
 
-`prisma/schema.prisma`. UUIDv7 ids; composite foreign keys keep `clubId` consistent from `Membership` down to `PointTransaction` — when creating rows, copy `clubId`/`committeeId` from the loaded parent. All FKs are `Restrict`; nothing with history is hard-deleted (soft delete with `removedAt`, archive with `archivedAt`). Points: never delete; cancel = status CANCELLED + revision; every edit writes a `PointTransactionRevision` with previous values in the same transaction. `workDate` is a calendar date in Asia/Riyadh (`src/lib/dates.ts`), never in the future. Write `User.searchName = normalizeForSearch(fullName)` whenever `fullName` is written. Hand-written CHECK constraints live in the init migration.
+`prisma/schema.prisma`. UUIDv7 ids; composite foreign keys keep `clubId` consistent from `Membership` down to `PointTransaction` — when creating rows, copy `clubId`/`committeeId` from the loaded parent. All FKs are `Restrict`; nothing with history is hard-deleted (soft delete with `removedAt`, archive with `archivedAt`). Points: never delete; cancel = status CANCELLED + revision; every edit writes a `PointTransactionRevision` with previous values in the same transaction. `workDate` is a calendar date in Asia/Riyadh (`src/lib/dates.ts`), never in the future. Write `User.searchName = normalizeForSearch(fullName)` whenever `fullName` is written. `User` holds only the shared identity (name, university email); contact and study details (phone, personal email, college, major, level) are per club on `Membership`, and nothing reads another club's copy (ADR 0012). Hand-written CHECK constraints live in the init migration.
 
 ## Frontend rules
 

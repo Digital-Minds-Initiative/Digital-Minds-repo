@@ -14,7 +14,6 @@ import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
 
 import type {
   CreateMemberBody,
-  CreateMemberOutcome,
   ListMembersQuery,
   ListMembersResponse,
   Member,
@@ -88,16 +87,14 @@ export async function getMember(actor: Actor, memberId: string): Promise<Member>
 
 /**
  * Adds a person to a club, matched by university email: creates an unregistered account if the
- * email is new, links the existing account otherwise, and adds the requested committees.
+ * email is new, links the existing account otherwise, and adds the requested committees. The
+ * answer is the same member either way, so it never reveals whether the account existed.
  *
  * Someone who already has a membership in this club (active or removed) can only be added by an
  * actor who can see that membership; for anyone else it does not exist (404). So a lead cannot
  * pull a member of another committee into theirs, or restore someone an officer removed.
  */
-export async function createMember(
-  actor: Actor,
-  body: CreateMemberBody,
-): Promise<{ outcome: CreateMemberOutcome; member: Member }> {
+export async function createMember(actor: Actor, body: CreateMemberBody): Promise<Member> {
   const club = await findClubForMembers(clubsScope(actor), body.clubId);
   if (!club) throw new NotFoundError('Club');
   if (club.archived) throw new ConflictError('The club is archived.', 'club_archived');
@@ -133,26 +130,19 @@ export async function createMember(
     );
   }
 
-  const outcome: CreateMemberOutcome = !existing
-    ? 'created'
-    : !existing.membership
-      ? 'linked'
-      : existing.membership.removed
-        ? 'reactivated'
-        : 'existing';
-
   const memberId = await saveNewMember({
     person: body.person,
+    profile: body.profile,
     existing,
     clubId: club.id,
     membershipTypeId,
     overrideType: body.membershipTypeId !== undefined,
     committeeIds,
   });
-  return { outcome, member: await getMember(actor, memberId) };
+  return getMember(actor, memberId);
 }
 
-/** Profile fields are shared by all of the person's clubs; the type belongs to this club. */
+/** The name and university email are shared by the person's clubs; everything else is this club's. */
 export async function updateMember(
   actor: Actor,
   memberId: string,
@@ -187,7 +177,7 @@ export async function updateMember(
     assertUniversityEmail(profile.uniEmail);
   }
 
-  await saveMemberChanges(membersScope(actor), memberId, { ...profile, membershipTypeId });
+  await saveMemberChanges(membersScope(actor), memberId, body);
   return getMember(actor, memberId);
 }
 

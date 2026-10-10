@@ -198,9 +198,10 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 
 `prisma/schema.prisma` covers the whole phase. Highlights ([ADR 0003](adr/0003-data-model.md), [ADR 0004](adr/0004-points-ledger.md)):
 
-- `User` — one per person, `uniEmail` unique and lowercase (CHECK), `registeredAt` null until they sign up, random `publicId` for public pages, `searchName` for Arabic-aware search.
+- `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK), `registeredAt` null until they sign up, random `publicId` for public pages, `searchName` for Arabic-aware search.
 - `Club` → `Committee`, `MembershipType` (ordered per club).
-- `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
+- `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
+- `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
 - `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel).
 - **Composite foreign keys** carry `clubId` down the chain, so a committee membership or a point can never point into another club — even if application code has a bug.
 - **Nothing with history is hard-deleted.** All foreign keys are `Restrict`.

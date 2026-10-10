@@ -1,8 +1,15 @@
 import { addDays, todayInAppTimeZone } from '@/lib/dates';
-import type { ClubRole, CommitteeRole } from '@/modules/members/contracts';
+import type { ClubRole, CommitteeRole, MemberProfile } from '@/modules/members/contracts';
 import type { PointTransactionStatus } from '@/modules/points/contracts';
 
-import { demoClubs, demoKeys, demoPeople, type DemoClubKey, type DemoPersona } from './data/demo';
+import {
+  demoClubs,
+  demoKeys,
+  demoPeople,
+  demoProfile,
+  type DemoClubKey,
+  type DemoPersona,
+} from './data/demo';
 import { demoId, demoPublicId } from './data/ids';
 import { generateDemoTransactions } from './data/points';
 
@@ -21,11 +28,6 @@ interface MockUser {
   publicId: string;
   fullName: string;
   uniEmail: string;
-  personalEmail: string | null;
-  phone: string | null;
-  college: string | null;
-  major: string | null;
-  level: number | null;
   isFullAdmin: boolean;
   registered: boolean;
   persona: DemoPersona;
@@ -57,6 +59,8 @@ export interface MockMembership {
   clubId: string;
   typeId: string;
   role: ClubRole;
+  /** This club's copy of the person's details. */
+  profile: MemberProfile;
   joinedAt: string;
   removedAt: string | null;
   committees: Array<{ committeeId: string; role: CommitteeRole; removed: boolean }>;
@@ -112,11 +116,6 @@ export function buildMockDb(today: string): MockDb {
     publicId: demoPublicId(person.key),
     fullName: person.fullName,
     uniEmail: person.uniEmail,
-    personalEmail: person.personalEmail ?? null,
-    phone: person.phone ?? null,
-    college: person.college ?? null,
-    major: person.major ?? null,
-    level: person.level ?? null,
     isFullAdmin: person.isFullAdmin ?? false,
     registered: person.registered,
     persona: person.persona,
@@ -130,6 +129,7 @@ export function buildMockDb(today: string): MockDb {
         clubId: demoId(demoKeys.club(membership.club)),
         typeId: demoId(demoKeys.membershipType(membership.club, membership.type)),
         role: membership.officer && !removed ? 'CLUB_OFFICER' : 'MEMBER',
+        profile: demoProfile(person),
         joinedAt: `${addDays(today, -(200 + personIndex * 3))}T08:00:00.000Z`,
         removedAt: removed
           ? `${addDays(today, -(membership.removedDaysAgo ?? 0))}T10:00:00.000Z`

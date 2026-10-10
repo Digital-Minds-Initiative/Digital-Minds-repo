@@ -6,7 +6,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | ---------------------------------------------- | ----------------------------------------------------------------- | ------------------------------- |
 | [0001](0001-feature-modules-and-boundaries.md) | Feature modules with four public entry points, enforced by ESLint | Accepted                        |
 | [0002](0002-authorization-model.md)            | Actor + branded scopes; 404 outside scope, 403 for roles          | Accepted (role rules: see 0011) |
-| [0003](0003-data-model.md)                     | UUIDv7, composite foreign keys per club, no hard deletes          | Accepted                        |
+| [0003](0003-data-model.md)                     | UUIDv7, composite foreign keys per club, no hard deletes          | Accepted (profiles: see 0012)   |
 | [0004](0004-points-ledger.md)                  | Append-only points ledger with revisions; balances computed       | Accepted                        |
 | [0005](0005-api-contracts-and-errors.md)       | Endpoint definitions as contracts; one error envelope             | Accepted                        |
 | [0006](0006-data-through-the-api.md)           | All UI data goes through `/api/v1`                                | Accepted                        |
@@ -15,6 +15,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0009](0009-demo-dataset-and-mocks.md)         | One demo dataset for the seed and the mocks                       | Accepted                        |
 | [0010](0010-toolchain-versions.md)             | Toolchain versions and the ones we deliberately held back         | Accepted                        |
 | [0011](0011-modules-own-their-policies.md)     | Modules own their policies; authz keeps the role predicates       | Accepted                        |
+| [0012](0012-member-profiles-per-club.md)       | Contact and study details per club; only the identity is shared   | Accepted                        |
 
 ## Writing a new ADR
 

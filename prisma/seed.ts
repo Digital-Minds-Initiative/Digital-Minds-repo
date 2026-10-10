@@ -10,7 +10,13 @@ import { truncateAllTables } from './truncate';
 import { normalizeForSearch } from '../src/lib/arabic';
 import { addDays, dateOnlyToDate, todayInAppTimeZone } from '../src/lib/dates';
 import { isAllowedEmailDomain, parseEmailDomains } from '../src/lib/email-domains';
-import { demoClubs, demoKeys, demoPeople, type DemoClubKey } from '../src/mocks/data/demo';
+import {
+  demoClubs,
+  demoKeys,
+  demoPeople,
+  demoProfile,
+  type DemoClubKey,
+} from '../src/mocks/data/demo';
 import { demoId, demoPublicId } from '../src/mocks/data/ids';
 import { generateDemoTransactions } from '../src/mocks/data/points';
 import { PrismaClient, type Prisma } from '../src/server/db/generated/client';
@@ -104,11 +110,6 @@ async function main(): Promise<void> {
           fullName: person.fullName,
           searchName: normalizeForSearch(person.fullName),
           uniEmail: person.uniEmail,
-          personalEmail: person.personalEmail ?? null,
-          phone: person.phone ?? null,
-          college: person.college ?? null,
-          major: person.major ?? null,
-          level: person.level ?? null,
           isFullAdmin: person.isFullAdmin ?? false,
           registeredAt: person.registered ? new Date(now.getTime() - (190 - index) * DAY_MS) : null,
           createdAt: new Date(now.getTime() - (210 - index) * DAY_MS),
@@ -131,6 +132,7 @@ async function main(): Promise<void> {
             membershipTypeId: ids.type(membership.club, membership.type),
             // Removal resets roles, exactly like the members service does.
             role: membership.officer && !removed ? 'CLUB_OFFICER' : 'MEMBER',
+            ...demoProfile(person),
             removedAt,
             removedById: removed ? ids.user(officerOf(membership.club)?.key ?? 'abdullah') : null,
             createdAt: at(addDays(today, -(200 + personIndex * 3)), 8),
