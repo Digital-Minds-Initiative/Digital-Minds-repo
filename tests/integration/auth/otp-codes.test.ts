@@ -77,6 +77,26 @@ describe('sign-in codes', () => {
     expect(await db.session.count({ where: { email } })).toBe(1);
   });
 
+  it('sign in once even when both requests have already passed the attempt check', async () => {
+    const email = newEmail();
+    await auth.request(email);
+    const code = lastCodeFor(email);
+
+    // Hold a lock on the code rows so both verifies queue on the attempt UPDATE; released
+    // together, both pass it and compare the right code before either deletes the row. Only the
+    // delete decides who signs in.
+    let verifies: Array<Promise<Response>> = [];
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "OtpChallenge" FOR UPDATE`;
+      verifies = [auth.verify(email, code), auth.verify(email, code)];
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+    const statuses = (await Promise.all(verifies)).map((response) => response.status);
+
+    expect(statuses.sort()).toEqual([200, 422]);
+    expect(await db.session.count({ where: { email } })).toBe(1);
+  });
+
   it('refuse a wrong code, which can then be corrected', async () => {
     const email = newEmail();
     await auth.request(email);
