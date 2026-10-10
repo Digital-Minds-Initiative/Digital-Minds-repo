@@ -72,55 +72,84 @@ describe('repository writes apply the scope themselves', () => {
     expect(await memberA1()).toEqual(before);
   });
 
-  it('addToCommittee', async () => {
-    const before = await memberA1();
+  // A lead's scopes isolate each check: same club, but only one committee and its members.
+  const leadScopes = async () => {
+    const lead = await actorFor(s.users.leadA1.id);
+    return {
+      club: clubsScope(lead),
+      committees: committeesScope(lead),
+      members: membersScope(lead),
+    };
+  };
+  const committeeRows = (membershipId: string) =>
+    db.committeeMembership.findMany({ where: { membershipId }, orderBy: { committeeId: 'asc' } });
+
+  it('addToCommittee checks the member and the committee', async () => {
+    const lead = await leadScopes();
+    const beforeA1 = await committeeRows(s.memberships.memberA1);
+    const beforeA2 = await committeeRows(s.memberships.memberA2);
+
+    // A member the lead cannot see, into the lead's own committee.
     await expectNotFound(
-      addToCommittee(
-        { members: membersScope(officerB), committees: committeesScope(officerB) },
-        { memberId: s.memberships.memberA1, clubId: s.clubA.id, committeeId: s.committees.a2.id },
-      ),
+      addToCommittee(lead, {
+        memberId: s.memberships.memberA2,
+        clubId: s.clubA.id,
+        committeeId: s.committees.a1.id,
+      }),
     );
-    expect(await memberA1()).toEqual(before);
+    // A member the lead can see, into a committee the lead does not lead.
+    await expectNotFound(
+      addToCommittee(lead, {
+        memberId: s.memberships.memberA1,
+        clubId: s.clubA.id,
+        committeeId: s.committees.a2.id,
+      }),
+    );
+
+    expect(await committeeRows(s.memberships.memberA1)).toEqual(beforeA1);
+    expect(await committeeRows(s.memberships.memberA2)).toEqual(beforeA2);
   });
 
-  it('saveNewMember, into another club and onto another club’s membership', async () => {
-    const scopes = {
+  it('saveNewMember checks the club, the committees and an existing membership', async () => {
+    const officerBScopes = {
       club: clubsScope(officerB),
       committees: committeesScope(officerB),
       members: membersScope(officerB),
     };
+    const lead = await leadScopes();
     const users = await db.user.count();
-    const before = await memberA1();
+    const memberships = await db.membership.count();
+    const beforeA2 = await committeeRows(s.memberships.memberA2);
+    const newPerson = {
+      person: { uniEmail: 's900000321@st.uqu.edu.sa', fullName: 'شخص جديد' },
+      profile: {},
+      existing: null,
+      clubId: s.clubA.id,
+      membershipTypeId: s.types.a,
+      overrideType: false,
+    };
 
+    // A club outside the scope.
+    await expectNotFound(saveNewMember(officerBScopes, { ...newPerson, committeeIds: [] }));
+    // The lead's club, but a committee the lead does not lead.
+    await expectNotFound(saveNewMember(lead, { ...newPerson, committeeIds: [s.committees.a2.id] }));
+    // An existing membership in the lead's club that the lead cannot see.
+    const memberA2 = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.memberA2 },
+      include: { user: true },
+    });
     await expectNotFound(
-      saveNewMember(scopes, {
-        person: { uniEmail: 's900000321@st.uqu.edu.sa', fullName: 'شخص جديد' },
-        profile: {},
-        existing: null,
-        clubId: s.clubA.id,
-        membershipTypeId: s.types.a,
-        overrideType: false,
-        committeeIds: [],
-      }),
-    );
-    // Club B is in scope, but the membership being "restored" belongs to club A.
-    await expectNotFound(
-      saveNewMember(scopes, {
-        person: { uniEmail: before.user.uniEmail, fullName: before.user.fullName },
-        profile: { phone: '+966500009999' },
-        existing: {
-          userId: before.userId,
-          membership: { id: s.memberships.memberA1, removed: true },
-        },
-        clubId: s.clubB.id,
-        membershipTypeId: s.types.b,
-        overrideType: true,
-        committeeIds: [],
+      saveNewMember(lead, {
+        ...newPerson,
+        person: { uniEmail: memberA2.user.uniEmail, fullName: memberA2.user.fullName },
+        existing: { userId: memberA2.userId, membership: { id: memberA2.id, removed: false } },
+        committeeIds: [s.committees.a1.id],
       }),
     );
 
     expect(await db.user.count()).toBe(users);
-    expect(await memberA1()).toEqual(before);
+    expect(await db.membership.count()).toBe(memberships);
+    expect(await committeeRows(s.memberships.memberA2)).toEqual(beforeA2);
   });
 
   it('insertTransaction', async () => {
