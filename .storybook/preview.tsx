@@ -25,7 +25,12 @@ function StoryProviders({
     const root = document.documentElement;
     root.lang = 'ar';
     root.dir = direction;
-    root.classList.add(fontSans.variable);
+    root.classList.add(
+      fontSans.variable,
+      fontSerif.variable,
+      fontArabicSerif.variable,
+      fontMono.variable,
+    );
   }, [direction]);
 
   return (

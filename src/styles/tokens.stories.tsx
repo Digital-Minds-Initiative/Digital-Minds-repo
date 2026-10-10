@@ -28,6 +28,33 @@ const GROUPS: Record<string, string[]> = {
     'info',
     'info-subtle',
   ],
+  Kit: [
+    'canvas',
+    'surface',
+    'surface-sunken',
+    'brand',
+    'deep',
+    'slab',
+    'slab-2',
+    'slab-3',
+    'paper-cream',
+    'paper-teal',
+    'paper-peach',
+    'paper-lilac',
+    'teal',
+    'gold',
+    'orange',
+  ],
+  Clubs: [
+    'club-indigo',
+    'club-teal',
+    'club-gold',
+    'club-orange',
+    'club-rose',
+    'club-sky',
+    'club-olive',
+    'club-slate',
+  ],
 };
 
 function Tokens() {

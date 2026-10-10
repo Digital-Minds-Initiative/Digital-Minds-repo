@@ -8,7 +8,7 @@ const emptyStateVariants = cva('flex flex-col items-center justify-center gap-3 
   variants: {
     variant: {
       /** Stand-alone section with a dashed frame. */
-      framed: 'rounded-xl border border-dashed border-border-strong px-6 py-12',
+      framed: 'rounded-card border border-dashed border-border-strong px-6 py-12',
       /** Inside another container (e.g. a table body). */
       plain: 'px-4 py-6',
     },
@@ -34,7 +34,7 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div data-slot="empty-state" className={cn(emptyStateVariants({ variant }), className)}>
-      <div className="flex size-12 items-center justify-center rounded-full bg-surface-3 text-fg-muted">
+      <div className="flex size-12 items-center justify-center rounded-cell bg-surface-3 text-fg-muted">
         <Icon className="size-6" aria-hidden />
       </div>
       <div className="grid gap-1">

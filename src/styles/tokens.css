@@ -1,95 +1,154 @@
 /*
- * Design tokens — three layers.
+ * Design tokens — Digital Minds design system v5 ("sheets", Tuwaiq × UQU Computing).
  *
- * 1. PRIMITIVES (`--palette-*`, `--size-*`, `--typeface-*`): raw values. They live outside
- *    Tailwind's namespaces, so they never become utility classes. Components must not use them.
- *
- * 2. SEMANTIC (`--color-*`, `--radius-*`, `--shadow-*`, `--text-*`, `--font-*`): what a value is
- *    FOR. They are Tailwind theme variables, so `bg-surface-1`, `text-fg-muted`, `border-border`,
- *    `rounded-md` … exist. Tailwind's default palette is removed: only these colours exist.
- *
+ * Layers:
+ * 1. KIT PRIMITIVES (`--canvas`, `--brand`, `--slab`, `--paper-*`, `--club-*`, `--cell-*`,
+ *    depth/motion constants…): the design system's own raw tokens, named exactly as its
+ *    components expect (`var(--brand)`, `var(--cell-m)`…). Theme-dependent ones are set
+ *    under `[data-theme]`; constants (spacing, radius, motion, type stacks) are theme-free.
+ * 2. SEMANTIC (`--color-*`, `--radius-*`, `--font-*`, `--shadow-*`, `--text-*`): Tailwind
+ *    theme variables built from layer 1 — `bg-brand`, `bg-slab`, `text-on-paper`,
+ *    `rounded-control`, `font-serif`… Tailwind's default palette is removed: only these
+ *    colours exist. A handful of pre-existing generic names (`--color-surface-1`,
+ *    `--color-primary`…) alias onto the kit so components not yet ported keep working.
  * 3. COMPONENTS use semantic utilities only (enforced by ESLint).
  *
- * Theming = overriding SEMANTIC tokens under a selector:
- *   [data-theme='dark']        → dark mode (below)
- *   [data-brand='<club-slug>'] → per-club branding later (override --color-primary*, radii…)
+ * Theming = overriding layer-1/2 tokens under a selector:
+ *   [data-theme='dark']        → Dusk (below)
+ *   [data-club='<club-slug>']  → a club's accent (`--brand`/`--club` follow `--club-*`)
  */
 
-/* ─── 1. Primitives ──────────────────────────────────────────── */
+/* ─── 1. Kit primitives — theme-dependent ───────────────────────────────── */
+[data-theme='light'] {
+  --canvas: #f4f1ea;
+  --surface: #fbf9f4;
+  --surface-sunken: #eae6dc;
+  --slab: #14121a;
+  --slab-2: #24212e;
+  --slab-3: #3a3647;
+  --on-slab: #f4f1ea;
+  --on-slab-muted: #b9b5c7;
+  --ink: #1c1a24;
+  --muted: #5b5864;
+  --line: #e1dcd0;
+  --control-border: #77747e;
+  --registration: #c4bdae;
+  --brand: var(--tuwaiq-indigo);
+  --on-brand: #ffffff;
+  --deep: #170f3a;
+  --on-deep: #f4f1ea;
+  --on-deep-muted: #a9a2c8;
+  --paper-cream: #f3ead7;
+  --paper-teal: #c4f2ee;
+  --paper-peach: #f9d9bd;
+  --paper-lilac: #ddd2ff;
+  --on-paper: #1c1a24;
+  --on-paper-muted: #55525f;
+  --paper-rule: #1c1a2459;
+  --teal: var(--uqu-deep-teal);
+  --on-teal: #ffffff;
+  --gold: #76602a;
+  --on-gold: #ffffff;
+  --orange: #a04e14;
+  --on-orange: #ffffff;
+  --success: #1b7a57;
+  --warning: #7a5200;
+  --error: #b3392f;
+  --info: #2b5f9e;
+  /* Status fills read dark-on-light in Oasis; flip in Dusk below. */
+  --on-success: #ffffff;
+  --on-warning: var(--tuwaiq-ink);
+  --on-error: #ffffff;
+  --on-info: #ffffff;
+}
+
+[data-theme='dark'] {
+  --canvas: #121019;
+  --surface: #1b1924;
+  --surface-sunken: #0c0b11;
+  --slab: #1b1824;
+  --slab-2: #272333;
+  --slab-3: #3a3647;
+  --on-slab: #f4f1ea;
+  --on-slab-muted: #b9b5c7;
+  --ink: #eeebe3;
+  --muted: #a3a0ad;
+  --line: #2b2935;
+  --control-border: #7f7c8a;
+  --registration: #3a3747;
+  --brand: var(--tuwaiq-lilac);
+  --on-brand: #121019;
+  --deep: #170f3a;
+  --on-deep: #f4f1ea;
+  --on-deep-muted: #a9a2c8;
+  --paper-cream: #f3ead7;
+  --paper-teal: #c4f2ee;
+  --paper-peach: #f9d9bd;
+  --paper-lilac: #ddd2ff;
+  --on-paper: #1c1a24;
+  --on-paper-muted: #55525f;
+  --paper-rule: #1c1a2459;
+  --teal: var(--tuwaiq-teal);
+  --on-teal: #121019;
+  --gold: #d2b77a;
+  --on-gold: #121019;
+  --orange: var(--tuwaiq-orange);
+  --on-orange: #121019;
+  --success: #4fc08d;
+  --warning: #e3b563;
+  --error: #f0877d;
+  --info: #86b6e6;
+  /* Dusk's status colours are light pastels: fill text must be dark ink, not white. */
+  --on-success: var(--tuwaiq-ink);
+  --on-warning: var(--tuwaiq-ink);
+  --on-error: var(--tuwaiq-ink);
+  --on-info: var(--tuwaiq-ink);
+}
+
+/* ─── 1b. Kit primitives — theme-independent (brand marks, clubs, motion, cells) ───── */
 :root {
-  /* Neutral (cool grey) */
-  --palette-neutral-0: oklch(1 0 0);
-  --palette-neutral-25: oklch(0.985 0.002 260);
-  --palette-neutral-50: oklch(0.97 0.004 260);
-  --palette-neutral-100: oklch(0.94 0.006 260);
-  --palette-neutral-200: oklch(0.9 0.008 260);
-  --palette-neutral-300: oklch(0.83 0.012 260);
-  --palette-neutral-400: oklch(0.7 0.016 260);
-  --palette-neutral-500: oklch(0.56 0.018 260);
-  --palette-neutral-600: oklch(0.45 0.018 260);
-  --palette-neutral-700: oklch(0.37 0.016 260);
-  --palette-neutral-800: oklch(0.28 0.014 260);
-  --palette-neutral-850: oklch(0.235 0.012 260);
-  --palette-neutral-900: oklch(0.2 0.012 260);
-  --palette-neutral-950: oklch(0.16 0.01 260);
-  --palette-neutral-1000: oklch(0.13 0.008 260);
+  --tuwaiq-indigo: #4f29b7;
+  --tuwaiq-lilac: #a380ff;
+  --tuwaiq-teal: #57e3d8;
+  --tuwaiq-orange: #f4a664;
+  --tuwaiq-ink: #262626;
+  --tuwaiq-mist: #ededed;
+  --uqu-deep-teal: #2a636d;
+  --uqu-teal-blue: #358b9a;
+  --uqu-taupe: #9f895c;
+  --uqu-dark-cyan: #0c272c;
+  --club-indigo: #4f29b7;
+  --club-teal: #2a636d;
+  --club-gold: #76602a;
+  --club-orange: #a04e14;
+  --club-rose: #a8466e;
+  --club-sky: #2a6c9c;
+  --club-olive: #5e6b26;
+  --club-slate: #4b5968;
 
-  /* Brand (Digital Minds indigo) */
-  --palette-brand-50: oklch(0.97 0.02 268);
-  --palette-brand-100: oklch(0.93 0.04 268);
-  --palette-brand-200: oklch(0.87 0.07 268);
-  --palette-brand-300: oklch(0.78 0.11 268);
-  --palette-brand-400: oklch(0.68 0.16 268);
-  --palette-brand-500: oklch(0.58 0.2 268);
-  --palette-brand-600: oklch(0.51 0.21 268);
-  --palette-brand-700: oklch(0.44 0.19 268);
-  --palette-brand-800: oklch(0.37 0.15 268);
-  --palette-brand-900: oklch(0.3 0.11 268);
-  --palette-brand-950: oklch(0.22 0.08 268);
+  /* The cell grid: three finishes (solid / perforated / outline), three sizes. */
+  --cell-s: 4px;
+  --cell-m: 8px;
+  --cell-l: 16px;
 
-  /* Status hues */
-  --palette-red-50: oklch(0.97 0.02 25);
-  --palette-red-100: oklch(0.93 0.05 25);
-  --palette-red-200: oklch(0.87 0.08 25);
-  --palette-red-400: oklch(0.7 0.17 25);
-  --palette-red-500: oklch(0.63 0.21 25);
-  --palette-red-600: oklch(0.55 0.22 25);
-  --palette-red-700: oklch(0.48 0.19 25);
-  --palette-red-950: oklch(0.25 0.08 25);
+  /* Depth: Tower (perspective) and SheetStack (sticky step). */
+  --perspective-tower: 1400px;
+  --tilt-tower: -4deg;
+  --sheet-tilt: 4deg;
+  --stack-step: 16px;
+  --stack-scale: 0.04;
 
-  --palette-green-50: oklch(0.97 0.03 150);
-  --palette-green-100: oklch(0.93 0.06 150);
-  --palette-green-200: oklch(0.87 0.09 150);
-  --palette-green-400: oklch(0.73 0.15 150);
-  --palette-green-500: oklch(0.65 0.16 150);
-  --palette-green-600: oklch(0.55 0.15 150);
-  --palette-green-700: oklch(0.47 0.13 150);
-  --palette-green-950: oklch(0.24 0.05 150);
+  /*
+   * Motion never decorates — it shows depth and gives feedback. `--ease-out`/
+   * `--ease-linear` are registered under @theme below (Tailwind's own namespace),
+   * so the bare `ease-out`/`ease-linear` utilities use the kit's curves everywhere.
+   */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 400ms;
+  --duration-marquee: 40s;
 
-  --palette-amber-50: oklch(0.98 0.03 80);
-  --palette-amber-100: oklch(0.95 0.07 80);
-  --palette-amber-200: oklch(0.9 0.11 80);
-  --palette-amber-400: oklch(0.82 0.15 80);
-  --palette-amber-500: oklch(0.77 0.16 75);
-  --palette-amber-600: oklch(0.67 0.16 70);
-  --palette-amber-700: oklch(0.52 0.13 65);
-  --palette-amber-950: oklch(0.27 0.06 65);
-
-  --palette-blue-50: oklch(0.97 0.02 240);
-  --palette-blue-100: oklch(0.93 0.04 240);
-  --palette-blue-200: oklch(0.87 0.07 240);
-  --palette-blue-400: oklch(0.7 0.14 240);
-  --palette-blue-500: oklch(0.62 0.17 240);
-  --palette-blue-600: oklch(0.54 0.18 240);
-  --palette-blue-700: oklch(0.47 0.16 240);
-  --palette-blue-950: oklch(0.24 0.07 240);
-
-  --palette-black-alpha-10: oklch(0 0 0 / 0.1);
-  --palette-black-alpha-20: oklch(0 0 0 / 0.2);
-  --palette-black-alpha-40: oklch(0 0 0 / 0.4);
-  --palette-black-alpha-60: oklch(0 0 0 / 0.6);
-
-  /* Type scale (rem) */
+  /* Type scale (rem), radii and spacing unit used by components not yet restyled. */
   --size-font-1: 0.75rem;
   --size-font-2: 0.875rem;
   --size-font-3: 1rem;
@@ -99,81 +158,136 @@
   --size-font-7: 1.875rem;
   --size-font-8: 2.25rem;
   --size-font-9: 3rem;
-
-  /* Radii */
-  --size-radius-1: 0.125rem;
-  --size-radius-2: 0.25rem;
-  --size-radius-3: 0.375rem;
-  --size-radius-4: 0.5rem;
-  --size-radius-5: 0.75rem;
-  --size-radius-6: 1rem;
-
-  /* Spacing unit: Tailwind multiplies it (p-4 = 4 × unit) */
   --size-space-unit: 0.25rem;
-
-  /*
-   * Typefaces. `--font-ibm-plex-sans-arabic` is set by next/font (src/styles/fonts.ts).
-   * To change the app font, change it there and here — components only see `font-sans`.
-   */
-  --typeface-arabic-sans:
-    var(--font-ibm-plex-sans-arabic), 'Segoe UI', Tahoma, system-ui, sans-serif;
-  --typeface-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 
-/* ─── 2. Semantic tokens (light theme defaults). `static`: always emitted as CSS variables. ─── */
+/* ─── 2. Semantic tokens (Tailwind theme vars; `static`: always emitted as CSS vars). ── */
 @theme static {
-  /* Remove Tailwind's defaults so only semantic tokens exist as utilities. */
+  /* Remove Tailwind's defaults so only these tokens exist as utilities. */
   --color-*: initial;
   --font-*: initial;
   --radius-*: initial;
   --shadow-*: initial;
   --text-*: initial;
 
-  /* Surfaces & text */
-  --color-bg: var(--palette-neutral-25);
-  --color-fg: var(--palette-neutral-950);
-  --color-fg-muted: var(--palette-neutral-600);
-  --color-fg-subtle: var(--palette-neutral-500);
-  --color-fg-inverse: var(--palette-neutral-0);
-  --color-surface-1: var(--palette-neutral-0);
-  --color-surface-2: var(--palette-neutral-50);
-  --color-surface-3: var(--palette-neutral-100);
-  --color-overlay: var(--palette-neutral-0);
-  --color-backdrop: var(--palette-black-alpha-40);
-  --color-border: var(--palette-neutral-200);
-  --color-border-strong: var(--palette-neutral-300);
-  --color-input: var(--palette-neutral-300);
-  --color-ring: var(--palette-brand-500);
+  /* ─ Kit colours, exact names (bg-canvas, text-on-slab, border-paper-rule…) ─ */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-control-border: var(--control-border);
+  --color-registration: var(--registration);
 
-  /* Brand */
-  --color-primary: var(--palette-brand-600);
-  --color-primary-hover: var(--palette-brand-700);
-  --color-primary-fg: var(--palette-neutral-0);
-  --color-primary-subtle: var(--palette-brand-50);
-  --color-primary-subtle-fg: var(--palette-brand-700);
+  --color-brand: var(--brand);
+  --color-on-brand: var(--on-brand);
+  --color-deep: var(--deep);
+  --color-on-deep: var(--on-deep);
+  --color-on-deep-muted: var(--on-deep-muted);
 
-  /* Status */
-  --color-danger: var(--palette-red-600);
-  --color-danger-hover: var(--palette-red-700);
-  --color-danger-fg: var(--palette-neutral-0);
-  --color-danger-subtle: var(--palette-red-50);
-  --color-danger-subtle-fg: var(--palette-red-700);
-  --color-success: var(--palette-green-600);
-  --color-success-fg: var(--palette-neutral-0);
-  --color-success-subtle: var(--palette-green-50);
-  --color-success-subtle-fg: var(--palette-green-700);
-  --color-warning: var(--palette-amber-500);
-  --color-warning-fg: var(--palette-neutral-1000);
-  --color-warning-subtle: var(--palette-amber-50);
-  --color-warning-subtle-fg: var(--palette-amber-700);
-  --color-info: var(--palette-blue-600);
-  --color-info-fg: var(--palette-neutral-0);
-  --color-info-subtle: var(--palette-blue-50);
-  --color-info-subtle-fg: var(--palette-blue-700);
+  --color-slab: var(--slab);
+  --color-slab-2: var(--slab-2);
+  --color-slab-3: var(--slab-3);
+  --color-on-slab: var(--on-slab);
+  --color-on-slab-muted: var(--on-slab-muted);
 
-  /* Typography */
-  --font-sans: var(--typeface-arabic-sans);
-  --font-mono: var(--typeface-mono);
+  --color-paper-cream: var(--paper-cream);
+  --color-paper-teal: var(--paper-teal);
+  --color-paper-peach: var(--paper-peach);
+  --color-paper-lilac: var(--paper-lilac);
+  --color-on-paper: var(--on-paper);
+  --color-on-paper-muted: var(--on-paper-muted);
+  --color-paper-rule: var(--paper-rule);
+
+  --color-teal: var(--teal);
+  --color-on-teal: var(--on-teal);
+  --color-gold: var(--gold);
+  --color-on-gold: var(--on-gold);
+  --color-orange: var(--orange);
+  --color-on-orange: var(--on-orange);
+
+  --color-success: var(--success);
+  --color-on-success: var(--on-success);
+  --color-warning: var(--warning);
+  --color-on-warning: var(--on-warning);
+  --color-error: var(--error);
+  --color-on-error: var(--on-error);
+  --color-info: var(--info);
+  --color-on-info: var(--on-info);
+
+  --color-tuwaiq-indigo: var(--tuwaiq-indigo);
+  --color-tuwaiq-lilac: var(--tuwaiq-lilac);
+  --color-tuwaiq-teal: var(--tuwaiq-teal);
+  --color-tuwaiq-orange: var(--tuwaiq-orange);
+  --color-tuwaiq-ink: var(--tuwaiq-ink);
+  --color-tuwaiq-mist: var(--tuwaiq-mist);
+  --color-uqu-deep-teal: var(--uqu-deep-teal);
+  --color-uqu-teal-blue: var(--uqu-teal-blue);
+  --color-uqu-taupe: var(--uqu-taupe);
+  --color-uqu-dark-cyan: var(--uqu-dark-cyan);
+
+  --color-club-indigo: var(--club-indigo);
+  --color-club-teal: var(--club-teal);
+  --color-club-gold: var(--club-gold);
+  --color-club-orange: var(--club-orange);
+  --color-club-rose: var(--club-rose);
+  --color-club-sky: var(--club-sky);
+  --color-club-olive: var(--club-olive);
+  --color-club-slate: var(--club-slate);
+
+  /* ─ Generic names kept for components not yet ported to the kit's own names ─ */
+  --color-bg: var(--canvas);
+  --color-fg: var(--ink);
+  --color-fg-muted: var(--muted);
+  --color-fg-subtle: var(--muted);
+  --color-fg-inverse: var(--on-slab);
+  --color-surface-1: var(--surface);
+  --color-surface-2: var(--surface-sunken);
+  --color-surface-3: var(--paper-cream);
+  --color-overlay: var(--surface);
+  --color-backdrop: color-mix(in oklch, var(--deep) 55%, transparent);
+  --color-border: var(--line);
+  --color-border-strong: var(--control-border);
+  --color-input: var(--control-border);
+  --color-ring: var(--brand);
+
+  --color-primary: var(--brand);
+  --color-primary-hover: color-mix(in oklch, var(--brand) 85%, black);
+  --color-primary-fg: var(--on-brand);
+  --color-primary-subtle: color-mix(in oklch, var(--brand) 14%, var(--surface));
+  --color-primary-subtle-fg: var(--brand);
+
+  --color-danger: var(--error);
+  --color-danger-hover: color-mix(in oklch, var(--error) 85%, black);
+  --color-danger-fg: var(--on-error);
+  --color-danger-subtle: color-mix(in oklch, var(--error) 14%, var(--surface));
+  --color-danger-subtle-fg: var(--error);
+  --color-success-fg: var(--on-success);
+  --color-success-subtle: color-mix(in oklch, var(--success) 14%, var(--surface));
+  --color-success-subtle-fg: var(--success);
+  --color-warning-fg: var(--on-warning);
+  --color-warning-subtle: color-mix(in oklch, var(--warning) 14%, var(--surface));
+  --color-warning-subtle-fg: var(--warning);
+  --color-info-fg: var(--on-info);
+  --color-info-subtle: color-mix(in oklch, var(--info) 14%, var(--surface));
+  --color-info-subtle-fg: var(--info);
+
+  /*
+   * Typography. Thmanyah's licence forbids redistributing its files, so it is never
+   * embedded — every stack lists it first and falls through to the self-hosted
+   * fallback (src/styles/fonts.ts). On a machine with Thmanyah installed, the real
+   * font shows with no change to any component.
+   */
+  --font-display:
+    'Thmanyah Sans', var(--font-ibm-plex-sans-arabic), 'Segoe UI', Tahoma, system-ui, sans-serif;
+  --font-body: var(--font-display);
+  --font-sans: var(--font-display);
+  --font-serif: 'Thmanyah Serif Display', var(--font-newsreader), var(--font-amiri), serif;
+  --font-reading: 'Thmanyah Serif Text', var(--font-newsreader), var(--font-amiri), serif;
+  --font-mono:
+    'Thmanyah Mono', var(--font-ibm-plex-mono), ui-monospace, 'SFMono-Regular', Menlo, Consolas,
+    monospace;
   --text-xs: var(--size-font-1);
   --text-xs--line-height: 1.6;
   --text-sm: var(--size-font-2);
@@ -193,25 +307,35 @@
   --text-5xl: var(--size-font-9);
   --text-5xl--line-height: 1.15;
 
-  /* Shape & depth */
+  /* Shape — cells, not curves. */
   --spacing: var(--size-space-unit);
-  --radius-sm: var(--size-radius-2);
-  --radius-md: var(--size-radius-3);
-  --radius-lg: var(--size-radius-4);
-  --radius-xl: var(--size-radius-5);
-  --radius-2xl: var(--size-radius-6);
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px var(--palette-black-alpha-10);
-  --shadow-md:
-    0 4px 12px -2px var(--palette-black-alpha-10), 0 2px 4px -2px var(--palette-black-alpha-10);
-  --shadow-lg:
-    0 16px 32px -8px var(--palette-black-alpha-20), 0 4px 8px -4px var(--palette-black-alpha-10);
+  --radius-block: 0px;
+  --radius-cell: 2px;
+  --radius-control: 6px;
+  --radius-card: 20px;
+  --radius-pill: 999px;
+  /* Aliases so components not yet ported to the kit's radius names keep working. */
+  --radius-sm: var(--radius-cell);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-control);
+  --radius-xl: var(--radius-card);
+  --radius-2xl: var(--radius-card);
+  --radius-full: var(--radius-pill);
+
+  /* Borders, not shadows — kept at `none` so nothing silently re-adds glow. */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Motion never decorates — overrides Tailwind's defaults so bare `ease-out`/`ease-linear` match the kit. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-linear: linear;
 
   /* Motion (used with Radix data-[state] attributes) */
-  --animate-fade-in: fade-in 150ms ease-out;
-  --animate-fade-out: fade-out 120ms ease-in;
-  --animate-pop-in: pop-in 150ms ease-out;
-  --animate-pop-out: pop-out 120ms ease-in;
+  --animate-fade-in: fade-in var(--duration-fast) var(--ease-out);
+  --animate-fade-out: fade-out var(--duration-fast) ease-in;
+  --animate-pop-in: pop-in var(--duration-fast) var(--ease-out);
+  --animate-pop-out: pop-out var(--duration-fast) ease-in;
 
   @keyframes fade-in {
     from {
@@ -237,49 +361,10 @@
   }
 }
 
-/* ─── Themes: override SEMANTIC tokens only ──────────────────── */
+/* ─── Themes: `color-scheme` only — the kit's own tokens above already theme. ──── */
 @layer base {
   :root[data-theme='dark'] {
     color-scheme: dark;
-
-    --color-bg: var(--palette-neutral-1000);
-    --color-fg: var(--palette-neutral-50);
-    --color-fg-muted: var(--palette-neutral-400);
-    --color-fg-subtle: var(--palette-neutral-500);
-    --color-fg-inverse: var(--palette-neutral-950);
-    --color-surface-1: var(--palette-neutral-950);
-    --color-surface-2: var(--palette-neutral-900);
-    --color-surface-3: var(--palette-neutral-850);
-    --color-overlay: var(--palette-neutral-900);
-    --color-backdrop: var(--palette-black-alpha-60);
-    --color-border: var(--palette-neutral-800);
-    --color-border-strong: var(--palette-neutral-700);
-    --color-input: var(--palette-neutral-700);
-    --color-ring: var(--palette-brand-400);
-
-    --color-primary: var(--palette-brand-500);
-    --color-primary-hover: var(--palette-brand-400);
-    --color-primary-fg: var(--palette-neutral-0);
-    --color-primary-subtle: var(--palette-brand-950);
-    --color-primary-subtle-fg: var(--palette-brand-200);
-
-    --color-danger: var(--palette-red-500);
-    --color-danger-hover: var(--palette-red-400);
-    --color-danger-subtle: var(--palette-red-950);
-    --color-danger-subtle-fg: var(--palette-red-200);
-    --color-success: var(--palette-green-500);
-    --color-success-subtle: var(--palette-green-950);
-    --color-success-subtle-fg: var(--palette-green-200);
-    --color-warning: var(--palette-amber-400);
-    --color-warning-subtle: var(--palette-amber-950);
-    --color-warning-subtle-fg: var(--palette-amber-200);
-    --color-info: var(--palette-blue-500);
-    --color-info-subtle: var(--palette-blue-950);
-    --color-info-subtle-fg: var(--palette-blue-200);
-
-    --shadow-sm: 0 1px 2px var(--palette-black-alpha-40);
-    --shadow-md: 0 4px 12px -2px var(--palette-black-alpha-40);
-    --shadow-lg: 0 16px 32px -8px var(--palette-black-alpha-60);
   }
 
   :root[data-theme='light'] {
