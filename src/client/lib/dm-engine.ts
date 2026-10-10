@@ -153,13 +153,7 @@ export interface CellRect {
 }
 
 /** One cell of the grid: a solid/outline/perforated rounded square. */
-export function cell(
-  x: number,
-  y: number,
-  s: number,
-  finish: CellFinish = 'solid',
-  r?: number,
-): CellRect {
+function cell(x: number, y: number, s: number, finish: CellFinish = 'solid', r?: number): CellRect {
   return {
     x,
     y,
@@ -203,7 +197,7 @@ export function iconCells(name: IconName, s: number): CellRect[] {
   return out;
 }
 
-export type FontChar = keyof typeof FONT_5X7;
+type FontChar = keyof typeof FONT_5X7;
 
 /** DIGITAL / MINDS style pixel lettering (5x7 bitmap font), used by SharePoster. */
 export function wordCells(
@@ -281,7 +275,7 @@ export function punchMarks(seed: string, cols: number, rows: number, s: number):
   return out;
 }
 
-export function reducedMotion(): boolean {
+function reducedMotion(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
