@@ -5,7 +5,7 @@ import {
   type MockActor,
   type MockDb,
 } from '@/client/mocks/db';
-import type { Me } from '@/shared/contracts/auth';
+import type { Me, SignInStep } from '@/shared/contracts/auth';
 
 /** The `GET /me` response for a mock persona. */
 export function buildMeFixture(db: MockDb, actor: MockActor): Me {
@@ -66,4 +66,35 @@ export function buildMeFixture(db: MockDb, actor: MockActor): Me {
       })),
     },
   };
+}
+
+/** What a correct code leads to for this address in the demo data. */
+export function mockSignInStep(db: MockDb, email: string): SignInStep {
+  const user = db.users.find((candidate) => candidate.uniEmail === email);
+  if (!user) return { step: 'enter_name' };
+  return user.registered
+    ? { step: 'signed_in' }
+    : { step: 'confirm_name', fullName: user.fullName };
+}
+
+/** The name step: registers the demo persona, or adds a new person with no memberships. */
+export function registerMockUser(db: MockDb, email: string, fullName: string): void {
+  const existing = db.users.find((candidate) => candidate.uniEmail === email);
+  if (existing) {
+    existing.fullName = fullName;
+    existing.registered = true;
+    return;
+  }
+  const user: MockDb['users'][number] = {
+    id: crypto.randomUUID(),
+    key: email,
+    publicId: crypto.randomUUID().replaceAll('-', ''),
+    fullName,
+    uniEmail: email,
+    isFullAdmin: false,
+    registered: true,
+    persona: 'member',
+  };
+  db.users.push(user);
+  db.usersById.set(user.id, user);
 }
