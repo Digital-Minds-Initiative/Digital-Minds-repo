@@ -127,15 +127,15 @@ export const listMembersEndpoint = defineEndpoint({
   }
   ```
 
-| Status | Code                | When                                                                                              |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------- |
-| 400    | `BAD_REQUEST`       | body is not JSON                                                                                  |
-| 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                   |
-| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule)          |
-| 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                 |
-| 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`…) |
-| 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`  |
-| 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                 |
+| Status | Code                | When                                                                                                                                                                                               |
+| ------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `BAD_REQUEST`       | body is not JSON                                                                                                                                                                                   |
+| 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                                                                                                                    |
+| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule)                                                                                                           |
+| 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                                                                                                                  |
+| 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`…); every unique-constraint violation is `already_exists`, mapped once in `src/server/db/client.ts` |
+| 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`                                                                                                   |
+| 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                                                                                                                  |
 
 - **Responses are parsed by their contract** before sending: fields not in the contract are dropped. This is the safety net for public endpoints, which must never return phone numbers or emails.
 - `code` is for programs; the UI translates it (`common.errors.<code>`). `message` is English, for developers. Custom validation messages are keys (`date_in_future`) translated under `common.validation`.

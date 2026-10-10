@@ -34,7 +34,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 5. **Services take the `Actor` as the first argument**, read through scopes, assert roles, then write through scoped repository functions:
    - outside scope → `NotFoundError` (404);
    - visible but the role may not act → `AuthzError` (403, from `src/server/authz`);
-   - conflicting state → `ConflictError(message, reason)` (409);
+   - conflicting state → `ConflictError(message, reason)` (409); unique-constraint violations already become 409 `already_exists` in the db client — don't catch P2002 in repositories;
    - business validation → `ValidationError` (422).
 6. **Only repositories use Prisma** (`modules/*/server/repository.ts`, plus `src/server/authz/actor-repository.ts`). Repository functions for scoped models take a branded scope (`MemberScope`, `PointTransactionScope`…) and combine it as `AND: [scope, filters]` — including writes (`updateMany` with the scope). Never build a scope by hand or cast to a scope type.
 7. **Contracts first.** Every endpoint is a `defineEndpoint({...})` in the module's `contracts.ts` (Zod for params/query/body/response). Contracts import only `zod`, `@/lib/contracts` and other contracts — never Prisma or React. Response schemas are the whitelist of what leaves the server.

@@ -8,8 +8,8 @@ import type {
   MemberScope,
 } from '@/server/authz';
 import { db } from '@/server/db/client';
-import { Prisma } from '@/server/db/generated/client';
-import { ConflictError, NotFoundError } from '@/server/errors';
+import type { Prisma } from '@/server/db/generated/client';
+import { NotFoundError } from '@/server/errors';
 
 import type {
   ClubRole,
@@ -250,56 +250,52 @@ export async function saveNewMember(input: {
   overrideType: boolean;
   committeeIds: string[];
 }): Promise<string> {
-  try {
-    return await db.$transaction(async (tx) => {
-      const userId =
-        input.existing?.userId ??
-        (
-          await tx.user.create({
-            data: {
-              ...input.person,
-              searchName: normalizeForSearch(input.person.fullName),
-            },
-            select: { id: true },
-          })
-        ).id;
+  return db.$transaction(async (tx) => {
+    const userId =
+      input.existing?.userId ??
+      (
+        await tx.user.create({
+          data: {
+            ...input.person,
+            searchName: normalizeForSearch(input.person.fullName),
+          },
+          select: { id: true },
+        })
+      ).id;
 
-      const current = input.existing?.membership ?? null;
-      let membershipId: string;
-      if (!current) {
-        membershipId = (
-          await tx.membership.create({
-            data: { userId, clubId: input.clubId, membershipTypeId: input.membershipTypeId },
-            select: { id: true },
-          })
-        ).id;
-      } else {
-        membershipId = current.id;
-        if (current.removed || input.overrideType) {
-          await tx.membership.update({
-            where: { id: current.id },
-            data: {
-              ...(current.removed ? { removedAt: null, removedById: null, role: 'MEMBER' } : {}),
-              ...(input.overrideType || current.removed
-                ? { membershipTypeId: input.membershipTypeId }
-                : {}),
-            },
-          });
-        }
-      }
-
-      for (const committeeId of input.committeeIds) {
-        await tx.committeeMembership.upsert({
-          where: { membershipId_committeeId: { membershipId, committeeId } },
-          create: { membershipId, committeeId, clubId: input.clubId },
-          update: { removedAt: null },
+    const current = input.existing?.membership ?? null;
+    let membershipId: string;
+    if (!current) {
+      membershipId = (
+        await tx.membership.create({
+          data: { userId, clubId: input.clubId, membershipTypeId: input.membershipTypeId },
+          select: { id: true },
+        })
+      ).id;
+    } else {
+      membershipId = current.id;
+      if (current.removed || input.overrideType) {
+        await tx.membership.update({
+          where: { id: current.id },
+          data: {
+            ...(current.removed ? { removedAt: null, removedById: null, role: 'MEMBER' } : {}),
+            ...(input.overrideType || current.removed
+              ? { membershipTypeId: input.membershipTypeId }
+              : {}),
+          },
         });
       }
-      return membershipId;
-    });
-  } catch (error) {
-    throw toConflict(error);
-  }
+    }
+
+    for (const committeeId of input.committeeIds) {
+      await tx.committeeMembership.upsert({
+        where: { membershipId_committeeId: { membershipId, committeeId } },
+        create: { membershipId, committeeId, clubId: input.clubId },
+        update: { removedAt: null },
+      });
+    }
+    return membershipId;
+  });
 }
 
 /**
@@ -316,26 +312,22 @@ export async function saveMemberChanges(
     ...profile,
     ...(profile.fullName !== undefined ? { searchName: normalizeForSearch(profile.fullName) } : {}),
   };
-  try {
-    await db.$transaction(async (tx) => {
-      if (Object.keys(userData).length > 0) {
-        const { count } = await tx.user.updateMany({
-          where: { memberships: { some: { AND: [scope, { id: memberId, removedAt: null }] } } },
-          data: userData,
-        });
-        if (count !== 1) throw new NotFoundError('Member');
-      }
-      if (membershipTypeId !== undefined) {
-        const { count } = await tx.membership.updateMany({
-          where: { AND: [scope, { id: memberId, removedAt: null }] },
-          data: { membershipTypeId },
-        });
-        if (count !== 1) throw new NotFoundError('Member');
-      }
-    });
-  } catch (error) {
-    throw toConflict(error);
-  }
+  await db.$transaction(async (tx) => {
+    if (Object.keys(userData).length > 0) {
+      const { count } = await tx.user.updateMany({
+        where: { memberships: { some: { AND: [scope, { id: memberId, removedAt: null }] } } },
+        data: userData,
+      });
+      if (count !== 1) throw new NotFoundError('Member');
+    }
+    if (membershipTypeId !== undefined) {
+      const { count } = await tx.membership.updateMany({
+        where: { AND: [scope, { id: memberId, removedAt: null }] },
+        data: { membershipTypeId },
+      });
+      if (count !== 1) throw new NotFoundError('Member');
+    }
+  });
 }
 
 /**
@@ -403,15 +395,4 @@ export async function removeFromCommittee(
     data: { removedAt: new Date(), role: 'MEMBER' },
   });
   if (count === 0) throw new NotFoundError('Committee member');
-}
-
-/** Unique-constraint violations (races, duplicate emails) become a 409 instead of a 500. */
-function toConflict(error: unknown): unknown {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-    return new ConflictError(
-      'That university email or membership already exists.',
-      'already_exists',
-    );
-  }
-  return error;
 }
