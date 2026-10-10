@@ -40,9 +40,16 @@ export function errorResponse(error: unknown, requestId: string): Response {
         requestId,
         ...(error.reason ? { reason: error.reason } : {}),
         ...(error.issues ? { issues: error.issues } : {}),
+        ...(error.retryAfterSeconds !== undefined
+          ? { retryAfterSeconds: error.retryAfterSeconds }
+          : {}),
       },
     };
-    return jsonResponse(envelope, status, requestId);
+    const response = jsonResponse(envelope, status, requestId);
+    if (error.retryAfterSeconds !== undefined) {
+      response.headers.set('retry-after', String(error.retryAfterSeconds));
+    }
+    return response;
   }
 
   logger.error('Unhandled error in route handler', {

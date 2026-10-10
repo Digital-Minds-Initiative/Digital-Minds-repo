@@ -5,12 +5,14 @@ import type { z } from 'zod';
 
 import { resolveActor } from '@/server/actor';
 import type { Actor } from '@/server/authz';
+import { env } from '@/server/env';
 import {
   BadRequestError,
   NotFoundError,
   UnauthenticatedError,
   ValidationError,
 } from '@/server/errors';
+import { sessionCookie } from '@/server/session-cookie';
 import {
   searchParamsToObject,
   toValidationIssues,
@@ -22,22 +24,33 @@ import {
   type InputLocation,
 } from '@/shared/contracts/core';
 
+import { assertJsonContentType, assertSameOrigin, clientIp } from './request-guards';
 import { emptyResponse, errorResponse, jsonResponse, ResponseContractError } from './responses';
 
 /**
  * The one way to write a route handler. It:
- *  1. resolves the Actor (401 when the endpoint needs one and there is none),
- *  2. validates params, query and body with the endpoint's Zod schemas (422 on failure),
- *  3. calls your handler — which should only call a service and return its result,
- *  4. parses the result through the response schema (fields not in the contract are dropped),
- *  5. maps errors to the standard envelope: AuthzError → 403, NotFoundError → 404, …
+ *  1. refuses cross-origin non-GET requests (403) and bodies that are not JSON (400) — CSRF,
+ *  2. resolves the Actor (401 when the endpoint needs one and there is none),
+ *  3. validates params, query and body with the endpoint's Zod schemas (422 on failure),
+ *  4. calls your handler — which should only call a service and return its result,
+ *  5. parses the result through the response schema (fields not in the contract are dropped),
+ *  6. maps errors to the standard envelope: AuthzError → 403, NotFoundError → 404, …
  *
  * Usage (src/app/api/v1/members/route.ts):
  *   export const GET = defineRoute(listMembersEndpoint, ({ actor, query }) => listMembers(actor, query));
  */
 
+/** Who is calling, for services that work before there is an Actor (sign-in, rate limits). */
+export interface ClientInfo {
+  /** From the CLIENT_IP_HEADER the reverse proxy sets; null when no header is trusted. */
+  ip: string | null;
+  /** The session cookie's token, if the request has one (not yet checked against the database). */
+  sessionToken: string | null;
+}
+
 interface HandlerContext<E extends EndpointDefinition> {
   actor: E['access'] extends 'actor' ? Actor : null;
+  client: ClientInfo;
   params: EndpointParams<E>;
   query: EndpointQuery<E>;
   body: EndpointBody<E>;
@@ -45,20 +58,42 @@ interface HandlerContext<E extends EndpointDefinition> {
   requestId: string;
 }
 
-/** Return `withStatus(503, data)` from a handler to override the endpoint's success status. */
-class WithStatus<T> {
+/** A handler result with HTTP details: a status override and/or cookies to set. */
+class HandlerResult<T> {
   constructor(
-    readonly status: number,
     readonly data: T,
+    readonly status?: number,
+    readonly cookies: readonly string[] = [],
   ) {}
 }
 
-export function withStatus<T>(status: number, data: T): WithStatus<T> {
-  return new WithStatus(status, data);
+/** Return `withStatus(503, data)` from a handler to override the endpoint's success status. */
+export function withStatus<T>(status: number, data: T): HandlerResult<T> {
+  return new HandlerResult(data, status);
+}
+
+/** A new session to store in the cookie. */
+export interface SessionGrant {
+  token: string;
+  expiresAt: Date;
+}
+
+/**
+ * For sign-in endpoints: sets the session cookie to `session`, or clears it when `session` is
+ * null. `withSession(await verifyOtp(body, client))`
+ */
+export function withSession<T>(result: {
+  data: T;
+  session: SessionGrant | null;
+}): HandlerResult<T> {
+  const cookie = result.session
+    ? sessionCookie.set(result.session.token, result.session.expiresAt)
+    : sessionCookie.clear();
+  return new HandlerResult(result.data, undefined, [cookie]);
 }
 
 type HandlerReturn<E extends EndpointDefinition> =
-  EndpointResult<E> | WithStatus<EndpointResult<E>>;
+  EndpointResult<E> | HandlerResult<EndpointResult<E>>;
 
 type RouteHandler<E extends EndpointDefinition> = (
   context: HandlerContext<E>,
@@ -80,6 +115,9 @@ export function defineRoute<E extends EndpointDefinition>(
   ): Promise<Response> {
     const requestId = crypto.randomUUID();
     try {
+      assertSameOrigin(request, env.APP_ORIGIN);
+      if (endpoint.body) assertJsonContentType(request);
+
       // Public endpoints never see an actor, even when the caller is signed in.
       const actor = endpoint.access === 'actor' ? await resolveActor(request) : null;
       if (endpoint.access === 'actor' && !actor) throw new UnauthenticatedError();
@@ -98,6 +136,10 @@ export function defineRoute<E extends EndpointDefinition>(
       // types through the generic parse calls above.
       const handlerContext = {
         actor,
+        client: {
+          ip: clientIp(request.headers, env.CLIENT_IP_HEADER),
+          sessionToken: sessionCookie.read(request),
+        },
         params,
         query,
         body,
@@ -146,15 +188,17 @@ function successResponse(
   result: unknown,
   requestId: string,
 ): Response {
-  const status =
-    result instanceof WithStatus
-      ? result.status
-      : (endpoint.successStatus ?? (endpoint.response ? 200 : 204));
-  const data: unknown = result instanceof WithStatus ? result.data : result;
+  const wrapped = result instanceof HandlerResult ? result : new HandlerResult(result);
+  const status = wrapped.status ?? endpoint.successStatus ?? (endpoint.response ? 200 : 204);
 
-  if (!endpoint.response || status === 204) return emptyResponse(requestId);
-
-  const parsed = endpoint.response.safeParse(data);
-  if (!parsed.success) throw new ResponseContractError(parsed.error);
-  return jsonResponse(parsed.data, status, requestId);
+  let response: Response;
+  if (!endpoint.response || status === 204) {
+    response = emptyResponse(requestId);
+  } else {
+    const parsed = endpoint.response.safeParse(wrapped.data);
+    if (!parsed.success) throw new ResponseContractError(parsed.error);
+    response = jsonResponse(parsed.data, status, requestId);
+  }
+  for (const cookie of wrapped.cookies) response.headers.append('set-cookie', cookie);
+  return response;
 }

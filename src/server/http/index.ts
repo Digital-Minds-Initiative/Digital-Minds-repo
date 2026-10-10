@@ -1,3 +1,10 @@
 import 'server-only';
 
-export { apiNotFound, defineRoute, withStatus } from './route';
+export {
+  apiNotFound,
+  defineRoute,
+  withSession,
+  withStatus,
+  type ClientInfo,
+  type SessionGrant,
+} from './route';
