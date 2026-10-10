@@ -4,11 +4,11 @@ import { NextIntlClientProvider } from 'next-intl';
 import { Direction } from 'radix-ui';
 import type { ReactElement, ReactNode } from 'react';
 
+import { createQueryClient } from '@/client/lib/query-client';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { formats } from '@/i18n/formats';
 import { messages } from '@/i18n/messages';
-import { APP_TIME_ZONE } from '@/lib/dates';
-import { createQueryClient } from '@/lib/query-client';
+import { APP_TIME_ZONE } from '@/shared/lib/dates';
 
 /** Renders UI with the same providers as the app: Arabic messages, RTL, React Query. */
 export function renderWithProviders(ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) {

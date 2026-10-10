@@ -25,10 +25,15 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          // Colocated with the code. Component tests opt into the DOM with
+          // In a __tests__ folder next to the code. Component tests opt into the DOM with
           // `// @vitest-environment jsdom` at the top of the file.
           // tests/repo/ checks repository config (for example, toolchain versions).
-          include: ['src/**/*.test.{ts,tsx}', 'tests/repo/**/*.test.ts'],
+          include: [
+            'src/**/__tests__/**/*.test.{ts,tsx}',
+            // src/components keeps its two tests colocated (that folder is not restructured).
+            'src/components/**/*.test.tsx',
+            'tests/repo/**/*.test.ts',
+          ],
           environment: 'node',
           setupFiles: ['./tests/setup/unit.ts'],
         },

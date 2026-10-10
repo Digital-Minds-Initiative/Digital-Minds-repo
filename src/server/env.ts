@@ -2,7 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 
-import { parseEmailDomains } from '@/lib/email-domains';
+import { parseEmailDomains } from '@/shared/lib/email-domains';
 
 /**
  * Server environment, validated once at startup (src/instrumentation.ts imports this module).

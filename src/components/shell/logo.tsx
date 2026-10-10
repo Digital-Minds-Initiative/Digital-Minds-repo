@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 /** Digital Minds mark + name. The mark uses semantic colours, so it follows the theme. */
 export function Logo({ className, showName = true }: { className?: string; showName?: boolean }) {

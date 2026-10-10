@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { readCookie } from '@/lib/cookies';
-import { DEV_ACTOR_COOKIE, DEV_ACTOR_HEADER } from '@/modules/auth/contracts';
 import { findActorByUniEmail, type Actor } from '@/server/authz';
 import { env } from '@/server/env';
+import { DEV_ACTOR_COOKIE, DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
+import { readCookie } from '@/shared/lib/cookies';
 
 /**
  * Resolves who is making a request. Returns null when nobody is signed in — the route wrapper

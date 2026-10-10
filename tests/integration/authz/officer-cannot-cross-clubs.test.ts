@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { Actor } from '@/server/authz';
+import { db } from '@/server/db/client';
 import {
   addMemberToCommittee,
   createMember,
@@ -8,15 +10,13 @@ import {
   removeMember,
   removeMemberFromCommittee,
   updateMember,
-} from '@/modules/members/server';
+} from '@/server/modules/members';
 import {
   cancelPointTransaction,
   createPointTransaction,
   getMemberPoints,
   updatePointTransaction,
-} from '@/modules/points/server';
-import type { Actor } from '@/server/authz';
-import { db } from '@/server/db/client';
+} from '@/server/modules/points';
 import {
   actorFor,
   buildScenario,

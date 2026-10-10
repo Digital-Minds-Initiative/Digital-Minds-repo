@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { createMember, getMember, listMembers, updateMember } from '@/modules/members/server';
 import { db } from '@/server/db/client';
+import { createMember, getMember, listMembers, updateMember } from '@/server/modules/members';
 import { actorFor, buildScenario, membersQuery, type Scenario } from '@tests/factories/scenario';
 
 /**

@@ -18,9 +18,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useRouter } from '@/i18n/navigation';
-import { readCookie } from '@/lib/cookies';
-import { demoClubs, demoPeople, type DemoPerson } from '@/mocks/data/demo';
-import { DEV_ACTOR_COOKIE } from '@/modules/auth/contracts';
+import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
+import { demoClubs, demoPeople, type DemoPerson } from '@/shared/demo/demo';
+import { readCookie } from '@/shared/lib/cookies';
 
 /*
  * DEVELOPMENT ONLY. Lets you act as any seeded user by setting the dev actor cookie, which the

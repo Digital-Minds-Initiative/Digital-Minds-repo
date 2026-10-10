@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PAGE_SIZE_OPTIONS } from '@/lib/contracts';
+import { PAGE_SIZE_OPTIONS } from '@/shared/contracts/core';
 
 import type { DataTableFeatures } from './features';
 

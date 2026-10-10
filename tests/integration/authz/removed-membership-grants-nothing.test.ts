@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { getMe } from '@/modules/auth/server';
-import { createMember, getMember, listMembers, removeMember } from '@/modules/members/server';
-import { createPointTransaction, getMemberPoints } from '@/modules/points/server';
 import type { Actor } from '@/server/authz';
 import { db } from '@/server/db/client';
+import { getMe } from '@/server/modules/auth';
+import { createMember, getMember, listMembers, removeMember } from '@/server/modules/members';
+import { createPointTransaction, getMemberPoints } from '@/server/modules/points';
 import {
   actorFor,
   buildScenario,

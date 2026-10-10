@@ -1,14 +1,14 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { addDays } from '@/lib/dates';
+import type { Actor } from '@/server/authz';
+import { db } from '@/server/db/client';
 import {
   cancelPointTransaction,
   createPointTransaction,
   getMemberPoints,
   updatePointTransaction,
-} from '@/modules/points/server';
-import type { Actor } from '@/server/authz';
-import { db } from '@/server/db/client';
+} from '@/server/modules/points';
+import { addDays } from '@/shared/lib/dates';
 import {
   actorFor,
   buildScenario,

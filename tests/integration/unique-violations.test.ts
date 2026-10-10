@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { updateMember } from '@/modules/members/server';
 import { db } from '@/server/db/client';
 import { ConflictError } from '@/server/errors';
+import { updateMember } from '@/server/modules/members';
 import { actorFor, buildScenario, type Scenario } from '@tests/factories/scenario';
 import { expectConflict } from '@tests/utils/assertions';
 

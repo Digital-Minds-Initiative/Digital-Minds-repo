@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { listMembers } from '@/modules/members/server';
 import { db } from '@/server/db/client';
+import { listMembers } from '@/server/modules/members';
 import { actorFor, buildScenario, membersQuery, type Scenario } from '@tests/factories/scenario';
 
 describe('member search by phone', () => {

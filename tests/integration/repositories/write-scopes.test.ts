@@ -1,19 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  addToCommittee,
-  removeFromClub,
-  removeFromCommittee,
-  saveMemberChanges,
-  saveNewMember,
-} from '@/modules/members/server/repository';
-import {
-  cancelTransactionWithRevision,
-  findTransaction,
-  insertTransaction,
-  updateTransactionWithRevision,
-} from '@/modules/points/server/repository';
-import {
   clubsScope,
   committeeMembershipsScope,
   committeesScope,
@@ -22,6 +9,19 @@ import {
   type Actor,
 } from '@/server/authz';
 import { db } from '@/server/db/client';
+import {
+  addToCommittee,
+  removeFromClub,
+  removeFromCommittee,
+  saveMemberChanges,
+  saveNewMember,
+} from '@/server/modules/members/repository';
+import {
+  cancelTransactionWithRevision,
+  findTransaction,
+  insertTransaction,
+  updateTransactionWithRevision,
+} from '@/server/modules/points/repository';
 import { actorFor, buildScenario, today, type Scenario } from '@tests/factories/scenario';
 import { expectConflict, expectNotFound } from '@tests/utils/assertions';
 

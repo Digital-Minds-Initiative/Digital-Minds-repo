@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/client/lib/utils';
 
 export const cardVariants = cva('flex flex-col gap-4 rounded-xl text-fg', {
   variants: {

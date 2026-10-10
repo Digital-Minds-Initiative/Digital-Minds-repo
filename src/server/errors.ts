@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { ErrorCode, ValidationIssue } from '@/lib/contracts';
+import type { ErrorCode, ValidationIssue } from '@/shared/contracts/core';
 
 /**
  * Errors that services throw on purpose. The route wrapper turns each into the standard error
