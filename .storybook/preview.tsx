@@ -9,7 +9,7 @@ import { TooltipProvider } from '../src/components/ui/tooltip';
 import { formats } from '../src/i18n/formats';
 import { messages } from '../src/i18n/messages';
 import { APP_TIME_ZONE } from '../src/lib/dates';
-import { fontSans } from '../src/styles/fonts';
+import { fontArabicSerif, fontMono, fontSans, fontSerif } from '../src/styles/fonts';
 
 import '../src/styles/globals.css';
 
@@ -25,7 +25,12 @@ function StoryProviders({
     const root = document.documentElement;
     root.lang = 'ar';
     root.dir = direction;
-    root.classList.add(fontSans.variable);
+    root.classList.add(
+      fontSans.variable,
+      fontSerif.variable,
+      fontArabicSerif.variable,
+      fontMono.variable,
+    );
   }, [direction]);
 
   return (

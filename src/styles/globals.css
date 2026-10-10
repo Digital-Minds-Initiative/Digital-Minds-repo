@@ -46,4 +46,14 @@
   [dir='ltr'] {
     unicode-bidi: isolate;
   }
+
+  /* Marquee: a slow, infinite strip. See src/components/ui/marquee.tsx. */
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-50% - var(--spacing) * 2));
+    }
+  }
 }
