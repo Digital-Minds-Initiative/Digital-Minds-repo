@@ -15,15 +15,16 @@ export interface FragmentPiece {
   kind: 'lib' | 'chart' | 'photo' | 'note';
   tiltDeg: number;
   top: number;
-  left: number;
+  /** Distance from the reading-direction start edge (right in RTL) — never physical `left`. */
+  start: number;
   content: React.ReactNode;
 }
 
 const KIND_CLASS: Record<FragmentPiece['kind'], string> = {
-  lib: 'w-[206px] h-[244px] bg-paper-teal p-3.5',
-  chart: 'w-[290px] h-[206px] bg-paper-peach p-3.5',
-  photo: 'w-[300px] h-[236px] bg-paper-cream p-3',
-  note: 'w-[176px] h-[128px] bg-paper-lilac p-3',
+  lib: 'w-full lg:w-[206px] min-h-[180px] lg:min-h-[244px] bg-paper-teal p-3.5',
+  chart: 'w-full lg:w-[290px] min-h-[150px] lg:min-h-[206px] bg-paper-peach p-3.5',
+  photo: 'w-full lg:w-[300px] min-h-[170px] lg:min-h-[236px] bg-paper-cream p-3',
+  note: 'w-full lg:w-[176px] min-h-[110px] lg:min-h-[128px] bg-paper-lilac p-3',
 };
 
 function Piece({ piece }: { piece: FragmentPiece }) {
@@ -39,11 +40,12 @@ function Piece({ piece }: { piece: FragmentPiece }) {
     <div
       ref={ref}
       className={cn(
-        'absolute cursor-grab touch-none rounded-cell border border-paper-rule text-on-paper select-none',
+        'static cursor-grab touch-none rounded-cell border border-paper-rule text-on-paper select-none',
         'outline-offset-[3px] transition-[transform] duration-(--duration-slow) ease-out focus-visible:outline-2 focus-visible:outline-tuwaiq-lilac',
+        'lg:absolute',
         KIND_CLASS[piece.kind],
       )}
-      style={{ top: piece.top, left: piece.left }}
+      style={{ top: piece.top, insetInlineStart: piece.start }}
     >
       {piece.content}
     </div>
@@ -71,11 +73,12 @@ export function Fragments({ pieces, header, className }: FragmentsProps) {
     <div
       ref={boardRef}
       className={cn(
-        'relative h-[620px] cursor-grab overflow-hidden bg-deep text-on-deep',
+        'relative flex cursor-grab flex-col gap-4 bg-deep p-4 text-on-deep',
+        'lg:block lg:h-[620px] lg:gap-0 lg:overflow-hidden lg:p-0',
         className,
       )}
     >
-      <div className="relative z-10 p-8">{header}</div>
+      <div className="relative z-10 lg:p-8">{header}</div>
       {pieces.map((piece) => (
         <Piece key={piece.key} piece={piece} />
       ))}

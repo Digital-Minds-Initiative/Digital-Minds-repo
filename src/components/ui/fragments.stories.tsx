@@ -8,7 +8,7 @@ const PIECES: FragmentPiece[] = [
     kind: 'lib',
     tiltDeg: -3,
     top: 60,
-    left: 80,
+    start: 80,
     content: (
       <div className="flex h-full flex-col gap-2 text-on-paper">
         <strong className="font-serif text-lg">مصنّف العناكب</strong>
@@ -26,7 +26,7 @@ const PIECES: FragmentPiece[] = [
     kind: 'chart',
     tiltDeg: 2,
     top: 120,
-    left: 340,
+    start: 340,
     content: <strong className="font-serif text-lg text-on-paper">دقّة النموذج</strong>,
   },
   {
@@ -34,7 +34,7 @@ const PIECES: FragmentPiece[] = [
     kind: 'note',
     tiltDeg: -4,
     top: 360,
-    left: 160,
+    start: 160,
     content: (
       <p className="m-0 text-sm text-on-paper">
         النموذج ممتاز. أضيفوا صفحة تشرح كيف تدرّبتوا عليه.

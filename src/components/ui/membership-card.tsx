@@ -54,7 +54,8 @@ export function MembershipCard({
           direction="v"
           className="absolute inset-0 h-full"
         />
-        <div className="absolute start-1/2 top-3.5 h-2.5 w-9 -translate-x-1/2 rounded-full bg-canvas" />
+        {/* eslint-disable-next-line better-tailwindcss/no-restricted-classes -- translate-x is physical; must pair with physical `left` to stay centered under RTL */}
+        <div className="absolute top-3.5 left-1/2 h-2.5 w-9 -translate-x-1/2 rounded-full bg-canvas" />
         {clubMarkSrc ? (
           // eslint-disable-next-line @next/next/no-img-element -- fixed-size badge chip, not a content image
           <img
