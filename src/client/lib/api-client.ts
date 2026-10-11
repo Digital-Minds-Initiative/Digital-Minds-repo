@@ -25,7 +25,13 @@ export class ApiError extends Error {
     /** Envelope code, or NETWORK when the server could not be reached. */
     readonly code: ErrorCode | 'NETWORK',
     message: string,
-    readonly details: { requestId?: string; reason?: string; issues?: ValidationIssue[] } = {},
+    readonly details: {
+      requestId?: string;
+      reason?: string;
+      issues?: ValidationIssue[];
+      /** RATE_LIMITED: seconds until a retry can succeed. */
+      retryAfterSeconds?: number;
+    } = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -94,8 +100,13 @@ async function toApiError(response: Response): Promise<ApiError> {
   const json: unknown = await response.json().catch(() => null);
   const parsed = errorEnvelopeSchema.safeParse(json);
   if (parsed.success) {
-    const { code, message, requestId, reason, issues } = parsed.data.error;
-    return new ApiError(response.status, code, message, { requestId, reason, issues });
+    const { code, message, requestId, reason, issues, retryAfterSeconds } = parsed.data.error;
+    return new ApiError(response.status, code, message, {
+      requestId,
+      reason,
+      issues,
+      retryAfterSeconds,
+    });
   }
   return new ApiError(
     response.status,

@@ -207,7 +207,7 @@ Frontend work does not need PostgreSQL. Set one flag and every `/api/v1` request
 NEXT_PUBLIC_API_MOCKING=enabled
 ```
 
-Restart `pnpm dev` after changing it. Pick an account from **«حساب التجربة»** as usual. The sign-in endpoints are not mocked yet; their mocks come with the sign-in screens. Mock handlers live with each client feature (`src/client/features/<module>/mocks/`) and every response is validated against the module's contract, so a mock cannot drift from the real API. The flag is ignored by production builds.
+Restart `pnpm dev` after changing it. Pick an account from **«حساب التجربة»** as usual. The sign-in endpoints are mocked too: code `123456` is accepted (`000000` → wrong code, `111111` → expired, `222222` → too many attempts); a seeded registered account is signed in, the unregistered ones are asked to confirm their name, any other `@uqu.edu.sa` address to enter one. Mock handlers live with each client feature (`src/client/features/<module>/mocks/`) and every response is validated against the module's contract, so a mock cannot drift from the real API. The flag is ignored by production builds.
 
 ---
 
