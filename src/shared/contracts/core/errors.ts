@@ -6,7 +6,8 @@ import { z } from 'zod';
  *   { "error": { "code": "NOT_FOUND", "message": "…", "requestId": "…", "issues": [...] } }
  *
  * `code` is stable and meant for programs (the UI translates it); `message` is English and meant
- * for developers. `issues` is present only for VALIDATION_FAILED.
+ * for developers. `issues` is present only for VALIDATION_FAILED, `retryAfterSeconds` only for
+ * RATE_LIMITED.
  */
 const errorCodes = [
   'BAD_REQUEST',
@@ -15,6 +16,7 @@ const errorCodes = [
   'NOT_FOUND',
   'CONFLICT',
   'VALIDATION_FAILED',
+  'RATE_LIMITED',
   'INTERNAL',
 ] as const;
 
@@ -28,6 +30,7 @@ export const httpStatusByErrorCode: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   VALIDATION_FAILED: 422,
+  RATE_LIMITED: 429,
   INTERNAL: 500,
 };
 
@@ -64,9 +67,11 @@ export const errorEnvelopeSchema = z.object({
     code: errorCodeSchema,
     message: z.string(),
     requestId: z.string(),
-    /** Machine-readable detail for CONFLICT and FORBIDDEN, e.g. `transaction_cancelled`. */
+    /** Machine-readable detail, e.g. `transaction_cancelled` (CONFLICT), `resend_cooldown` (RATE_LIMITED). */
     reason: z.string().optional(),
     issues: z.array(validationIssueSchema).optional(),
+    /** RATE_LIMITED only: seconds until a retry can succeed (also sent as `Retry-After`). */
+    retryAfterSeconds: z.number().int().nonnegative().optional(),
   }),
 });
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;

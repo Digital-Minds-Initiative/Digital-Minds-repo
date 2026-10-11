@@ -59,6 +59,7 @@ model User {
   createdPointTransactions   PointTransaction[]         @relation("PointTransactionCreatedBy")
   cancelledPointTransactions PointTransaction[]         @relation("PointTransactionCancelledBy")
   pointRevisions             PointTransactionRevision[]
+  sessions                   Session[]
 }
 
 model Club {
@@ -218,4 +219,55 @@ model PointTransactionRevision {
   changedBy   User             @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@index([transactionId, createdAt])
+}
+
+// ─── Sign-in (docs/adr/0014-email-otp-sign-in.md) ─────────────────────────────────────────────
+// These rows are short-lived and are deleted when they expire, unlike the history above.
+
+/// A pending sign-in code. One row per email: requesting a new code replaces the previous one.
+/// Keyed by an HMAC of the address, so the table holds no email addresses and no codes.
+model OtpChallenge {
+  /// HMAC-SHA256(AUTH_SECRET, "email:" + email), hex.
+  emailHash String   @id
+  /// HMAC-SHA256(AUTH_SECRET, "otp:" + email + ":" + code), hex.
+  codeHash  String
+  /// Wrong guesses so far; the code stops working at 5 (CHECK 0..5).
+  attempts  Int      @default(0) @db.SmallInt
+  /// When this code was sent; the next one can be requested 60 seconds later.
+  sentAt    DateTime
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+/// One signed-in browser. The cookie holds a random 256-bit token; only its SHA-256 is stored.
+/// It grants an Actor only when `userId` is set and that user has registered (name step done).
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// SHA-256 of the cookie token, hex.
+  tokenHash String   @unique
+  /// The address the code proved (lower-case, CHECK).
+  email     String
+  /// Null while a new person has not entered their name yet: no User exists for them.
+  userId    String?  @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Fixed-window rate-limit counter. `key` is an HMAC of "<action>:<email or ip>", so no
+/// addresses or IPs are stored.
+model RateLimitCounter {
+  key         String
+  windowStart DateTime
+  /// CHECK > 0
+  count       Int
+  expiresAt   DateTime
+
+  @@id([key, windowStart])
+  @@index([expiresAt])
 }

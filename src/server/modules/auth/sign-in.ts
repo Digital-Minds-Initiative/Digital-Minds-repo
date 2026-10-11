@@ -1,0 +1,261 @@
+import 'server-only';
+
+import { findActorByUserId, type Actor } from '@/server/authz';
+import { emailSender } from '@/server/email';
+import { assertUniversityEmail } from '@/server/email-policy';
+import {
+  ConflictError,
+  RateLimitedError,
+  UnauthenticatedError,
+  ValidationError,
+} from '@/server/errors';
+import {
+  OTP_RESEND_COOLDOWN_SECONDS,
+  OTP_TTL_SECONDS,
+  type OtpRejection,
+  type SessionState,
+  type SignInStep,
+} from '@/shared/contracts/auth';
+
+import {
+  digestsMatch,
+  emailKey,
+  generateOtpCode,
+  generateSessionToken,
+  otpCodeHash,
+  sessionTokenHash,
+} from './crypto';
+import { buildOtpEmail } from './otp-email';
+import { consumeLimit } from './rate-limits';
+import {
+  completeRegistration,
+  consumeOtpChallenge,
+  createSession,
+  deleteExpiredAuthRows,
+  deleteOtpChallenge,
+  deleteSessionByTokenHash,
+  extendSession,
+  findLiveSession,
+  findOtpChallenge,
+  findUserForSignIn,
+  registerOtpAttempt,
+  saveOtpChallenge,
+  type LiveSession,
+} from './repository';
+
+/*
+ * Email one-time-code sign-in (docs/adr/0014-email-otp-sign-in.md). Sign-up and sign-in are the
+ * same flow: the email is proved first, for everyone, and nothing here reveals whether an address
+ * has an account until its owner has entered the code sent to it.
+ */
+
+const MAX_CODE_ATTEMPTS = 5;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 30 * DAY_MS;
+/** A session waiting for the name step: long enough to type a name, not to keep around. */
+const INCOMPLETE_SESSION_TTL_MS = 60 * 60 * 1000;
+/** Sliding expiry: a session used more than a day after its last extension gets 30 days again. */
+const SESSION_REFRESH_AFTER_MS = DAY_MS;
+
+/** What the route wrapper knows about the caller (`client` in src/server/http). */
+interface SignInClient {
+  ip: string | null;
+  sessionToken: string | null;
+}
+
+interface SessionGrant {
+  token: string;
+  expiresAt: Date;
+}
+
+/** Response data plus the session cookie to set; null clears it. See `withSession`. */
+interface WithSessionCookie<T> {
+  data: T;
+  session: SessionGrant | null;
+}
+
+/**
+ * Emails a new code. The answer is the same for every allowed address, registered or not: this
+ * function never looks at the User table.
+ */
+export async function requestOtp(
+  body: { email: string },
+  client: SignInClient,
+): Promise<{ expiresInSeconds: number; resendAfterSeconds: number }> {
+  const now = new Date();
+  assertUniversityEmail(body.email, ['body', 'email']);
+  await deleteExpiredAuthRows(now);
+  await consumeLimit('requestPerIp', client.ip, now);
+
+  const key = emailKey(body.email);
+  const resendAllowedFrom = new Date(now.getTime() - OTP_RESEND_COOLDOWN_SECONDS * 1000);
+  const previous = await findOtpChallenge(key);
+  if (previous && previous.sentAt > resendAllowedFrom) throw resendCooldown(previous.sentAt, now);
+  await consumeLimit('requestPerEmailHour', body.email, now);
+  await consumeLimit('requestPerEmailDay', body.email, now);
+
+  const code = generateOtpCode();
+  const codeHash = otpCodeHash(body.email, code);
+  const saved = await saveOtpChallenge({
+    emailHash: key,
+    codeHash,
+    sentAt: now,
+    expiresAt: new Date(now.getTime() + OTP_TTL_SECONDS * 1000),
+    resendAllowedFrom,
+  });
+  // A simultaneous request for the same address won the race; its code is the live one.
+  if (!saved) throw resendCooldown(now, now);
+
+  try {
+    await emailSender.send(buildOtpEmail(body.email, code, OTP_TTL_SECONDS / 60));
+  } catch (error) {
+    // Let them retry at once. The route wrapper logs the error (it names no address) and answers
+    // a generic 500.
+    await deleteOtpChallenge(key, codeHash);
+    throw error;
+  }
+
+  return { expiresInSeconds: OTP_TTL_SECONDS, resendAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS };
+}
+
+/**
+ * Checks a code and opens a session. Wrong, expired, used and locked codes are refused before the
+ * User table is read, so failures look the same for every address.
+ */
+export async function verifyOtp(
+  body: { email: string; code: string },
+  client: SignInClient,
+): Promise<WithSessionCookie<SignInStep>> {
+  const now = new Date();
+  assertUniversityEmail(body.email, ['body', 'email']);
+  await consumeLimit('verifyPerIp', client.ip, now);
+  await consumeLimit('verifyPerEmail', body.email, now);
+
+  const key = emailKey(body.email);
+  const attempt = await registerOtpAttempt(key, now, MAX_CODE_ATTEMPTS);
+  if (!attempt) {
+    const challenge = await findOtpChallenge(key);
+    const lockedOut =
+      challenge !== null && challenge.expiresAt > now && challenge.attempts >= MAX_CODE_ATTEMPTS;
+    throw rejectCode(lockedOut ? 'too_many_attempts' : 'code_expired');
+  }
+  if (!digestsMatch(attempt.codeHash, otpCodeHash(body.email, body.code))) {
+    throw rejectCode(attempt.attempts >= MAX_CODE_ATTEMPTS ? 'too_many_attempts' : 'invalid_code');
+  }
+  if (!(await consumeOtpChallenge(key, attempt.codeHash))) throw rejectCode('code_expired');
+
+  // Signing in again replaces whatever session this browser had.
+  if (client.sessionToken) await deleteSessionByTokenHash(sessionTokenHash(client.sessionToken));
+
+  const user = await findUserForSignIn(body.email);
+  const step: SignInStep = !user
+    ? { step: 'enter_name' }
+    : user.registeredAt
+      ? { step: 'signed_in' }
+      : { step: 'confirm_name', fullName: user.fullName };
+  const ttl = step.step === 'signed_in' ? SESSION_TTL_MS : INCOMPLETE_SESSION_TTL_MS;
+  const session = await openSession(body.email, user?.id ?? null, new Date(now.getTime() + ttl));
+  return { data: step, session };
+}
+
+/**
+ * The name step after `confirm_name` or `enter_name`: stores the name, marks the account
+ * registered (creating it for a new person) and replaces the session with a full one.
+ */
+export async function completeName(
+  body: { fullName: string },
+  client: SignInClient,
+): Promise<WithSessionCookie<{ step: 'signed_in' }>> {
+  const now = new Date();
+  const session = await loadSession(client.sessionToken, now);
+  if (!session) throw new UnauthenticatedError();
+  if (session.user?.registeredAt) {
+    throw new ConflictError('The account is already registered.', 'already_registered');
+  }
+
+  const token = generateSessionToken();
+  const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+  const completed = await completeRegistration({
+    sessionId: session.id,
+    email: session.email,
+    userId: session.user?.id ?? null,
+    fullName: body.fullName,
+    now,
+    newSession: { tokenHash: sessionTokenHash(token), expiresAt },
+  });
+  if (!completed) throw new UnauthenticatedError();
+  return { data: { step: 'signed_in' }, session: { token, expiresAt } };
+}
+
+/** Deletes this browser's session (if any) and clears the cookie. */
+export async function logout(client: SignInClient): Promise<WithSessionCookie<undefined>> {
+  if (client.sessionToken) await deleteSessionByTokenHash(sessionTokenHash(client.sessionToken));
+  return { data: undefined, session: null };
+}
+
+export async function getSessionState(client: SignInClient): Promise<SessionState> {
+  const session = await loadSession(client.sessionToken, new Date());
+  if (!session) return { step: 'signed_out' };
+  if (!session.user) return { step: 'enter_name' };
+  if (session.user.uniEmail !== session.email) return { step: 'signed_out' };
+  if (!session.user.registeredAt) return { step: 'confirm_name', fullName: session.user.fullName };
+  return { step: 'signed_in' };
+}
+
+/**
+ * For resolveActor (src/server/actor.ts): what a session cookie grants. `found: false` when the
+ * token matches no live session. A session grants an Actor only once its user has registered, and
+ * using it more than a day after its last extension extends it to 30 days (`refreshed`).
+ */
+export async function resolveSessionActor(
+  token: string,
+): Promise<
+  { found: false } | { found: true; actor: Actor | null; refreshed: SessionGrant | null }
+> {
+  const now = new Date();
+  const session = await findLiveSession(sessionTokenHash(token), now);
+  if (!session) return { found: false };
+
+  const user = session.user;
+  if (!user?.registeredAt || user.uniEmail !== session.email) {
+    return { found: true, actor: null, refreshed: null };
+  }
+  const actor = await findActorByUserId(user.id);
+
+  let refreshed: SessionGrant | null = null;
+  if (
+    actor &&
+    session.expiresAt.getTime() - now.getTime() < SESSION_TTL_MS - SESSION_REFRESH_AFTER_MS
+  ) {
+    const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+    await extendSession(session.id, expiresAt);
+    refreshed = { token, expiresAt };
+  }
+  return { found: true, actor, refreshed };
+}
+
+async function openSession(
+  email: string,
+  userId: string | null,
+  expiresAt: Date,
+): Promise<SessionGrant> {
+  const token = generateSessionToken();
+  await createSession({ tokenHash: sessionTokenHash(token), email, userId, expiresAt });
+  return { token, expiresAt };
+}
+
+async function loadSession(token: string | null, now: Date): Promise<LiveSession | null> {
+  return token ? findLiveSession(sessionTokenHash(token), now) : null;
+}
+
+function rejectCode(code: OtpRejection): ValidationError {
+  return new ValidationError(
+    [{ path: ['body', 'code'], code, message: code }],
+    'The sign-in code was not accepted.',
+  );
+}
+
+function resendCooldown(sentAt: Date, now: Date): RateLimitedError {
+  const waitMs = sentAt.getTime() + OTP_RESEND_COOLDOWN_SECONDS * 1000 - now.getTime();
+  return new RateLimitedError('resend_cooldown', waitMs / 1000);
+}

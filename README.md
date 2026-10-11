@@ -9,7 +9,7 @@ Digital Minds (العقول الرقمية) is the platform for the tech student
 - hierarchical permissions: full admin → club officer (مدير شؤون) → committee lead (قائد لجنة);
 - a points ledger per member per committee (add, deduct, edit, cancel; every change is recorded).
 
-This repository is the foundation: architecture, authorization, contracts for every phase-one endpoint, the design system, and one feature (the members list) built end to end as the pattern to copy. Real sign-in arrives in the next task; until then you switch between seeded accounts with a dev-only switcher.
+This repository is the foundation: architecture, authorization, contracts for every phase-one endpoint, the design system, and one feature (the members list) built end to end as the pattern to copy. People sign in with a one-time code sent to their university email (the API is ready; the sign-in screens are the next task). In development you can also switch between seeded accounts with a dev-only switcher.
 
 ---
 
@@ -26,6 +26,7 @@ This repository is the foundation: architecture, authorization, contracts for ev
 9. [Adding a new feature module](#9-adding-a-new-feature-module)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Where to ask and where things live](#11-where-to-ask-and-where-things-live)
+12. [Deploying to production](#12-deploying-to-production)
 
 ---
 
@@ -175,7 +176,25 @@ Four more people (رهف، تركي، سلمان، ليان) were added by admin
   curl -H "X-Dev-Actor: s443001102@st.uqu.edu.sa" "http://localhost:3000/api/v1/members?pageSize=5"
   ```
 
-The switcher needs `DEV_ACTOR_SWITCHER=true` in `.env` (the default in `.env.example`) and only works with `pnpm dev` and in tests: it is compiled out of production builds, and a production server refuses to start with the flag set.
+The switcher needs `DEV_ACTOR_SWITCHER=true` in `.env` (the default in `.env.example`) and only works with `pnpm dev` and in tests: it is compiled out of production builds, and a production server refuses to start with the flag set. A real session (below) always wins over the switcher.
+
+**Signing in for real, locally.** Without `RESEND_API_KEY` in `.env`, no email is sent: the code is printed in the `pnpm dev` terminal instead. Until the sign-in screens exist, use curl (any seeded email, or any `@uqu.edu.sa` address to try the new-person flow):
+
+```bash
+# 1. Ask for a code. Every POST needs an Origin equal to APP_ORIGIN (http://localhost:3000 by default).
+curl -X POST http://localhost:3000/api/v1/auth/otp/request   -H "Origin: http://localhost:3000" -H "Content-Type: application/json"   -d '{"email":"s443001102@st.uqu.edu.sa"}'
+
+# 2. The pnpm dev terminal shows:  [dev email] to s44***@st.uqu.edu.sa — رمز الدخول إلى Digital Minds … رمز الدخول: 123456
+#    Send it back and keep the session cookie:
+curl -X POST http://localhost:3000/api/v1/auth/otp/verify -c cookies.txt   -H "Origin: http://localhost:3000" -H "Content-Type: application/json"   -d '{"email":"s443001102@st.uqu.edu.sa","code":"123456"}'
+# → {"step":"signed_in"}   (an unregistered persona gets "confirm_name", a new address "enter_name":
+#    finish with POST /api/v1/auth/profile/name {"fullName":"…"} using -b cookies.txt -c cookies.txt)
+
+# 3. Use the session.
+curl -b cookies.txt http://localhost:3000/api/v1/me
+```
+
+In the browser the same cookie (`dm-session`) is set by the sign-in screens. Open the app at `http://localhost:3000`, not `127.0.0.1`, or set `APP_ORIGIN` to match. How it works, the limits and the security rules: [ADR 0014](docs/adr/0014-email-otp-sign-in.md).
 
 ---
 
@@ -188,7 +207,7 @@ Frontend work does not need PostgreSQL. Set one flag and every `/api/v1` request
 NEXT_PUBLIC_API_MOCKING=enabled
 ```
 
-Restart `pnpm dev` after changing it. Pick an account from **«حساب التجربة»** as usual. Mock handlers live with each client feature (`src/client/features/<module>/mocks/`) and every response is validated against the module's contract, so a mock cannot drift from the real API. The flag is ignored by production builds.
+Restart `pnpm dev` after changing it. Pick an account from **«حساب التجربة»** as usual. The sign-in endpoints are not mocked yet; their mocks come with the sign-in screens. Mock handlers live with each client feature (`src/client/features/<module>/mocks/`) and every response is validated against the module's contract, so a mock cannot drift from the real API. The flag is ignored by production builds.
 
 ---
 
@@ -227,7 +246,7 @@ prisma/           Database schema, migrations and the seed script
 public/           Static files (including the MSW service worker)
 src/
   app/            Next.js routes: [locale]/ pages and api/v1/ route handlers (thin)
-  server/         Backend only: modules/<module>/ (service, repository, policies), authz, db, http, env
+  server/         Backend only: modules/<module>/ (service, repository, policies), authz, db, http, email, env
   client/         Frontend only: features/<module>/ (components, hooks, messages, mocks), lib/, mocks/
   shared/         Used by both: contracts/ (one file per module), lib/ (dates, phone…), demo/ (demo data)
   components/     Design system: ui/ primitives, patterns/, shell/ (layouts)
@@ -270,8 +289,9 @@ Before pushing: `pnpm typecheck && pnpm lint && pnpm test` (and `pnpm test:integ
 5. **No hard-coded UI strings.** Text goes in `messages/ar.json` and is read with `useTranslations`.
 6. **Logical CSS properties only** (`ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`/`text-start`); direction icons use `DirectionalIcon`.
 7. **No secrets in git.** Only `.env.example` is committed; CI fails if any other `.env` file is tracked.
+8. **Never reveal whether an account exists** before the person has proved they own the email (ADR 0014), and never weaken the sign-in limits or the dev switcher's production guards.
 
-ESLint enforces 1–6 where possible (boundary rules, `server-only`, Tailwind class rules); review enforces the rest.
+ESLint enforces 1–6 where possible (boundary rules, `server-only`, Tailwind class rules); the integration tests in `tests/integration/auth/` guard 8; review enforces the rest.
 
 ---
 
@@ -323,6 +343,14 @@ Short version (full walkthrough with code in [docs/architecture.md → Adding a 
 - `DEV_ACTOR_SWITCHER=true` must be in `.env`, and you must be running `pnpm dev` (not `pnpm start`). Restart after changing `.env`.
 - Only registered accounts can be selected (see the table above).
 
+**`403` with `"reason":"cross_origin"`, or sign-in does nothing in the browser**
+
+- Every POST/PATCH/DELETE to `/api/v1` must come from `APP_ORIGIN` (default `http://localhost:3000`). Open the app at exactly that address (not `127.0.0.1`), or set `APP_ORIGIN` in `.env` when you use another port, and restart. From curl, send `-H "Origin: http://localhost:3000"`.
+
+**No sign-in email arrives**
+
+- Without `RESEND_API_KEY` none is sent: the code is printed in the `pnpm dev` terminal. A second request within 60 seconds answers `429 resend_cooldown`.
+
 **Mock mode does not take effect**
 
 - Restart `pnpm dev` after setting `NEXT_PUBLIC_API_MOCKING=enabled`, and hard-refresh the browser. After upgrading MSW, run `pnpm exec msw init public --save`.
@@ -349,3 +377,20 @@ Short version (full walkthrough with code in [docs/architecture.md → Adding a 
 | Conventions for AI assistants   | [CLAUDE.md](CLAUDE.md)                                                              |
 
 Questions about a task go in its ClickUp comments, so the answer stays with the task. If something in this README was unclear or wrong, fix it in your next pull request.
+
+---
+
+## 12. Deploying to production
+
+Hosting is not decided yet; whatever runs the app must provide these. A production server (`pnpm start`) checks them at startup and refuses to start, naming each missing or unsafe variable (`src/server/env.ts`).
+
+| Variable                                        | Production value                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `ALLOWED_EMAIL_DOMAINS`         | the production database, `uqu.edu.sa`                                                                                                                                                                                                                                                       |
+| `APP_ORIGIN`                                    | the public URL people open, e.g. `https://app.digitalmindsint.org` (CSRF check)                                                                                                                                                                                                             |
+| `AUTH_SECRET`                                   | your own random value, at least 32 characters (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)                                                                                                                                                               |
+| `RESEND_API_KEY`, `EMAIL_FROM`                  | the Resend key and `Digital Minds <no-reply@auth.digitalmindsint.org>`                                                                                                                                                                                                                      |
+| `CLIENT_IP_HEADER`                              | **required, no default.** The header your reverse proxy sets with the client IP (`x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`, …), so the per-IP sign-in limits work; or `none` to run without them deliberately. Never name a header the proxy does not set: clients could forge it. |
+| `DEV_ACTOR_SWITCHER`, `NEXT_PUBLIC_API_MOCKING` | `false` and `disabled` (the server refuses anything else)                                                                                                                                                                                                                                   |
+
+Run `pnpm db:deploy` before starting a new version. The details behind the sign-in settings are in [ADR 0014](docs/adr/0014-email-otp-sign-in.md).

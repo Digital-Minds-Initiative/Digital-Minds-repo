@@ -31,11 +31,12 @@ How Digital Minds is put together, why, and how to extend it. Decisions and thei
    ▼
  src/app/api/v1/members/route.ts      ← thin: defineRoute(contract, handler)
    │  defineRoute (src/server/http):
-   │    1. resolveActor(request)            src/server/actor.ts   (401 if none)
-   │    2. parse params/query/body          contract Zod schemas  (422 if invalid)
-   │    3. handler → service(actor, input)
-   │    4. parse result with the contract   (unknown fields are dropped)
-   │    5. errors → standard envelope       (403/404/409/422/500)
+   │    1. CSRF: same Origin, JSON bodies   (403/400 otherwise)
+   │    2. resolveActor(request)            src/server/actor.ts   (session cookie; 401 if none)
+   │    3. parse params/query/body          contract Zod schemas  (422 if invalid)
+   │    4. handler → service(actor, input)
+   │    5. parse result with the contract   (unknown fields are dropped)
+   │    6. errors → standard envelope       (403/404/409/422/429/500)
    ▼
  src/server/modules/members/service.ts  ← business rules; ALWAYS receives the Actor first
    │  membersScope(actor) … from src/server/authz   (who may see what)
@@ -106,7 +107,7 @@ Current modules:
 | `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)          |
 | `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`                                 |
 | `permissions` | appointing officers and leads                                | contracts                                                          |
-| `auth`        | the signed-in actor (`/me`)                                  | contracts, service, user menu, overview                            |
+| `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints; user menu, overview                |
 | `system`      | health                                                       | full endpoint                                                      |
 
 ## Contracts and API conventions
@@ -143,12 +144,13 @@ export const listMembersEndpoint = defineEndpoint({
 
 | Status | Code                | When                                                                                                                                                                                               |
 | ------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `BAD_REQUEST`       | body is not JSON                                                                                                                                                                                   |
+| 400    | `BAD_REQUEST`       | body is not JSON, or not sent as `application/json` (`reason: json_required`)                                                                                                                      |
 | 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                                                                                                                    |
-| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule)                                                                                                           |
+| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule); or a non-GET request from another origin (`reason: cross_origin`)                                        |
 | 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                                                                                                                  |
 | 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`…); every unique-constraint violation is `already_exists`, mapped once in `src/server/db/client.ts` |
 | 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`                                                                                                   |
+| 429    | `RATE_LIMITED`      | too many requests (`reason`: `resend_cooldown`, `too_many_requests`); `retryAfterSeconds` and a `Retry-After` header say when to retry                                                             |
 | 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                                                                                                                  |
 
 - **Responses are parsed by their contract** before sending: fields not in the contract are dropped. This is the safety net for public endpoints, which must never return phone numbers or emails.
@@ -204,7 +206,11 @@ if (row.removedAt) return; // 3. business rules → 409/422
 await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 ```
 
-**The dev actor switcher** (`src/server/actor.ts`) reads a university email from the `dm-dev-actor` cookie or the `X-Dev-Actor` header. It only runs when `NODE_ENV` is not production **and** `DEV_ACTOR_SWITCHER=true`; the branch is compiled out of production builds and a production server refuses to start with the flag set ([ADR 0007](adr/0007-dev-actor-switcher.md)). The auth task adds the real session lookup at the top of `resolveActor` — nothing else changes.
+**Sign-in** ([ADR 0014](adr/0014-email-otp-sign-in.md)) is one flow for everyone: `POST /auth/otp/request` emails a 6-digit code to a university address (the same answer whether or not the address has an account), `POST /auth/otp/verify` opens a session and answers `signed_in`, `confirm_name` (an admin added them) or `enter_name` (new person — no `User` exists yet), and `POST /auth/profile/name` sets `registeredAt` and replaces the session. Codes are stored as HMACs keyed by `AUTH_SECRET`, expire after 10 minutes, are single use and lock after 5 wrong guesses; requests and guesses are rate-limited per email and per IP in Postgres. Sessions are an opaque token in an HttpOnly cookie (`__Host-dm-session` in production), stored as a SHA-256, 30 days sliding (1 hour until the name step).
+
+**Resolving the Actor** (`src/server/actor.ts`): a live session cookie decides alone; a session whose name step is not done grants no Actor (so every scoped endpoint answers 401). Only without a live session does **the dev actor switcher** run: it reads a university email from the `dm-dev-actor` cookie or the `X-Dev-Actor` header, only when `NODE_ENV` is not production **and** `DEV_ACTOR_SWITCHER=true`; the branch is compiled out of production builds and a production server refuses to start with the flag set ([ADR 0007](adr/0007-dev-actor-switcher.md)).
+
+**CSRF.** `defineRoute` refuses any non-GET request whose `Origin` is not `APP_ORIGIN` (403 `cross_origin`) and any body not sent as `application/json` (400 `json_required`), on top of `SameSite=Lax` cookies.
 
 **Public endpoints** (`access: 'public'`, e.g. the committee view link) never receive an actor. They are scoped by their capability token and their contracts contain no contact data.
 
@@ -212,7 +218,8 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 
 `prisma/schema.prisma` covers the whole phase. Highlights ([ADR 0003](adr/0003-data-model.md), [ADR 0004](adr/0004-points-ledger.md)):
 
-- `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK), `registeredAt` null until they sign up, random `publicId` for public pages, `searchName` for Arabic-aware search.
+- `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK), `registeredAt` null until they sign in and confirm their name, random `publicId` for public pages, `searchName` for Arabic-aware search.
+- Sign-in tables, short-lived and deleted when they expire: `OtpChallenge` (one pending code per address, keyed by an HMAC of it), `Session` (SHA-256 of the cookie token; `userId` null until a new person enters their name), `RateLimitCounter` ([ADR 0014](adr/0014-email-otp-sign-in.md)).
 - `Club` → `Committee`, `MembershipType` (ordered per club).
 - `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
 - `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
@@ -261,12 +268,13 @@ Themes override semantic tokens under a selector: `[data-theme='dark']` today, `
 | Repository   | `tests/repo/`                     | `pnpm test`             | config that must stay in step, e.g. `engines` and the README match the Node version in `.nvmrc`                                           |
 
 - Integration files start from an empty database and build their own small scenario with `tests/factories/scenario.ts` (independent of the demo seed). They prove the authorization guarantees: officers cannot cross clubs, leads cannot leave their committee, mixed roles are scoped per club, full admins see everything, removed memberships grant nothing — always checking both the error **and** that the database did not change.
+- `tests/integration/auth/` proves the sign-in guarantees through the real route handlers (`@tests/utils/auth` drives them like a browser and reads codes from the dev email sender): no account is revealed or created before the code, codes expire, are single use and lock after 5 attempts, limits and cooldowns hold, incomplete sessions read nothing, logout and expiry end access, and the CSRF checks refuse foreign origins. Time-dependent tests move the clock with `vi.setSystemTime` (services pass times to the database instead of using `now()`).
 - The test database name must end in `_test`; the setup refuses anything else.
 - Component tests start with `// @vitest-environment jsdom` and render through `renderWithProviders` (`@tests/utils/render`).
 
 ## Configuration
 
-Server settings are validated by `src/server/env.ts` when the server starts (`src/instrumentation.ts`); an invalid value stops the process with the variable's name. Browser settings (`NEXT_PUBLIC_*`) are validated in `src/client/lib/public-env.ts`. Every variable is documented in `.env.example`; keep them in sync. Tools outside Next.js (Prisma CLI, seed, Vitest) load `.env` files the same way through `@next/env`.
+Server settings are validated by `src/server/env.ts` when the server starts (`src/instrumentation.ts`); an invalid value stops the process with the variable's name. Browser settings (`NEXT_PUBLIC_*`) are validated in `src/client/lib/public-env.ts`. Every variable is documented in `.env.example`; keep them in sync. A production server also refuses to start without `APP_ORIGIN`, its own `AUTH_SECRET` and `RESEND_API_KEY`/`EMAIL_FROM`; outside production they default (emails go to the console). Tools outside Next.js (Prisma CLI, seed, Vitest) load `.env` files the same way through `@next/env`.
 
 ## Adding a feature module
 
@@ -318,7 +326,7 @@ Example: an `events` module that lists a club's events. Backend steps (1–7) an
 
 ## What comes next
 
-- **Auth task:** add the session lookup to `resolveActor` (`src/server/actor.ts`) and session checks to `src/proxy.ts`; registration links to the pre-created `User` by `uniEmail` and sets `registeredAt`. Add a Content-Security-Policy in `next.config.ts`.
-- **Mobile app:** move `src/shared/contracts` into a shared package; the API is already versioned and token-agnostic.
+- **Sign-in screens** (frontend): MSW mocks for the `/auth` endpoints, the pages for the flow above, and redirects by sign-in state in `src/proxy.ts`. Add a Content-Security-Policy in `next.config.ts`.
+- **Mobile app:** move `src/shared/contracts` into a shared package; it will need a token-based session (the cookie and the Origin check are for browsers) — a new ADR.
 - **Public committee view:** implement the contracts in `src/shared/contracts/clubs.ts` (token-scoped, no contact data, rate-limited).
 - **Audit log:** role grants and profile edits (points already have revisions).

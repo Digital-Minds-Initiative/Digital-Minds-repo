@@ -1,6 +1,6 @@
 # 0007. A dev-only actor switcher that cannot run in production
 
-- Status: Accepted
+- Status: Accepted; real sessions arrived with [0014](0014-email-otp-sign-in.md) and take priority over the switcher
 - Date: 2026-10-10
 
 ## Context
