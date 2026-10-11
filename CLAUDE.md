@@ -93,5 +93,8 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 ## Workflow
 
 - Branch `feat/<clickup-task-id>-short-name` (or `fix/`, `chore/`), Conventional Commits (`feat(members): …`), PR to `main` with the template, squash merge. Do not commit or push unless asked.
+- Checks by task size:
+  - Small, contained changes (one component, copy, styles, a single helper): run typecheck, lint and only the tests for the files you changed. Don't run the full suite or the build locally; CI runs everything on the PR.
+  - Larger changes, anything touching auth, permissions, the database schema, shared contracts or more than one module: run the full suite and the build locally before opening the PR.
 - Never commit `.env*` files (only `.env.example`). Never log personal data (phones, emails); log ids.
 - Keep docs in sync: new env vars → `.env.example` + `src/server/env.ts`; new decisions → an ADR; changed personas → README "Seeded accounts".
