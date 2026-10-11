@@ -50,6 +50,32 @@ describe('api client (against the MSW mocks)', () => {
     expect((error as ApiError).details.issues?.[0]?.path).toEqual(['query', 'pageSize']);
   });
 
+  it('keeps the reason and retry delay of a rate-limit error', async () => {
+    const limited = createApiClient({
+      baseUrl: BASE_URL,
+      fetch: () =>
+        Promise.resolve(
+          Response.json(
+            {
+              error: {
+                code: 'RATE_LIMITED',
+                message: 'Too many requests.',
+                requestId: 'r1',
+                reason: 'resend_cooldown',
+                retryAfterSeconds: 42,
+              },
+            },
+            { status: 429 },
+          ),
+        ),
+    });
+    await expect(limited.request(meEndpoint, {})).rejects.toMatchObject({
+      status: 429,
+      code: 'RATE_LIMITED',
+      details: { reason: 'resend_cooldown', retryAfterSeconds: 42 },
+    });
+  });
+
   it('reports network failures as NETWORK', async () => {
     const offline = createApiClient({
       baseUrl: BASE_URL,
