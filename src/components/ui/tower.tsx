@@ -104,8 +104,9 @@ export function Tower({
     >
       <div
         data-tower
-        className="absolute inset-x-0 top-[96px] h-full transform-3d"
+        className="absolute inset-x-0 top-[96px] h-full"
         style={{
+          transformStyle: 'preserve-3d',
           transform: 'rotateX(calc(var(--tilt-tower) + var(--rx, 0deg))) rotateY(var(--ry, 0deg))',
         }}
       >

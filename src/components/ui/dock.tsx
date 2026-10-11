@@ -50,7 +50,10 @@ export function Dock({ items, renderLink, className }: DockProps) {
       role="navigation"
       aria-label="الرئيسية"
       className={cn(
-        'absolute start-1/2 bottom-4 flex -translate-x-1/2 gap-2 rounded-card border border-slab-3 bg-slab p-2',
+        // translate-x-1/2 is a physical transform, so it must pair with physical `left` to stay
+        // centered under RTL — `start-1/2` here would anchor to the wrong edge.
+        // eslint-disable-next-line better-tailwindcss/no-restricted-classes -- translate-x is physical, must pair with physical left to stay centered under RTL
+        'fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 gap-2 rounded-card border border-slab-3 bg-slab p-2',
         className,
       )}
     >
@@ -81,7 +84,9 @@ export function Dock({ items, renderLink, className }: DockProps) {
           )}
           <span
             className={cn(
-              'pointer-events-none absolute start-1/2 bottom-[calc(100%+10px)] -translate-x-1/2 rounded-cell border border-paper-rule bg-paper-cream px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-on-paper opacity-0 transition-opacity duration-(--duration-fast) ease-out',
+              // Same physical-anchor requirement as the dock's own centering — see above.
+              // eslint-disable-next-line better-tailwindcss/no-restricted-classes -- same physical-anchor requirement as the dock's own centering
+              'pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 rounded-cell border border-paper-rule bg-paper-cream px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-on-paper opacity-0 transition-opacity duration-(--duration-fast) ease-out',
               'group-focus-within:opacity-100 group-hover:opacity-100',
             )}
           >

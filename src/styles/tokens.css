@@ -283,7 +283,14 @@
     'Thmanyah Sans', var(--font-ibm-plex-sans-arabic), 'Segoe UI', Tahoma, system-ui, sans-serif;
   --font-body: var(--font-display);
   --font-sans: var(--font-display);
-  --font-serif: 'Thmanyah Serif Display', var(--font-newsreader), var(--font-amiri), serif;
+  /*
+   * `font-serif` is for headlines, at display sizes up to 112px (Hero). Amiri's
+   * calligraphic kashida connectors stretch badly that large, so Arabic falls
+   * through to the clean sans instead; Amiri is kept only for `font-reading`
+   * (long-form paragraphs), where its classic style and kashida read naturally.
+   */
+  --font-serif:
+    'Thmanyah Serif Display', var(--font-newsreader), var(--font-ibm-plex-sans-arabic), serif;
   --font-reading: 'Thmanyah Serif Text', var(--font-newsreader), var(--font-amiri), serif;
   --font-mono:
     'Thmanyah Mono', var(--font-ibm-plex-mono), ui-monospace, 'SFMono-Regular', Menlo, Consolas,
