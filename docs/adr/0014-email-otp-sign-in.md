@@ -52,7 +52,7 @@ Every person is identified by their university email. Admins add people to clubs
 
 The per-email limits and the university-domain rule are the real protection: about 50 guesses a day at one address, a 1 in 20,000 chance. The per-IP limits are loose because students at a club event sign in together from one campus network. Exceeding a limit answers 429 `RATE_LIMITED` with `reason` (`resend_cooldown` or `too_many_requests`), `retryAfterSeconds` and `Retry-After`.
 
-**Client IP.** The app does not know yet what will sit in front of it, so `CLIENT_IP_HEADER` names the one header to trust: `x-forwarded-for` (the last entry is used, the one the proxy appended), `x-real-ip`, `cf-connecting-ip`, and so on. The default is `none`: no header is trusted and the per-IP limits are off. Trusting a header the proxy does not set would let clients forge their IP and dodge the limit, or spend someone else's.
+**Client IP.** The app does not know yet what will sit in front of it, so `CLIENT_IP_HEADER` names the one header to trust: `x-forwarded-for` (the last entry is used, the one the proxy appended), `x-real-ip`, `cf-connecting-ip`, and so on. `none` trusts no header and turns the per-IP limits off. Unset means `none` in development, but a production server refuses to start until it is set explicitly (a header or `none`), so the choice cannot be forgotten at deployment. Trusting a header the proxy does not set would let clients forge their IP and dodge the limit, or spend someone else's.
 
 **Sessions.**
 

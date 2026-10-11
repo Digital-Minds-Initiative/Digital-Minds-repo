@@ -52,14 +52,15 @@ const envSchema = (phase: string | undefined) =>
        * The request header that holds the client IP, set by the reverse proxy in front of the app
        * (for example `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`), or `none`. Any other
        * header can be forged by the client, so only name one your proxy overwrites or appends to.
+       * Unset means "none" outside production; a production server requires it explicitly.
        */
-      CLIENT_IP_HEADER: z
-        .string()
-        .trim()
-        .toLowerCase()
-        .default('none')
-        .pipe(z.string().regex(/^[a-z0-9-]+$/, 'must be a header name or "none"'))
-        .transform((value) => (value === 'none' ? null : value)),
+      CLIENT_IP_HEADER: optionalString.pipe(
+        z
+          .string()
+          .toLowerCase()
+          .regex(/^[a-z0-9-]+$/, 'must be a header name or "none"')
+          .optional(),
+      ),
       /** Sends email through Resend when set; otherwise the dev sender prints emails to the console. */
       RESEND_API_KEY: optionalString,
       /** For example `Digital Minds <no-reply@auth.digitalmindsint.org>`. */
@@ -80,6 +81,15 @@ const envSchema = (phase: string | undefined) =>
           if (!env[name]) {
             ctx.addIssue({ code: 'custom', path: [name], message: 'is required in production' });
           }
+        }
+        // So the per-IP sign-in limits are a deliberate choice at deployment, never forgotten.
+        if (!env.CLIENT_IP_HEADER) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['CLIENT_IP_HEADER'],
+            message:
+              'is required in production: the header your proxy sets with the client IP, or "none" (turns the per-IP limits off)',
+          });
         }
         if (env.AUTH_SECRET === DEVELOPMENT_AUTH_SECRET) {
           ctx.addIssue({
@@ -115,6 +125,10 @@ const envSchema = (phase: string | undefined) =>
       ...env,
       APP_ORIGIN: env.APP_ORIGIN ?? 'http://localhost:3000',
       AUTH_SECRET: env.AUTH_SECRET ?? DEVELOPMENT_AUTH_SECRET,
+      CLIENT_IP_HEADER:
+        env.CLIENT_IP_HEADER === undefined || env.CLIENT_IP_HEADER === 'none'
+          ? null
+          : env.CLIENT_IP_HEADER,
     }));
 
 export type ServerEnv = z.output<ReturnType<typeof envSchema>>;

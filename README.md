@@ -26,6 +26,7 @@ This repository is the foundation: architecture, authorization, contracts for ev
 9. [Adding a new feature module](#9-adding-a-new-feature-module)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Where to ask and where things live](#11-where-to-ask-and-where-things-live)
+12. [Deploying to production](#12-deploying-to-production)
 
 ---
 
@@ -376,3 +377,20 @@ Short version (full walkthrough with code in [docs/architecture.md → Adding a 
 | Conventions for AI assistants   | [CLAUDE.md](CLAUDE.md)                                                              |
 
 Questions about a task go in its ClickUp comments, so the answer stays with the task. If something in this README was unclear or wrong, fix it in your next pull request.
+
+---
+
+## 12. Deploying to production
+
+Hosting is not decided yet; whatever runs the app must provide these. A production server (`pnpm start`) checks them at startup and refuses to start, naming each missing or unsafe variable (`src/server/env.ts`).
+
+| Variable                                        | Production value                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `ALLOWED_EMAIL_DOMAINS`         | the production database, `uqu.edu.sa`                                                                                                                                                                                                                                                       |
+| `APP_ORIGIN`                                    | the public URL people open, e.g. `https://app.digitalmindsint.org` (CSRF check)                                                                                                                                                                                                             |
+| `AUTH_SECRET`                                   | your own random value, at least 32 characters (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)                                                                                                                                                               |
+| `RESEND_API_KEY`, `EMAIL_FROM`                  | the Resend key and `Digital Minds <no-reply@auth.digitalmindsint.org>`                                                                                                                                                                                                                      |
+| `CLIENT_IP_HEADER`                              | **required, no default.** The header your reverse proxy sets with the client IP (`x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`, …), so the per-IP sign-in limits work; or `none` to run without them deliberately. Never name a header the proxy does not set: clients could forge it. |
+| `DEV_ACTOR_SWITCHER`, `NEXT_PUBLIC_API_MOCKING` | `false` and `disabled` (the server refuses anything else)                                                                                                                                                                                                                                   |
+
+Run `pnpm db:deploy` before starting a new version. The details behind the sign-in settings are in [ADR 0014](docs/adr/0014-email-otp-sign-in.md).

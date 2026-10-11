@@ -15,6 +15,7 @@ const production = {
   AUTH_SECRET: 'a'.repeat(32),
   RESEND_API_KEY: 're_test',
   EMAIL_FROM: 'Digital Minds <no-reply@auth.example.org>',
+  CLIENT_IP_HEADER: 'x-forwarded-for',
 };
 
 describe('server environment', () => {
@@ -69,7 +70,7 @@ describe('auth and email settings', () => {
 
   it('requires the origin, secret and email key on a production server', () => {
     expect(() => parseServerEnv({ ...valid, NODE_ENV: 'production' })).toThrow(
-      /APP_ORIGIN is required[\s\S]*AUTH_SECRET is required[\s\S]*RESEND_API_KEY is required/,
+      /APP_ORIGIN is required[\s\S]*AUTH_SECRET is required[\s\S]*RESEND_API_KEY is required[\s\S]*CLIENT_IP_HEADER is required/,
     );
     expect(parseServerEnv(production)).toMatchObject({ APP_ORIGIN: 'https://app.example.org' });
   });
@@ -91,6 +92,21 @@ describe('auth and email settings', () => {
     expect(() => parseServerEnv({ ...valid, APP_ORIGIN: 'ftp://example.org' })).toThrow(
       /APP_ORIGIN/,
     );
+  });
+
+  it('makes a production server name the client IP header, or say "none", explicitly', () => {
+    const { CLIENT_IP_HEADER: _, ...unset } = production;
+    for (const missing of [unset, { ...production, CLIENT_IP_HEADER: '' }]) {
+      expect(() => parseServerEnv(missing)).toThrow(/CLIENT_IP_HEADER is required in production/);
+    }
+    expect(parseServerEnv({ ...production, CLIENT_IP_HEADER: 'none' })).toMatchObject({
+      CLIENT_IP_HEADER: null,
+    });
+    expect(parseServerEnv(production)).toMatchObject({ CLIENT_IP_HEADER: 'x-forwarded-for' });
+    // `next build` is not a running server: unset still means none there.
+    expect(parseServerEnv({ ...unset, NEXT_PHASE: 'phase-production-build' })).toMatchObject({
+      CLIENT_IP_HEADER: null,
+    });
   });
 
   it('trusts no IP header unless one is named', () => {
