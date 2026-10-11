@@ -107,7 +107,7 @@ Current modules:
 | `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)          |
 | `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`                                 |
 | `permissions` | appointing officers and leads                                | contracts                                                          |
-| `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints, mocks; user menu, overview         |
+| `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints; user menu, overview                |
 | `system`      | health                                                       | full endpoint                                                      |
 
 ## Contracts and API conventions
@@ -326,7 +326,7 @@ Example: an `events` module that lists a club's events. Backend steps (1–7) an
 
 ## What comes next
 
-- **Sign-in screens** (frontend): the pages for the flow above, built against the mocks; redirect pages by sign-in state in `src/proxy.ts`. Add a Content-Security-Policy in `next.config.ts`.
+- **Sign-in screens** (frontend): MSW mocks for the `/auth` endpoints, the pages for the flow above, and redirects by sign-in state in `src/proxy.ts`. Add a Content-Security-Policy in `next.config.ts`.
 - **Mobile app:** move `src/shared/contracts` into a shared package; it will need a token-based session (the cookie and the Origin check are for browsers) — a new ADR.
 - **Public committee view:** implement the contracts in `src/shared/contracts/clubs.ts` (token-scoped, no contact data, rate-limited).
 - **Audit log:** role grants and profile edits (points already have revisions).
