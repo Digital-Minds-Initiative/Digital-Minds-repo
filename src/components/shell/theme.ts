@@ -1,15 +1,17 @@
 /*
- * Theme preference: stored in a cookie so the server can render the right `data-theme` (no flash).
- * "system" follows the OS; the inline script resolves it before the first paint.
+ * Theme: the user's choice is stored in a cookie so the server can render the right `data-theme`
+ * (no flash). Without a saved choice the page follows the device; the inline script resolves it
+ * before the first paint.
  */
 
 export const THEME_COOKIE = 'dm-theme';
 
-const themePreferences = ['light', 'dark', 'system'] as const;
-export type ThemePreference = (typeof themePreferences)[number];
+const themes = ['light', 'dark'] as const;
+export type Theme = (typeof themes)[number];
 
-export function parseThemePreference(value: string | undefined | null): ThemePreference {
-  return themePreferences.find((preference) => preference === value) ?? 'system';
+/** The saved choice, or null when there is none (an absent or unknown cookie value). */
+export function parseTheme(value: string | undefined | null): Theme | null {
+  return themes.find((theme) => theme === value) ?? null;
 }
 
 /** Runs in <head> before paint. Kept tiny and dependency-free. */

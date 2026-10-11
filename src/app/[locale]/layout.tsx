@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 
 import { AppProviders } from '@/components/providers/app-providers';
-import { parseThemePreference, THEME_COOKIE, themeInitScript } from '@/components/shell/theme';
+import { parseTheme, THEME_COOKIE, themeInitScript } from '@/components/shell/theme';
 import { resolveLocale } from '@/i18n/locale';
 import { localeDirection, routing } from '@/i18n/routing';
 import { fontArabicSerif, fontMono, fontSans, fontSerif } from '@/styles/fonts';
@@ -26,14 +26,15 @@ export async function generateMetadata({ params }: LayoutProps<'/[locale]'>): Pr
 
 export default async function LocaleLayout({ children, params }: LayoutProps<'/[locale]'>) {
   const locale = await resolveLocale(params);
-  const theme = parseThemePreference((await cookies()).get(THEME_COOKIE)?.value);
+  // Without a saved choice, the init script applies the device's theme before paint.
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   const direction = localeDirection[locale];
 
   return (
     <html
       lang={locale}
       dir={direction}
-      data-theme={theme === 'system' ? undefined : theme}
+      data-theme={theme ?? undefined}
       className={`${fontSans.variable} ${fontSerif.variable} ${fontArabicSerif.variable} ${fontMono.variable}`}
       // The theme script may set data-theme before React hydrates.
       suppressHydrationWarning
