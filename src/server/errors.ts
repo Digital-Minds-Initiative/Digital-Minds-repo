@@ -12,17 +12,32 @@ export abstract class AppError extends Error {
   /** Machine-readable detail, sent as `error.reason`. */
   readonly reason?: string;
   readonly issues?: ValidationIssue[];
+  /** Sent as `error.retryAfterSeconds` and the `Retry-After` header. */
+  readonly retryAfterSeconds?: number;
 
-  constructor(message: string, options?: { reason?: string; issues?: ValidationIssue[] }) {
+  constructor(
+    message: string,
+    options?: { reason?: string; issues?: ValidationIssue[]; retryAfterSeconds?: number },
+  ) {
     super(message);
     this.name = new.target.name;
     this.reason = options?.reason;
     this.issues = options?.issues;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
   }
 }
 
 export class BadRequestError extends AppError {
   readonly code = 'BAD_REQUEST';
+}
+
+/** A request refused before it reaches a service (for example a cross-origin POST). */
+export class ForbiddenRequestError extends AppError {
+  readonly code = 'FORBIDDEN';
+
+  constructor(reason: string, message = 'This request is not allowed.') {
+    super(message, { reason });
+  }
 }
 
 export class UnauthenticatedError extends AppError {
@@ -50,6 +65,18 @@ export class ConflictError extends AppError {
 
   constructor(message: string, reason: string) {
     super(message, { reason });
+  }
+}
+
+/** Too many requests; `reason` says which limit (`resend_cooldown`, `too_many_requests`). */
+export class RateLimitedError extends AppError {
+  readonly code = 'RATE_LIMITED';
+
+  constructor(reason: string, retryAfterSeconds: number) {
+    super('Too many requests. Try again later.', {
+      reason,
+      retryAfterSeconds: Math.max(1, Math.ceil(retryAfterSeconds)),
+    });
   }
 }
 

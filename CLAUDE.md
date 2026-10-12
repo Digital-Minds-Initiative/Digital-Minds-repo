@@ -4,7 +4,7 @@ Guidance for Claude Code (and other AI assistants) working in this repository. R
 
 ## Project
 
-Digital Minds — platform for the tech student clubs at Umm Al-Qura University. UI is **Arabic, RTL-first**. Phase one: members & points (clubs, committees, membership types, hierarchical permissions, a points ledger). One Next.js 16 app (App Router, Route Handlers as the backend), TypeScript strict, PostgreSQL + Prisma 7, Zod 4, Tailwind 4, next-intl, TanStack Query + Table v9, React Hook Form, MSW 3, Vitest 5, Storybook 10, pnpm 12, Node 24.
+Digital Minds — platform for the tech student clubs at Umm Al-Qura University. UI is **Arabic, RTL-first**. Phase one: members & points (clubs, committees, membership types, hierarchical permissions, a points ledger). People sign in with a one-time code emailed to their university address (ADR 0014). One Next.js 16 app (App Router, Route Handlers as the backend), TypeScript strict, PostgreSQL + Prisma 7, Zod 4, Tailwind 4, next-intl, TanStack Query + Table v9, React Hook Form, MSW 3, Vitest 5, Storybook 10, pnpm 12, Node 24.
 
 ## Commands
 
@@ -30,12 +30,13 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 1. **Three trees** (ADR 0013): backend in `src/server/` (modules in `src/server/modules/<module>/`: service, repository, policies, mappers, `index.ts`), frontend in `src/client/` (`features/<module>/` with components, hooks, messages, mocks, `index.ts`; plus `lib/` and `mocks/`), and `src/shared/` (`contracts/<module>.ts` + `contracts/core/`, `lib/`, `demo/`). Pages in `src/app/[locale]`, route handlers in `src/app/api/v1`; the design system stays in `src/components`. Outside code uses a server module only through its `index.ts`, a client feature only through `index.ts`, `mocks/index.ts` or `messages/`. Never deep-import another module's files.
 2. **Client never imports server, server never imports client** (`src/client`, `src/components`, pages ↔ `src/server`, route handlers); both may import `src/shared`, which imports neither. Every server file starts with `import 'server-only';`.
 3. **Pages and layouts (`src/app/[locale]`) never call services.** UI data goes through `/api/v1` with TanStack Query hooks built on `apiClient` (`src/client/lib/api-client.ts`). No Server Actions.
-4. **Route handlers are one line**: `export const GET = defineRoute(endpoint, ({ actor, query }) => service(actor, query));` No logic, no Prisma, no authz calls.
+4. **Route handlers are one line**: `export const GET = defineRoute(endpoint, ({ actor, query }) => service(actor, query));` No logic, no Prisma, no authz calls. Sign-in endpoints pass `client` (IP, session token) and wrap the result in `withSession` to set the cookie: `verifyOtp(body, client).then(withSession)`.
 5. **Services take the `Actor` as the first argument**, read through scopes, assert roles, then write through scoped repository functions:
    - outside scope → `NotFoundError` (404);
    - visible but the role may not act → `AuthzError` (403, from `src/server/authz`);
    - conflicting state → `ConflictError(message, reason)` (409); unique-constraint violations already become 409 `already_exists` in the db client — don't catch P2002 in repositories;
-   - business validation → `ValidationError` (422).
+   - business validation → `ValidationError` (422);
+   - too many requests → `RateLimitedError(reason, retryAfterSeconds)` (429).
 6. **Only repositories use Prisma** (`src/server/modules/*/repository.ts`, plus `src/server/authz/actor-repository.ts`). Repository functions for scoped models take a branded scope (`MemberScope`, `PointTransactionScope`…) and combine it as `AND: [scope, filters]` — including writes: updates use `updateMany` with the scope, creates first check their parent rows through the scope in the same transaction. Prove it in `tests/integration/repositories/` (call the write with another club's scope; assert nothing changed). Never build a scope by hand or cast to a scope type.
 7. **Contracts first.** Every endpoint is a `defineEndpoint({...})` in `src/shared/contracts/<module>.ts` (Zod for params/query/body/response). Contracts import only `zod`, `@/shared/contracts/core`, other contracts and `@/shared/lib` — never Prisma or React. Response schemas are the whitelist of what leaves the server.
 8. **Authorization changes need integration tests** in `tests/integration/` proving both the error and that the database did not change. Use `tests/factories/scenario.ts`.
@@ -46,11 +47,13 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 - The Actor contains only _active_ memberships; removed rows grant nothing. Removing a member resets roles.
 - Scope builders and role predicates: `src/server/authz/{scopes,roles}.ts`. Module rules, and the `reason` each 403 carries: `src/server/modules/*/policies.ts`, written with the service that calls them (ADR 0011).
 - Nested data must be scoped too (e.g. a member's committee list for a lead shows only the lead's committee).
-- The dev actor switcher (`dm-dev-actor` cookie / `X-Dev-Actor` header with a university email) works only in development with `DEV_ACTOR_SWITCHER=true`. Never weaken its guards.
+- **Sign-in** (ADR 0014, `src/server/modules/auth/sign-in.ts`): email → 6-digit code → session cookie → name step. Nothing may reveal whether an address has an account before its code is verified (the request step never reads `User`; verify refuses wrong/expired/used/locked codes before reading it), and no `User` is created for an unverified address. Codes are HMACs keyed by `AUTH_SECRET`, 10 min, single use, 5 attempts; limits per email and per IP live in `rate-limits.ts`. `registeredAt` is set at the name step.
+- `resolveActor` (`src/server/actor.ts`): a live session cookie decides alone (an incomplete session grants nothing → 401). Only without one, the dev actor switcher (`dm-dev-actor` cookie / `X-Dev-Actor` header with a university email) runs — only in development with `DEV_ACTOR_SWITCHER=true`. Never weaken its guards.
+- **CSRF**: `defineRoute` refuses non-GET requests whose `Origin` is not `APP_ORIGIN` and bodies not sent as `application/json`. Tests that POST must send both (see `@tests/utils/auth`).
 
 ## Data model
 
-`prisma/schema.prisma`. UUIDv7 ids; composite foreign keys keep `clubId` consistent from `Membership` down to `PointTransaction` — when creating rows, copy `clubId`/`committeeId` from the loaded parent. All FKs are `Restrict`; nothing with history is hard-deleted (soft delete with `removedAt`, archive with `archivedAt`). Points: never delete; cancel = status CANCELLED + revision; every edit writes a `PointTransactionRevision` with previous values in the same transaction. `workDate` is a calendar date in Asia/Riyadh (`src/shared/lib/dates.ts`), never in the future. Write `User.searchName = normalizeForSearch(fullName)` whenever `fullName` is written. `User` holds only the shared identity (name, university email); contact and study details (phone, personal email, college, major, level) are per club on `Membership`, and nothing reads another club's copy (ADR 0012). Hand-written CHECK constraints live in the init migration.
+`prisma/schema.prisma`. UUIDv7 ids; composite foreign keys keep `clubId` consistent from `Membership` down to `PointTransaction` — when creating rows, copy `clubId`/`committeeId` from the loaded parent. All FKs are `Restrict`; nothing with history is hard-deleted (soft delete with `removedAt`, archive with `archivedAt`). Points: never delete; cancel = status CANCELLED + revision; every edit writes a `PointTransactionRevision` with previous values in the same transaction. `workDate` is a calendar date in Asia/Riyadh (`src/shared/lib/dates.ts`), never in the future. Write `User.searchName = normalizeForSearch(fullName)` whenever `fullName` is written. `User` holds only the shared identity (name, university email); contact and study details (phone, personal email, college, major, level) are per club on `Membership`, and nothing reads another club's copy (ADR 0012). Hand-written CHECK constraints live in the migrations (appended by hand after the generated SQL). The sign-in tables (`OtpChallenge`, `Session`, `RateLimitCounter`) are short-lived and are deleted when they expire.
 
 ## Frontend rules
 
@@ -70,6 +73,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 - Unit tests in a `__tests__/` folder next to the code they test (`src/components` keeps its two tests colocated); component tests start with `// @vitest-environment jsdom` and use `renderWithProviders` from `@tests/utils/render`.
 - Integration tests in `tests/integration/` run services/route handlers against a real DB. Each file starts from an empty DB (`beforeAll` truncate) and builds its own scenario. `tests/integration/repositories/` may import repositories directly (an ESLint exception) to test the write scopes.
 - `server-only` is aliased to an empty module in Vitest.
+- `tests/integration/auth/` drives the sign-in endpoints like a browser with `@tests/utils/auth` (`signIn`, `lastCodeFor` reads the code from the dev email sender). Services that depend on time take `new Date()` and pass it to the database (no `now()` in SQL), so tests move the clock with `vi.useFakeTimers({ toFake: ['Date'] })`.
 - `tests/repo/` holds checks on repository config (run with `pnpm test`).
 
 ## Gotchas specific to this stack
@@ -81,6 +85,7 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 - **TanStack Table v9:** features are registered via `tableFeatures` in `components/patterns/data-table/features.ts`; build columns with `createDataTableColumnHelper<T>()`.
 - **Generic helpers** (`defineRoute`, `mockEndpoint`) use `NoInfer` so the endpoint alone decides types.
 - **ESLint on Windows:** `import/no-restricted-paths` globs must not start a segment with `*` (wrap new zones with the `glob()` helper in `eslint.config.mjs`).
+- **Email:** without `RESEND_API_KEY` the dev sender prints emails (with the sign-in code) to the `pnpm dev` console and keeps them in memory for tests; integration tests always use it. Email HTML uses inline styles and literal colours (email clients ignore CSS variables); its strings are in `src/i18n/messages/ar/email.json`.
 - **Node version:** set only in `.nvmrc` (fnm and CI read it). To change it, also update `engines` in `package.json` and the README Prerequisites; `tests/repo/toolchain-versions.test.ts` fails until all three match.
 - **pnpm 12:** settings live in `pnpm-workspace.yaml`; new packages younger than one day are refused; dependencies with install scripts must be added to `allowBuilds` deliberately.
 - **TypeScript 6** (not 7) and **ESLint 9** (not 10) on purpose — see ADR 0010.
@@ -88,5 +93,8 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 ## Workflow
 
 - Branch `feat/<clickup-task-id>-short-name` (or `fix/`, `chore/`), Conventional Commits (`feat(members): …`), PR to `main` with the template, squash merge. Do not commit or push unless asked.
+- Checks by task size:
+  - Small, contained changes (one component, copy, styles, a single helper): run typecheck, lint and only the tests for the files you changed. Don't run the full suite or the build locally; CI runs everything on the PR.
+  - Larger changes, anything touching auth, permissions, the database schema, shared contracts or more than one module: run the full suite and the build locally before opening the PR.
 - Never commit `.env*` files (only `.env.example`). Never log personal data (phones, emails); log ids.
 - Keep docs in sync: new env vars → `.env.example` + `src/server/env.ts`; new decisions → an ADR; changed personas → README "Seeded accounts".

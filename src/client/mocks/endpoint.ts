@@ -20,16 +20,42 @@ import {
  *  - responses are parsed with the contract, so a fixture that drifts from it fails loudly.
  */
 
+interface MockErrorDetails {
+  reason?: string;
+  issues?: ValidationIssue[];
+  retryAfterSeconds?: number;
+}
+
 export class MockError {
   constructor(
     readonly code: ErrorCode,
     readonly message: string,
+    readonly details: MockErrorDetails = {},
   ) {}
 }
 
 /** Return this from a mock resolver to answer with the standard error envelope. */
-export function mockError(code: ErrorCode, message: string = code): MockError {
-  return new MockError(code, message);
+export function mockError(
+  code: ErrorCode,
+  message: string = code,
+  details?: MockErrorDetails,
+): MockError {
+  return new MockError(code, message, details);
+}
+
+class MockWithCookies<T> {
+  constructor(
+    readonly data: T,
+    readonly cookies: readonly string[],
+  ) {}
+}
+
+/**
+ * Return this from a mock resolver to also set cookies (`name=value; Path=/`). In the browser MSW
+ * writes them to document.cookie, so they cannot be HttpOnly like the real session cookie.
+ */
+export function mockWithCookies<T>(data: T, cookies: readonly string[]): MockWithCookies<T> {
+  return new MockWithCookies(data, cookies);
 }
 
 interface MockRequestContext<E> {
@@ -40,15 +66,18 @@ interface MockRequestContext<E> {
   request: Request;
 }
 
-type MockResolver<E> = (
-  context: MockRequestContext<E>,
-) => EndpointResult<E> | MockError | Promise<EndpointResult<E> | MockError>;
+type MockResult<E> = EndpointResult<E> | MockWithCookies<EndpointResult<E>> | MockError;
 
-function errorResponse(code: ErrorCode, message: string, issues?: ValidationIssue[]) {
-  const body: ErrorEnvelope = {
-    error: { code, message, requestId: 'mock', ...(issues ? { issues } : {}) },
-  };
-  return HttpResponse.json(body, { status: httpStatusByErrorCode[code] });
+type MockResolver<E> = (context: MockRequestContext<E>) => MockResult<E> | Promise<MockResult<E>>;
+
+function errorResponse(code: ErrorCode, message: string, details: MockErrorDetails = {}) {
+  const body: ErrorEnvelope = { error: { code, message, requestId: 'mock', ...details } };
+  return HttpResponse.json(body, {
+    status: httpStatusByErrorCode[code],
+    ...(details.retryAfterSeconds !== undefined
+      ? { headers: { 'retry-after': String(details.retryAfterSeconds) } }
+      : {}),
+  });
 }
 
 export function mockEndpoint<E extends EndpointDefinition>(
@@ -63,31 +92,25 @@ export function mockEndpoint<E extends EndpointDefinition>(
 
     const parsedParams = endpoint.params?.safeParse(params);
     if (parsedParams && !parsedParams.success) {
-      return errorResponse(
-        'VALIDATION_FAILED',
-        'Invalid path parameters.',
-        toValidationIssues(parsedParams.error.issues, 'params'),
-      );
+      return errorResponse('VALIDATION_FAILED', 'Invalid path parameters.', {
+        issues: toValidationIssues(parsedParams.error.issues, 'params'),
+      });
     }
     const parsedQuery = endpoint.query?.safeParse(
       searchParamsToObject(new URL(request.url).searchParams),
     );
     if (parsedQuery && !parsedQuery.success) {
-      return errorResponse(
-        'VALIDATION_FAILED',
-        'Invalid query.',
-        toValidationIssues(parsedQuery.error.issues, 'query'),
-      );
+      return errorResponse('VALIDATION_FAILED', 'Invalid query.', {
+        issues: toValidationIssues(parsedQuery.error.issues, 'query'),
+      });
     }
     let parsedBody: unknown;
     if (endpoint.body) {
       const result = endpoint.body.safeParse(await request.json().catch(() => undefined));
       if (!result.success) {
-        return errorResponse(
-          'VALIDATION_FAILED',
-          'Invalid body.',
-          toValidationIssues(result.error.issues, 'body'),
-        );
+        return errorResponse('VALIDATION_FAILED', 'Invalid body.', {
+          issues: toValidationIssues(result.error.issues, 'body'),
+        });
       }
       parsedBody = result.data;
     }
@@ -102,12 +125,20 @@ export function mockEndpoint<E extends EndpointDefinition>(
       request,
     } as MockRequestContext<E>);
 
-    if (result instanceof MockError) return errorResponse(result.code, result.message);
-    if (!endpoint.response) return new HttpResponse(null, { status: 204 });
+    if (result instanceof MockError) {
+      return errorResponse(result.code, result.message, result.details);
+    }
+    const { data, cookies: setCookies } =
+      result instanceof MockWithCookies ? result : { data: result, cookies: [] };
+    const headers = new Headers();
+    for (const cookie of setCookies) headers.append('set-cookie', cookie);
+
+    if (!endpoint.response) return new HttpResponse(null, { status: 204, headers });
     // Throws (and shows in the console) if the fixture does not satisfy the contract.
-    const body: unknown = endpoint.response.parse(result);
+    const body: unknown = endpoint.response.parse(data);
     return HttpResponse.json(body as Record<string, unknown>, {
       status: endpoint.successStatus ?? 200,
+      headers,
     });
   });
 }
