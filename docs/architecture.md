@@ -105,7 +105,7 @@ Current modules:
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services (list/get/create/update/remove/committees), UI |
 | `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)          |
-| `clubs`       | clubs, committees, membership types, view links, public view | contracts, read services for `/me`                                 |
+| `clubs`       | clubs, committees, membership types, view links, public view | contracts, services and endpoints (view links: later)              |
 | `permissions` | appointing officers and leads                                | contracts                                                          |
 | `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints, mocks; user menu, overview         |
 | `system`      | health                                                       | full endpoint                                                      |
@@ -142,16 +142,16 @@ export const listMembersEndpoint = defineEndpoint({
   }
   ```
 
-| Status | Code                | When                                                                                                                                                                                               |
-| ------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `BAD_REQUEST`       | body is not JSON, or not sent as `application/json` (`reason: json_required`)                                                                                                                      |
-| 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                                                                                                                    |
-| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule); or a non-GET request from another origin (`reason: cross_origin`)                                        |
-| 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                                                                                                                  |
-| 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`…); every unique-constraint violation is `already_exists`, mapped once in `src/server/db/client.ts` |
-| 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`                                                                                                   |
-| 429    | `RATE_LIMITED`      | too many requests (`reason`: `resend_cooldown`, `too_many_requests`); `retryAfterSeconds` and a `Retry-After` header say when to retry                                                             |
-| 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                                                                                                                  |
+| Status | Code                | When                                                                                                                                                                                                                                                                                                                                           |
+| ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `BAD_REQUEST`       | body is not JSON, or not sent as `application/json` (`reason: json_required`)                                                                                                                                                                                                                                                                  |
+| 401    | `UNAUTHENTICATED`   | no actor on an `actor` endpoint                                                                                                                                                                                                                                                                                                                |
+| 403    | `FORBIDDEN`         | the actor can see the resource but their role may not do this (`reason` says which rule); or a non-GET request from another origin (`reason: cross_origin`)                                                                                                                                                                                    |
+| 404    | `NOT_FOUND`         | does not exist **or is outside the actor's scope** — indistinguishable on purpose                                                                                                                                                                                                                                                              |
+| 409    | `CONFLICT`          | the request conflicts with current state (`reason`: `transaction_cancelled`, `uni_email_locked`, `name_taken`, `slug_taken`, `club_archived`, `committee_archived`, `membership_type_in_use`, `last_membership_type`…); a unique-constraint violation that no check caught first is `already_exists`, mapped once in `src/server/db/client.ts` |
+| 422    | `VALIDATION_FAILED` | input fails the contract or a business rule; `issues[].path` starts with `params`/`query`/`body`                                                                                                                                                                                                                                               |
+| 429    | `RATE_LIMITED`      | too many requests (`reason`: `resend_cooldown`, `too_many_requests`); `retryAfterSeconds` and a `Retry-After` header say when to retry                                                                                                                                                                                                         |
+| 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                                                                                                                                                                                                                                                              |
 
 - **Responses are parsed by their contract** before sending: fields not in the contract are dropped. This is the safety net for public endpoints, which must never return phone numbers or emails.
 - `code` is for programs; the UI translates it (`common.errors.<code>`). `message` is English, for developers. Custom validation messages are keys (`date_in_future`) translated under `common.validation`.
@@ -174,23 +174,26 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 
 **Permission matrix** (★ = full admin, O = officer of the club, L = lead of the committee):
 
-| Action                                          |  ★  |  O   |                                                 L                                                  |
-| ----------------------------------------------- | :-: | :--: | :------------------------------------------------------------------------------------------------: |
-| Read members and their contact data             | all | club |                                      own committee's members                                       |
-| Add a person to the club                        |  ✓  |  ✓   | only into their own committee, default type; not someone already in the club they cannot see (404) |
-| Edit profile fields (name, contact, college…)   |  ✓  |  ✓   |                                     members of their committee                                     |
-| Change membership type                          |  ✓  |  ✓   |                                                 —                                                  |
-| Add to / remove from a committee                |  ✓  |  ✓   |                            their committee (cannot remove another lead)                            |
-| Remove from the club / restore a removed member |  ✓  |  ✓   |                                                 —                                                  |
-| CSV import                                      |  ✓  |  ✓   |                                                 —                                                  |
-| Create / edit / cancel points                   |  ✓  |  ✓   |                                          their committee                                           |
-| Committees, membership types, club details      |  ✓  |  ✓   |                                                 —                                                  |
-| Rotate / disable a committee's view link        |  ✓  |  ✓   |                                          — (may read it)                                           |
-| Appoint / revoke committee leads                |  ✓  |  ✓   |                                                 —                                                  |
-| Appoint / revoke club officers                  |  ✓  |  —   |                                                 —                                                  |
-| Create / archive clubs                          |  ✓  |  —   |                                                 —                                                  |
+| Action                                          |  ★  |     O      |                                                 L                                                  |
+| ----------------------------------------------- | :-: | :--------: | :------------------------------------------------------------------------------------------------: |
+| Read clubs, committees, membership types        | all | their club |                      their club, the committees they lead, that club's types                       |
+| Read members and their contact data             | all |    club    |                                      own committee's members                                       |
+| Add a person to the club                        |  ✓  |     ✓      | only into their own committee, default type; not someone already in the club they cannot see (404) |
+| Edit profile fields (name, contact, college…)   |  ✓  |     ✓      |                                     members of their committee                                     |
+| Change membership type                          |  ✓  |     ✓      |                                                 —                                                  |
+| Add to / remove from a committee                |  ✓  |     ✓      |                            their committee (cannot remove another lead)                            |
+| Remove from the club / restore a removed member |  ✓  |     ✓      |                                                 —                                                  |
+| CSV import                                      |  ✓  |     ✓      |                                                 —                                                  |
+| Create / edit / cancel points                   |  ✓  |     ✓      |                                          their committee                                           |
+| Membership types of a club                      |  ✓  |     ✓      |                                                 —                                                  |
+| Clubs and committees: create, rename, archive   |  ✓  |     —      |                                                 —                                                  |
+| Rotate / disable a committee's view link        |  ✓  |     ✓      |                                          — (may read it)                                           |
+| Appoint / revoke committee leads                |  ✓  |     ✓      |                                                 —                                                  |
+| Appoint / revoke club officers                  |  ✓  |     —      |                                                 —                                                  |
 
-**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
+**Archived clubs and committees** are read-only for anything new: no members, committee memberships, points, committees or membership types can be added to them, and they are left out of lists unless `?includeArchived=true` is passed. Each module refuses its own writes ([ADR 0015](adr/0015-archive-instead-of-delete.md)).
+
+**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `membershipTypesScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
 
@@ -220,7 +223,7 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 
 - `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK), `registeredAt` null until they sign in and confirm their name, random `publicId` for public pages, `searchName` for Arabic-aware search.
 - Sign-in tables, short-lived and deleted when they expire: `OtpChallenge` (one pending code per address, keyed by an HMAC of it), `Session` (SHA-256 of the cookie token; `userId` null until a new person enters their name), `RateLimitCounter` ([ADR 0014](adr/0014-email-otp-sign-in.md)).
-- `Club` → `Committee`, `MembershipType` (ordered per club).
+- `Club` → `Committee`, `MembershipType` (ordered per club). Clubs and committees are **archived, never deleted** (`archivedAt`): hidden from lists by default and closed to anything new, while their members and points history stay readable ([ADR 0015](adr/0015-archive-instead-of-delete.md)). Membership types carry no history of their own and are deleted — a type in use only with a destination for its memberships, and never the club's last one ([ADR 0016](adr/0016-membership-type-deletes-and-order.md)).
 - `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
 - `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
 - `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel).
