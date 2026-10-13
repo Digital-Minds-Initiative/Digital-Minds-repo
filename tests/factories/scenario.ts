@@ -47,6 +47,45 @@ async function createPerson(
   return { ...user, phone: `+9665000${String(sequence).padStart(5, '0')}` };
 }
 
+const REMOVED_AT = new Date(Date.now() - 7 * 86_400_000);
+
+/** Adds a person to a club. Their phone is copied into this club's own profile (ADR 0012). */
+async function joinClub(
+  person: { id: string; phone: string },
+  club: { id: string },
+  typeId: string,
+  options: { officer?: boolean; removed?: boolean } = {},
+) {
+  const membership = await db.membership.create({
+    data: {
+      userId: person.id,
+      phone: person.phone,
+      clubId: club.id,
+      membershipTypeId: typeId,
+      role: options.officer ? 'CLUB_OFFICER' : 'MEMBER',
+      removedAt: options.removed ? REMOVED_AT : null,
+    },
+  });
+  return membership.id;
+}
+
+async function joinCommitteeOf(
+  membershipId: string,
+  committee: { id: string; clubId: string },
+  options: { lead?: boolean; removed?: boolean } = {},
+) {
+  const row = await db.committeeMembership.create({
+    data: {
+      membershipId,
+      committeeId: committee.id,
+      clubId: committee.clubId,
+      role: options.lead ? 'LEAD' : 'MEMBER',
+      removedAt: options.removed ? REMOVED_AT : null,
+    },
+  });
+  return row.id;
+}
+
 export async function buildScenario() {
   const clubA = await db.club.create({ data: { slug: `club-a-${Date.now()}`, name: 'نادي أ' } });
   const clubB = await db.club.create({ data: { slug: `club-b-${Date.now()}`, name: 'نادي ب' } });
@@ -79,78 +118,40 @@ export async function buildScenario() {
     unregistered: await createPerson('لم يسجل', { registered: false }),
   };
 
-  const removedAt = new Date(Date.now() - 7 * 86_400_000);
-
-  async function join(
-    person: { id: string; phone: string },
-    club: { id: string },
-    typeId: string,
-    options: { officer?: boolean; removed?: boolean } = {},
-  ) {
-    const membership = await db.membership.create({
-      data: {
-        userId: person.id,
-        phone: person.phone,
-        clubId: club.id,
-        membershipTypeId: typeId,
-        role: options.officer ? 'CLUB_OFFICER' : 'MEMBER',
-        removedAt: options.removed ? removedAt : null,
-      },
-    });
-    return membership.id;
-  }
-
-  async function joinCommittee(
-    membershipId: string,
-    committee: { id: string; clubId: string },
-    options: { lead?: boolean; removed?: boolean } = {},
-  ) {
-    const row = await db.committeeMembership.create({
-      data: {
-        membershipId,
-        committeeId: committee.id,
-        clubId: committee.clubId,
-        role: options.lead ? 'LEAD' : 'MEMBER',
-        removedAt: options.removed ? removedAt : null,
-      },
-    });
-    return row.id;
-  }
-
   const m = {
-    officerA: await join(users.officerA, clubA, typeA.id, { officer: true }),
-    officerB: await join(users.officerB, clubB, typeB.id, { officer: true }),
-    leadA1: await join(users.leadA1, clubA, typeA.id),
-    coLeadA1: await join(users.coLeadA1, clubA, typeA.id),
-    memberA1: await join(users.memberA1, clubA, typeA.id),
-    memberA2: await join(users.memberA2, clubA, typeA.id),
-    memberB1: await join(users.memberB1, clubB, typeB.id),
-    mixedA: await join(users.mixed, clubA, typeA.id, { officer: true }),
-    mixedB: await join(users.mixed, clubB, typeB.id),
-    bothClubsA: await join(users.bothClubs, clubA, typeA.id),
-    bothClubsB: await join(users.bothClubs, clubB, typeB.id),
-    removedOfficer: await join(users.removedOfficer, clubA, typeA.id, {
+    officerA: await joinClub(users.officerA, clubA, typeA.id, { officer: true }),
+    officerB: await joinClub(users.officerB, clubB, typeB.id, { officer: true }),
+    leadA1: await joinClub(users.leadA1, clubA, typeA.id),
+    coLeadA1: await joinClub(users.coLeadA1, clubA, typeA.id),
+    memberA1: await joinClub(users.memberA1, clubA, typeA.id),
+    memberA2: await joinClub(users.memberA2, clubA, typeA.id),
+    memberB1: await joinClub(users.memberB1, clubB, typeB.id),
+    mixedA: await joinClub(users.mixed, clubA, typeA.id, { officer: true }),
+    mixedB: await joinClub(users.mixed, clubB, typeB.id),
+    bothClubsA: await joinClub(users.bothClubs, clubA, typeA.id),
+    bothClubsB: await joinClub(users.bothClubs, clubB, typeB.id),
+    removedOfficer: await joinClub(users.removedOfficer, clubA, typeA.id, {
       officer: true,
       removed: true,
     }),
-    staleLead: await join(users.staleLead, clubA, typeA.id),
-    plain: await join(users.plain, clubA, typeA.id),
-    unregistered: await join(users.unregistered, clubA, typeA.id),
+    staleLead: await joinClub(users.staleLead, clubA, typeA.id),
+    plain: await joinClub(users.plain, clubA, typeA.id),
+    unregistered: await joinClub(users.unregistered, clubA, typeA.id),
   };
 
   const cm = {
-    leadA1: await joinCommittee(m.leadA1, a1, { lead: true }),
-    leadA1InA2: await joinCommittee(m.leadA1, a2),
-    coLeadA1: await joinCommittee(m.coLeadA1, a1, { lead: true }),
-    memberA1: await joinCommittee(m.memberA1, a1),
-    memberA2: await joinCommittee(m.memberA2, a2),
-    memberB1: await joinCommittee(m.memberB1, b1),
-    mixedB1: await joinCommittee(m.mixedB, b1),
-    bothClubsA2: await joinCommittee(m.bothClubsA, a2),
-    bothClubsB1: await joinCommittee(m.bothClubsB, b1),
-    removedOfficerA1: await joinCommittee(m.removedOfficer, a1, { lead: true, removed: true }),
-    staleLeadA1: await joinCommittee(m.staleLead, a1, { lead: true, removed: true }),
-    unregisteredA1: await joinCommittee(m.unregistered, a1),
+    leadA1: await joinCommitteeOf(m.leadA1, a1, { lead: true }),
+    leadA1InA2: await joinCommitteeOf(m.leadA1, a2),
+    coLeadA1: await joinCommitteeOf(m.coLeadA1, a1, { lead: true }),
+    memberA1: await joinCommitteeOf(m.memberA1, a1),
+    memberA2: await joinCommitteeOf(m.memberA2, a2),
+    memberB1: await joinCommitteeOf(m.memberB1, b1),
+    mixedB1: await joinCommitteeOf(m.mixedB, b1),
+    bothClubsA2: await joinCommitteeOf(m.bothClubsA, a2),
+    bothClubsB1: await joinCommitteeOf(m.bothClubsB, b1),
+    removedOfficerA1: await joinCommitteeOf(m.removedOfficer, a1, { lead: true, removed: true }),
+    staleLeadA1: await joinCommitteeOf(m.staleLead, a1, { lead: true, removed: true }),
+    unregisteredA1: await joinCommitteeOf(m.unregistered, a1),
   };
 
   async function transaction(
@@ -194,6 +195,71 @@ export async function buildScenario() {
 }
 
 export type Scenario = Awaited<ReturnType<typeof buildScenario>>;
+
+/*
+ * Opt-in extension for the archive rules (ADR 0015). Kept out of buildScenario so the tests that
+ * count clubs and members keep their small, predictable world:
+ *
+ *   archivedClub ......... archived, with one type and committee z1
+ *     officerZ ........... CLUB_OFFICER of it
+ *     memberZ1 ........... member of it, in z1
+ *     memberZ ............ member of it, in no committee
+ *   archivedCommittee a3 . archived committee of the *active* club A
+ *     memberA3 ........... member of A, in a3
+ */
+export async function buildArchivedScenario(s: Scenario) {
+  const archivedClub = await db.club.create({
+    data: {
+      slug: `club-z-${Date.now()}`,
+      name: 'نادي مؤرشف',
+      archivedAt: new Date('2026-01-01T00:00:00.000Z'),
+    },
+  });
+  const typeZ = await db.membershipType.create({
+    data: { clubId: archivedClub.id, name: 'عضو', order: 0 },
+  });
+  const z1 = await db.committee.create({
+    data: { clubId: archivedClub.id, name: 'لجنة ز1' },
+  });
+  const a3 = await db.committee.create({
+    data: {
+      clubId: s.clubA.id,
+      name: 'لجنة أ3 المؤرشفة',
+      archivedAt: new Date('2026-02-01T00:00:00.000Z'),
+    },
+  });
+
+  const users = {
+    officerZ: await createPerson('مدير شؤون النادي المؤرشف'),
+    memberZ1: await createPerson('عضو ز1'),
+    memberZ: await createPerson('عضو بلا لجنة في ز'),
+    memberA3: await createPerson('عضو أ3'),
+  };
+
+  const memberships = {
+    officerZ: await joinClub(users.officerZ, archivedClub, typeZ.id, { officer: true }),
+    memberZ1: await joinClub(users.memberZ1, archivedClub, typeZ.id),
+    memberZ: await joinClub(users.memberZ, archivedClub, typeZ.id),
+    memberA3: await joinClub(users.memberA3, s.clubA, s.types.a),
+  };
+
+  const committeeMemberships = {
+    memberZ1: await joinCommitteeOf(memberships.memberZ1, z1),
+    memberA3: await joinCommitteeOf(memberships.memberA3, a3),
+  };
+
+  return {
+    archivedClub,
+    archivedCommittee: a3,
+    typeZ,
+    z1,
+    users,
+    memberships,
+    committeeMemberships,
+  };
+}
+
+export type ArchivedScenario = Awaited<ReturnType<typeof buildArchivedScenario>>;
 
 /** Loads the real Actor (same code path as a request) and fails the test if it is missing. */
 export async function actorFor(userId: string): Promise<Actor> {

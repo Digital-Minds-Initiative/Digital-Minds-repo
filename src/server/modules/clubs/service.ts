@@ -25,6 +25,7 @@ import {
   type UpdateCommitteeBody,
   type UpdateMembershipTypeBody,
 } from '@/shared/contracts/clubs';
+import { normalizeEntityName } from '@/shared/lib/names';
 
 import { toClub, toCommittee, toMembershipType } from './mappers';
 import { assertCanManageClubsAndCommittees, assertCanManageMembershipTypes } from './policies';
@@ -80,10 +81,11 @@ export async function listClubs(
 
 export async function createClub(actor: Actor, body: CreateClubBody): Promise<Club> {
   assertCanManageClubsAndCommittees(actor);
-  await assertClubNameAndSlugFree({ name: body.name, slug: body.slug });
+  const name = normalizeEntityName(body.name);
+  await assertClubNameAndSlugFree({ name, slug: body.slug });
 
   const row = await insertClub(
-    { name: body.name, slug: body.slug, description: body.description ?? null },
+    { name, slug: body.slug, description: body.description ?? null },
     DEFAULT_MEMBERSHIP_TYPE_NAME,
   );
   return toClub(row);
@@ -97,12 +99,13 @@ export async function updateClub(
 ): Promise<Club> {
   const club = await loadClub(actor, clubId);
   assertCanManageClubsAndCommittees(actor);
-  if (body.name !== undefined && body.name !== club.name) {
-    await assertClubNameAndSlugFree({ name: body.name }, club.id);
+  const name = body.name === undefined ? undefined : normalizeEntityName(body.name);
+  if (name !== undefined && name !== club.name) {
+    await assertClubNameAndSlugFree({ name }, club.id);
   }
 
   const row = await updateClubRow(clubsScope(actor), club.id, {
-    ...(body.name !== undefined ? { name: body.name } : {}),
+    ...(name !== undefined ? { name } : {}),
     ...(body.description !== undefined ? { description: body.description } : {}),
   });
   return toClub(row);
@@ -147,10 +150,11 @@ export async function createCommittee(
   const club = await loadClub(actor, clubId);
   assertCanManageClubsAndCommittees(actor);
   assertClubNotArchived(club);
-  if (await committeeNameTaken(club.id, body.name)) throw nameTaken('committee');
+  const name = normalizeEntityName(body.name);
+  if (await committeeNameTaken(club.id, name)) throw nameTaken('committee');
 
   const row = await insertCommittee(clubsScope(actor), club.id, {
-    name: body.name,
+    name,
     description: body.description ?? null,
   });
   return toCommittee(row);
@@ -164,14 +168,15 @@ export async function updateCommittee(
 ): Promise<Committee> {
   const committee = await loadCommittee(actor, committeeId);
   assertCanManageClubsAndCommittees(actor);
-  if (body.name !== undefined && body.name !== committee.name) {
-    if (await committeeNameTaken(committee.clubId, body.name, committee.id)) {
+  const name = body.name === undefined ? undefined : normalizeEntityName(body.name);
+  if (name !== undefined && name !== committee.name) {
+    if (await committeeNameTaken(committee.clubId, name, committee.id)) {
       throw nameTaken('committee');
     }
   }
 
   const row = await updateCommitteeRow(committeesScope(actor), committee.id, {
-    ...(body.name !== undefined ? { name: body.name } : {}),
+    ...(name !== undefined ? { name } : {}),
     ...(body.description !== undefined ? { description: body.description } : {}),
   });
   return toCommittee(row);
@@ -216,9 +221,10 @@ export async function createMembershipType(
   const club = await loadClub(actor, clubId);
   assertCanManageMembershipTypes(actor, club.id);
   assertClubNotArchived(club);
-  if (await membershipTypeNameTaken(club.id, body.name)) throw nameTaken('membership type');
+  const name = normalizeEntityName(body.name);
+  if (await membershipTypeNameTaken(club.id, name)) throw nameTaken('membership type');
 
-  const row = await insertMembershipType(clubsScope(actor), club.id, body.name);
+  const row = await insertMembershipType(clubsScope(actor), club.id, name);
   // A type that was just created has no memberships yet.
   return toMembershipType(row, undefined);
 }
@@ -230,17 +236,12 @@ export async function updateMembershipType(
 ): Promise<MembershipType> {
   const type = await loadMembershipType(actor, membershipTypeId);
   assertCanManageMembershipTypes(actor, type.clubId);
-  if (body.name !== type.name) {
-    if (await membershipTypeNameTaken(type.clubId, body.name, type.id)) {
-      throw nameTaken('membership type');
-    }
+  const name = normalizeEntityName(body.name);
+  if (name !== type.name && (await membershipTypeNameTaken(type.clubId, name, type.id))) {
+    throw nameTaken('membership type');
   }
 
-  const row = await updateMembershipTypeName(
-    membershipTypesScope(actor),
-    membershipTypeId,
-    body.name,
-  );
+  const row = await updateMembershipTypeName(membershipTypesScope(actor), membershipTypeId, name);
   const [item] = await withUsage([row]);
   if (!item) throw new NotFoundError('Membership type');
   return item;

@@ -448,9 +448,11 @@ export async function reorderMembershipTypes(
       select: { id: true },
     });
     const current = new Set(rows.map((row) => row.id));
-    if (current.size !== ids.length || ids.some((id) => !current.has(id))) {
-      return { matched: false };
-    }
+    const wanted = new Set(ids);
+    // Every type exactly once: a duplicate would leave one type unmoved at its old place, so it
+    // is refused here too and not only by the contract.
+    if (wanted.size !== ids.length || current.size !== wanted.size) return { matched: false };
+    if (ids.some((id) => !current.has(id))) return { matched: false };
 
     for (const [index, id] of ids.entries()) {
       const { count } = await tx.membershipType.updateMany({

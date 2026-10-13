@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { isFutureDate } from '@/shared/lib/dates';
+import { normalizeEntityName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 
 /*
@@ -54,14 +55,12 @@ export const longTextSchema = z.string().trim().min(1).max(1000);
 
 /**
  * The name of something that must be unique among its siblings (a club, a committee in a club, a
- * membership type in a club). Trimmed, with repeated whitespace collapsed to one space, so
- * "نادي  الحاسبات" and "نادي الحاسبات" are the same name both to the uniqueness check and in
- * storage. Matching is exact otherwise: Postgres unique constraints are case-sensitive.
+ * membership type in a club). Normalised with `normalizeEntityName`, which the services apply
+ * again before they compare or store a name.
  */
 export const entityNameSchema = z
   .string()
-  .trim()
-  .transform((value) => value.replace(/\s+/g, ' '))
+  .transform(normalizeEntityName)
   .pipe(z.string().min(1).max(120));
 
 /** For PATCH bodies whose fields are all optional: rejects an update that changes nothing. */
