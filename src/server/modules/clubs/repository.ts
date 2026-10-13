@@ -334,6 +334,10 @@ export async function membershipTypeNameTaken(
  * reordering types in the same club run one after another: the set of ids and the order each of
  * them reads is the set and order it writes. Ordering by id makes the lock order deterministic,
  * so two of these transactions cannot deadlock.
+ *
+ * It locks rows, not the club, which is enough only because a club always has at least one type:
+ * it is created with one (`insertClub`) and its last one can never be deleted. Two transactions
+ * therefore always contend over at least one row.
  */
 async function lockMembershipTypes(tx: Tx, clubId: string): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
