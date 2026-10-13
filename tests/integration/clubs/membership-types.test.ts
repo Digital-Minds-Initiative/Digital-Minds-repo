@@ -253,6 +253,22 @@ describe('membership types', () => {
       await db.membershipType.deleteMany({ where: { id: { in: [types.spare, types.doomed] } } });
       await expectConflict(deleteMembershipType(admin, types.keep, del()), 'last_membership_type');
       expect(await db.membershipType.count({ where: { clubId } })).toBe(1);
+
+      // In use as well: the last type is refused for being the last, not for being in use —
+      // moving its members somewhere else is not an option when there is nowhere to move them.
+      await addMember(types.keep);
+      await expectConflict(deleteMembershipType(admin, types.keep, del()), 'last_membership_type');
+      expect(await db.membershipType.count({ where: { clubId } })).toBe(1);
+    });
+
+    it('keeps one type when the last two are deleted at the same time', async () => {
+      await db.membershipType.delete({ where: { id: types.doomed } });
+      const results = await Promise.allSettled([
+        deleteMembershipType(admin, types.keep, del()),
+        deleteMembershipType(admin, types.spare, del()),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await db.membershipType.count({ where: { clubId } })).toBe(1);
     });
 
     it('is managed by the club’s officer, refused for a lead, and a 404 across clubs', async () => {

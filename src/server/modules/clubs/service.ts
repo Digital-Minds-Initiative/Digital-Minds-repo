@@ -292,15 +292,9 @@ export async function deleteMembershipType(
     }
   }
 
-  const usage = await countMembershipsByType([type.id]);
-  const inUse = (usage.get(type.id)?.total ?? 0) > 0;
-  if (inUse && moveMembersTo === null) {
-    throw new ConflictError(
-      'Memberships still use this membership type.',
-      'membership_type_in_use',
-    );
-  }
-
+  // Whether the type is still in use is decided inside the transaction, under the club's type
+  // lock, so a membership assigned while this request runs cannot slip through
+  // (409 `membership_type_in_use` from the repository).
   await deleteMembershipTypeRow(
     { membershipTypes: membershipTypesScope(actor), members: membersScope(actor) },
     { membershipTypeId: type.id, clubId: type.clubId, moveMembersTo },

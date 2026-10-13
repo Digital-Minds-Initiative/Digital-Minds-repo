@@ -5,10 +5,22 @@ import {
   committeeMembershipsScope,
   committeesScope,
   membersScope,
+  membershipTypesScope,
   pointTransactionsScope,
   type Actor,
 } from '@/server/authz';
 import { db } from '@/server/db/client';
+import {
+  deleteMembershipType,
+  insertCommittee,
+  insertMembershipType,
+  reorderMembershipTypes,
+  setClubArchivedAt,
+  setCommitteeArchivedAt,
+  updateClub,
+  updateCommittee,
+  updateMembershipTypeName,
+} from '@/server/modules/clubs/repository';
 import {
   addToCommittee,
   removeFromClub,
@@ -196,6 +208,88 @@ describe('repository writes apply the scope themselves', () => {
         where: { transactionId: s.transactions.memberA1 },
       }),
     ).toBe(0);
+  });
+
+  describe('clubs, committees and membership types', () => {
+    const clubA = () => db.club.findUniqueOrThrow({ where: { id: s.clubA.id } });
+    const committeeA1 = () => db.committee.findUniqueOrThrow({ where: { id: s.committees.a1.id } });
+    const typesOfA = () =>
+      db.membershipType.findMany({ where: { clubId: s.clubA.id }, orderBy: { id: 'asc' } });
+
+    it('updateClub and setClubArchivedAt', async () => {
+      const before = await clubA();
+      const scope = clubsScope(officerB);
+      await expectNotFound(updateClub(scope, s.clubA.id, { name: 'اسم من نادٍ آخر' }));
+      await expectNotFound(setClubArchivedAt(scope, s.clubA.id, new Date()));
+      expect(await clubA()).toEqual(before);
+    });
+
+    it('insertCommittee, updateCommittee and setCommitteeArchivedAt', async () => {
+      const before = await committeeA1();
+      const committees = await db.committee.count();
+      await expectNotFound(
+        insertCommittee(clubsScope(officerB), s.clubA.id, {
+          name: 'لجنة مدسوسة',
+          description: null,
+        }),
+      );
+      await expectNotFound(
+        updateCommittee(committeesScope(officerB), s.committees.a1.id, { name: 'اسم آخر' }),
+      );
+      await expectNotFound(
+        setCommitteeArchivedAt(committeesScope(officerB), s.committees.a1.id, new Date()),
+      );
+      expect(await committeeA1()).toEqual(before);
+      expect(await db.committee.count()).toBe(committees);
+    });
+
+    it('insertMembershipType, updateMembershipTypeName and deleteMembershipType', async () => {
+      const before = await typesOfA();
+      await expectNotFound(insertMembershipType(clubsScope(officerB), s.clubA.id, 'نوع مدسوس'));
+      await expectNotFound(
+        updateMembershipTypeName(membershipTypesScope(officerB), s.types.a2, 'اسم آخر'),
+      );
+      await expectNotFound(
+        deleteMembershipType(
+          { membershipTypes: membershipTypesScope(officerB), members: membersScope(officerB) },
+          { membershipTypeId: s.types.a2, clubId: s.clubA.id, moveMembersTo: null },
+        ),
+      );
+      expect(await typesOfA()).toEqual(before);
+    });
+
+    it('deleteMembershipType refuses a move target outside the scope', async () => {
+      const before = await typesOfA();
+      const memberships = await db.membership.findMany({
+        where: { membershipTypeId: s.types.a },
+        select: { id: true, membershipTypeId: true },
+        orderBy: { id: 'asc' },
+      });
+      // Club B's scope reaches neither the type nor the target, so nothing moves and nothing goes.
+      await expectNotFound(
+        deleteMembershipType(
+          { membershipTypes: membershipTypesScope(officerB), members: membersScope(officerB) },
+          { membershipTypeId: s.types.a, clubId: s.clubA.id, moveMembersTo: s.types.a2 },
+        ),
+      );
+      expect(await typesOfA()).toEqual(before);
+      expect(
+        await db.membership.findMany({
+          where: { membershipTypeId: s.types.a },
+          select: { id: true, membershipTypeId: true },
+          orderBy: { id: 'asc' },
+        }),
+      ).toEqual(memberships);
+    });
+
+    it('reorderMembershipTypes', async () => {
+      const before = await typesOfA();
+      // Out of scope: the club's types are invisible, so the list can never match.
+      await expect(
+        reorderMembershipTypes(membershipTypesScope(officerB), s.clubA.id, [s.types.a2, s.types.a]),
+      ).resolves.toEqual({ matched: false });
+      expect(await typesOfA()).toEqual(before);
+    });
   });
 
   it('control: the same writes succeed inside the scope', async () => {
