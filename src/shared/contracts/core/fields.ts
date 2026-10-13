@@ -52,6 +52,18 @@ export const academicLevelSchema = z.number().int().min(1).max(12);
 export const shortTextSchema = z.string().trim().min(1).max(120);
 export const longTextSchema = z.string().trim().min(1).max(1000);
 
+/**
+ * The name of something that must be unique among its siblings (a club, a committee in a club, a
+ * membership type in a club). Trimmed, with repeated whitespace collapsed to one space, so
+ * "نادي  الحاسبات" and "نادي الحاسبات" are the same name both to the uniqueness check and in
+ * storage. Matching is exact otherwise: Postgres unique constraints are case-sensitive.
+ */
+export const entityNameSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/\s+/g, ' '))
+  .pipe(z.string().min(1).max(120));
+
 /** For PATCH bodies whose fields are all optional: rejects an update that changes nothing. */
 export function requireAnyField<T extends z.ZodObject>(schema: T) {
   return schema.refine((body) => Object.values(body).some((value) => value !== undefined), {

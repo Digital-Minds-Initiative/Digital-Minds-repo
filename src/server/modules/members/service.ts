@@ -215,6 +215,7 @@ export async function addMemberToCommittee(
     ]);
   }
   assertCanAddToCommittee(actor, { clubId: committee.clubId, committeeId: committee.id });
+  if (committee.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
   if (committee.archived)
     throw new ConflictError('The committee is archived.', 'committee_archived');
 
