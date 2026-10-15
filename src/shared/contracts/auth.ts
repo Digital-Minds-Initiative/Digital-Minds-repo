@@ -21,7 +21,7 @@ import { toLatinDigits } from '@/shared/lib/arabic';
  *                                                 allowed address, registered or not)
  *   2. POST /auth/otp/verify  { email, code }  → session cookie + the next step:
  *        signed_in     already registered: done
- *        confirm_name  added by an admin, first sign-in: show `fullName`, let them correct it
+ *        confirm_name  added by an admin, first sign-in: show `fullName` to confirm as it is
  *        enter_name    new person: ask for the full name (no account exists yet)
  *   3. POST /auth/profile/name { fullName }    → completes confirm_name / enter_name
  *
@@ -55,7 +55,10 @@ export type OtpRejection = (typeof otpRejectionCodes)[number];
 const signedInStep = z.object({ step: z.literal('signed_in') });
 const confirmNameStep = z.object({
   step: z.literal('confirm_name'),
-  /** The name an admin stored; the user confirms or corrects it. */
+  /**
+   * The name an admin stored, to confirm as it is: this step cannot change it (the club owns the
+   * record). Send it back unchanged — a different name is a 422 `name_mismatch`.
+   */
   fullName: z.string(),
 });
 const enterNameStep = z.object({ step: z.literal('enter_name') });
@@ -86,7 +89,12 @@ export const verifyOtpEndpoint = defineEndpoint({
   response: signInStepSchema,
 });
 
-/** Completes `confirm_name` and `enter_name`. 401 without such a session. */
+/**
+ * Completes `confirm_name` and `enter_name`. 401 without such a session.
+ *
+ * For `enter_name` the name is the person's own, given once. For `confirm_name` it must equal the
+ * stored name (422 `name_mismatch` otherwise) — see docs/adr/0017-member-permissions.md.
+ */
 export const completeNameEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/auth/profile/name',

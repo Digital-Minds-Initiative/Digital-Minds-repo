@@ -25,8 +25,9 @@ export { buildMeFixture } from './fixtures';
  *   code 111111 → code_expired   222222 → too_many_attempts   (anything else → invalid_code)
  *
  * After 123456: a registered demo persona is signed in (the dev actor cookie is set, so /me works),
- * the unregistered persona gets confirm_name, any other address gets enter_name. A second request
- * for the same address within 60 seconds answers the resend cooldown.
+ * the unregistered persona gets confirm_name (which only confirms — a different name is refused),
+ * any other address gets enter_name. A second request for the same address within 60 seconds
+ * answers the resend cooldown.
  *
  * The real session cookie is HttpOnly; MSW can only set readable cookies, so the mocks keep the
  * pending email in `dm-mock-sign-in` instead.
@@ -102,9 +103,16 @@ export const authHandlers = [
     const email = cookies[MOCK_SIGN_IN_COOKIE];
     if (!email) return mockError('UNAUTHENTICATED');
     const db = getMockDb();
-    if (mockSignInStep(db, email).step === 'signed_in') {
+    const step = mockSignInStep(db, email);
+    if (step.step === 'signed_in') {
       return mockError('CONFLICT', 'The account is already registered.', {
         reason: 'already_registered',
+      });
+    }
+    // confirm_name only confirms: the stored name cannot be changed here.
+    if (step.step === 'confirm_name' && body.fullName !== step.fullName) {
+      return mockError('VALIDATION_FAILED', 'This step confirms the stored name.', {
+        issues: [{ path: ['body', 'fullName'], code: 'name_mismatch', message: 'name_mismatch' }],
       });
     }
     registerMockUser(db, email, body.fullName);

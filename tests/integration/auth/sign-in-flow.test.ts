@@ -128,15 +128,16 @@ describe('after a correct code', () => {
       registeredAt: null,
     });
 
-    const done = await auth.completeName('  ريم   خالد العتيبي ', { session });
+    // Confirming it as it is, however it is spaced.
+    const done = await auth.completeName('  ريم   خالد ', { session });
     expect(done.status).toBe(200);
     expect(await done.json()).toEqual({ step: 'signed_in' });
     const fresh = sessionFrom(done);
     expect(fresh).not.toBe(session);
 
     const user = await db.user.findUniqueOrThrow({ where: { id: person.id } });
-    expect(user.fullName).toBe('ريم خالد العتيبي');
-    expect(user.searchName).toBe(normalizeForSearch('ريم خالد العتيبي'));
+    expect(user.fullName).toBe('ريم خالد');
+    expect(user.searchName).toBe(normalizeForSearch('ريم خالد'));
     expect(user.registeredAt).not.toBeNull();
     // Same account (memberships kept), one per address.
     expect(await db.user.count({ where: { uniEmail: person.uniEmail } })).toBe(1);
@@ -144,6 +145,30 @@ describe('after a correct code', () => {
     expect((await auth.me({ session: fresh })).status).toBe(200);
     // The incomplete session's token was replaced.
     expect((await auth.me({ session })).status).toBe(401);
+  });
+
+  it('refuses to change the stored name at the confirm step', async () => {
+    const person = await addedByAdmin('ريم خالد');
+    const { session } = await signIn(person.uniEmail);
+
+    const refused = await auth.completeName('ريم خالد العتيبي', { session });
+    expect(refused.status).toBe(422);
+    const error = await errorOf(refused);
+    expect(error.issues?.map((issue) => [issue.path.join('.'), issue.code])).toEqual([
+      ['body.fullName', 'name_mismatch'],
+    ]);
+
+    // Nothing was registered and the session is still waiting for the confirmation.
+    const user = await db.user.findUniqueOrThrow({ where: { id: person.id } });
+    expect(user).toMatchObject({ fullName: 'ريم خالد', registeredAt: null });
+    expect((await auth.me({ session })).status).toBe(401);
+    expect(await (await auth.session({ session })).json()).toEqual({
+      step: 'confirm_name',
+      fullName: 'ريم خالد',
+    });
+
+    // The name the club has on record still signs them in.
+    expect((await auth.completeName('ريم خالد', { session })).status).toBe(200);
   });
 
   it('asks a new person for their name and creates the account only then', async () => {
