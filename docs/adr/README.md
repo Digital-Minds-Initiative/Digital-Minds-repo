@@ -14,12 +14,13 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0008](0008-design-tokens-and-theming.md)         | Three-layer tokens; semantic tokens are the Tailwind theme        | Accepted                        |
 | [0009](0009-demo-dataset-and-mocks.md)            | One demo dataset for the seed and the mocks                       | Accepted                        |
 | [0010](0010-toolchain-versions.md)                | Toolchain versions and the ones we deliberately held back         | Accepted                        |
-| [0011](0011-modules-own-their-policies.md)        | Modules own their policies; authz keeps the role predicates       | Accepted                        |
+| [0011](0011-modules-own-their-policies.md)        | Modules own their policies; authz keeps the role predicates       | Accepted (members: see 0017)    |
 | [0012](0012-member-profiles-per-club.md)          | Contact and study details per club; only the identity is shared   | Accepted                        |
 | [0013](0013-server-client-shared-layout.md)       | Separate server, client and shared code at the top of `src`       | Accepted                        |
-| [0014](0014-email-otp-sign-in.md)                 | Sign in with a one-time code emailed to the university address    | Accepted                        |
+| [0014](0014-email-otp-sign-in.md)                 | Sign in with a one-time code emailed to the university address    | Accepted (name step: see 0017)  |
 | [0015](0015-archive-instead-of-delete.md)         | Archive clubs and committees instead of deleting them             | Accepted                        |
 | [0016](0016-membership-type-deletes-and-order.md) | Membership types: delete with a destination, order in one request | Accepted                        |
+| [0017](0017-member-permissions.md)                | Officers run the membership; a removed member is restored         | Accepted                        |
 
 ## Writing a new ADR
 

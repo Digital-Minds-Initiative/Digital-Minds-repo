@@ -4,6 +4,16 @@
  * unit-tested and reused.
  */
 
+/**
+ * How an address is written, wherever it is stored or compared. Addresses are kept lower-case
+ * (a CHECK constraint on `User.uniEmail` enforces it), and they identify a person: sign-in,
+ * adding a member and the uniqueness constraint must all agree on the same spelling. Applied by
+ * the contract fields and again by the services that store one.
+ */
+export function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 /** "uqu.edu.sa, @Other.edu" → ["uqu.edu.sa", "other.edu"] */
 export function parseEmailDomains(raw: string): string[] {
   return raw

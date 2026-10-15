@@ -6,9 +6,9 @@ import type {
   CommitteeScope,
   MemberScope,
 } from '@/server/authz';
-import { db } from '@/server/db/client';
+import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
-import { NotFoundError } from '@/server/errors';
+import { ConflictError, NotFoundError } from '@/server/errors';
 import type {
   ClubRole,
   CreateMemberBody,
@@ -237,6 +237,13 @@ export async function findAccountByUniEmail(
   };
 }
 
+/** 409 for someone who is already an active member of the club, with the id the UI needs. */
+export function alreadyInClub(memberId: string): ConflictError {
+  return new ConflictError('The person is already a member of this club.', 'already_in_club', {
+    memberId,
+  });
+}
+
 // ─── Writes ──────────────────────────────────────────────────
 
 /** What adding a member writes through: the club, its committees, and an existing membership. */
@@ -251,17 +258,19 @@ export interface NewMemberScopes {
  * committees — in one transaction. The service has authorised every part; the scopes are checked
  * again here, so a service bug cannot write into a club, committee or membership out of reach.
  * The profile is this club's copy: written on a new or restored membership, never on the account.
+ *
+ * The transaction owns the "already a member" rule, the way the type deletes do (ADR 0016): it
+ * reads the membership and decides inside the same transaction that writes, so two requests for
+ * the same person cannot both get past the check.
  */
 export async function saveNewMember(
   scopes: NewMemberScopes,
   input: {
     person: CreateMemberBody['person'];
     profile: CreateMemberBody['profile'];
-    existing: { userId: string; membership: { id: string; removed: boolean } | null } | null;
+    existing: { userId: string } | null;
     clubId: string;
     membershipTypeId: string;
-    /** Change the type of an existing membership (only when the caller chose one explicitly). */
-    overrideType: boolean;
     committeeIds: string[];
   },
 ): Promise<string> {
@@ -286,7 +295,13 @@ export async function saveNewMember(
         })
       ).id;
 
-    const current = input.existing?.membership ?? null;
+    // One membership per person and club (unique constraint), so this is the whole history of
+    // this person in this club: nothing, a live membership, or a removed one to restore.
+    const current = await tx.membership.findUnique({
+      where: { userId_clubId: { userId, clubId: input.clubId } },
+      select: { id: true, removedAt: true },
+    });
+
     let membershipId: string;
     if (!current) {
       membershipId = (
@@ -301,31 +316,31 @@ export async function saveNewMember(
         })
       ).id;
     } else {
-      membershipId = current.id;
-      const changes = current.removed
-        ? {
-            ...input.profile,
-            removedAt: null,
-            removedById: null,
-            role: 'MEMBER' as const,
-            membershipTypeId: input.membershipTypeId,
-          }
-        : input.overrideType
-          ? { membershipTypeId: input.membershipTypeId }
-          : null;
-      // Even when nothing on it changes, the membership must be one the actor can reach.
-      const reachable = { AND: [scopes.members, { id: current.id }] };
-      const count = changes
-        ? (await tx.membership.updateMany({ where: reachable, data: changes })).count
-        : await tx.membership.count({ where: reachable });
+      if (!current.removedAt) throw alreadyInClub(current.id);
+      // Restored, not recreated: the membership keeps its id, so its committee memberships and
+      // their points history come back with it. The role is reset, so a removed officer who is
+      // added again is an ordinary member until someone appoints them.
+      const { count } = await tx.membership.updateMany({
+        where: { AND: [scopes.members, { id: current.id, removedAt: { not: null } }] },
+        data: {
+          ...input.profile,
+          removedAt: null,
+          removedById: null,
+          role: 'MEMBER',
+          membershipTypeId: input.membershipTypeId,
+        },
+      });
       if (count !== 1) throw new NotFoundError('Member');
+      membershipId = current.id;
     }
 
     for (const committeeId of input.committeeIds) {
       await tx.committeeMembership.upsert({
         where: { membershipId_committeeId: { membershipId, committeeId } },
         create: { membershipId, committeeId, clubId: input.clubId },
-        update: { removedAt: null },
+        // Restores a removed committee membership with its points; its role is reset for the
+        // same reason as above (removing already resets it — this keeps that true from here too).
+        update: { removedAt: null, role: 'MEMBER' },
       });
     }
     return membershipId;
@@ -335,11 +350,17 @@ export async function saveNewMember(
 /**
  * The name and university email are on the shared account; contact and study details and the
  * type are this club's membership (ADR 0012). Both updates only match rows inside the scope.
+ *
+ * `alsoInTransaction` is how another module's write joins this one — the members module never
+ * writes a table it does not own, so ending the person's sessions after an email change is the
+ * auth module's `endUserSessions`, called here with this transaction's client
+ * (docs/adr/0017-member-permissions.md).
  */
 export async function saveMemberChanges(
   scope: MemberScope,
   memberId: string,
   changes: UpdateMemberBody,
+  alsoInTransaction?: (tx: TransactionClient) => Promise<unknown>,
 ): Promise<void> {
   const { uniEmail, fullName, ...clubFields } = changes;
   const account: Prisma.UserUpdateManyMutationInput = {
@@ -361,6 +382,8 @@ export async function saveMemberChanges(
       });
       if (count !== 1) throw new NotFoundError('Member');
     }
+    // After the scoped updates: it only runs when they matched a row the actor can reach.
+    if (alsoInTransaction) await alsoInTransaction(tx);
   });
 }
 
@@ -423,7 +446,9 @@ export async function addToCommittee(
         committeeId: target.committeeId,
         clubId: target.clubId,
       },
-      update: { removedAt: null },
+      // The restored row keeps its points but never its role: whoever comes back to a committee
+      // comes back as a member, and leading it again is an appointment of its own.
+      update: { removedAt: null, role: 'MEMBER' },
     });
   });
 }

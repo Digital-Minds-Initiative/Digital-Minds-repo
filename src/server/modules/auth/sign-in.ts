@@ -16,6 +16,7 @@ import {
   type SessionState,
   type SignInStep,
 } from '@/shared/contracts/auth';
+import { normalizePersonName } from '@/shared/lib/names';
 
 import {
   digestsMatch,
@@ -161,6 +162,11 @@ export async function verifyOtp(
 /**
  * The name step after `confirm_name` or `enter_name`: stores the name, marks the account
  * registered (creating it for a new person) and replaces the session with a full one.
+ *
+ * `confirm_name` only confirms. The name of someone an admin added belongs to their club's
+ * records, so this step cannot change it: a different name is refused (422 `name_mismatch`) and
+ * the stored one is what gets registered. Only a `enter_name` session — a person with no account
+ * yet — sets the name here, once (docs/adr/0017-member-permissions.md).
  */
 export async function completeName(
   body: { fullName: string },
@@ -172,6 +178,19 @@ export async function completeName(
   if (session.user?.registeredAt) {
     throw new ConflictError('The account is already registered.', 'already_registered');
   }
+  const stored = session.user?.fullName;
+  if (stored !== undefined && normalizePersonName(body.fullName) !== stored) {
+    throw new ValidationError(
+      [
+        {
+          path: ['body', 'fullName'],
+          code: 'name_mismatch',
+          message: 'name_mismatch',
+        },
+      ],
+      'This step confirms the stored name; it cannot change it.',
+    );
+  }
 
   const token = generateSessionToken();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
@@ -179,7 +198,7 @@ export async function completeName(
     sessionId: session.id,
     email: session.email,
     userId: session.user?.id ?? null,
-    fullName: body.fullName,
+    fullName: stored ?? normalizePersonName(body.fullName),
     now,
     newSession: { tokenHash: sessionTokenHash(token), expiresAt },
   });

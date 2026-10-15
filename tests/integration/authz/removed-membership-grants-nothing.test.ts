@@ -94,8 +94,7 @@ describe('removed memberships', () => {
       expect(formerLead.memberships).toEqual([]);
       expect((await listMembers(formerLead, membersQuery())).total).toBe(0);
 
-      const readded = await createMember(officerA, {
-        clubId: s.clubA.id,
+      const readded = await createMember(officerA, s.clubA.id, {
         person: { uniEmail: s.users.coLeadA1.uniEmail, fullName: s.users.coLeadA1.fullName },
         profile: {},
         committeeIds: [s.committees.a1.id],

@@ -95,8 +95,7 @@ describe('archiving', () => {
   describe('an archived club accepts nothing new', () => {
     it('refuses a new member', async () => {
       await expectConflict(
-        createMember(admin, {
-          clubId: a.archivedClub.id,
+        createMember(admin, a.archivedClub.id, {
           person: newPerson(),
           profile: {},
           committeeIds: [],
@@ -149,8 +148,7 @@ describe('archiving', () => {
   describe('an archived committee accepts nothing new', () => {
     it('refuses a new club member placed into it', async () => {
       await expectConflict(
-        createMember(admin, {
-          clubId: s.clubA.id,
+        createMember(admin, s.clubA.id, {
           person: newPerson(),
           profile: {},
           committeeIds: [a.archivedCommittee.id],

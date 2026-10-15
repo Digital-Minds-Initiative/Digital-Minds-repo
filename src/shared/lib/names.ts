@@ -14,3 +14,15 @@
 export function normalizeEntityName(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
+
+/**
+ * A person's full name. Names are not unique, so this is only about how the same name is written:
+ * pasted from a spreadsheet or typed on a phone it arrives as "أحمد  علي " or with a tab in it,
+ * and it is then displayed, searched and — at the `confirm_name` sign-in step — compared.
+ *
+ * Both `personNameSchema` and the services that store a name apply it, so a service called
+ * directly (a script, the CSV import) cannot store a differently spaced spelling either.
+ */
+export function normalizePersonName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}

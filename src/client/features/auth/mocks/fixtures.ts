@@ -77,11 +77,14 @@ export function mockSignInStep(db: MockDb, email: string): SignInStep {
     : { step: 'confirm_name', fullName: user.fullName };
 }
 
-/** The name step: registers the demo persona, or adds a new person with no memberships. */
+/**
+ * The name step: registers the demo persona, or adds a new person with no memberships. An
+ * admin-added persona keeps the stored name — the confirm step cannot change it (the handler
+ * refuses a different one first).
+ */
 export function registerMockUser(db: MockDb, email: string, fullName: string): void {
   const existing = db.users.find((candidate) => candidate.uniEmail === email);
   if (existing) {
-    existing.fullName = fullName;
     existing.registered = true;
     return;
   }

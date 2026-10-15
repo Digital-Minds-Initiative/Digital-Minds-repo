@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 import { isFutureDate } from '@/shared/lib/dates';
-import { normalizeEntityName } from '@/shared/lib/names';
+import { normalizeEmail } from '@/shared/lib/email-domains';
+import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 
 /*
@@ -30,9 +31,9 @@ export const pastOrTodayDateSchema = isoDateSchema.refine((value) => !isFutureDa
  * ALLOWED_EMAIL_DOMAINS setting, so that check runs on the server (`assertUniversityEmail` in
  * src/server/email-policy.ts).
  */
-export const universityEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
+export const universityEmailSchema = z.string().transform(normalizeEmail).pipe(z.email().max(254));
 
-export const personalEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
+export const personalEmailSchema = z.string().transform(normalizeEmail).pipe(z.email().max(254));
 
 /** Stored as E.164 (`+9665XXXXXXXX`); accepts the local formats people type. */
 export const phoneSchema = z
@@ -41,10 +42,10 @@ export const phoneSchema = z
   .refine((value) => normalizePhone(value) !== null, { message: 'invalid_phone' })
   .transform((value) => normalizePhone(value) ?? value);
 
+/** A person's full name, spacing normalised with `normalizePersonName` (applied again in services). */
 export const personNameSchema = z
   .string()
-  .trim()
-  .transform((value) => value.replace(/\s+/g, ' '))
+  .transform(normalizePersonName)
   .pipe(z.string().min(2).max(120));
 
 /** Academic level (المستوى). */

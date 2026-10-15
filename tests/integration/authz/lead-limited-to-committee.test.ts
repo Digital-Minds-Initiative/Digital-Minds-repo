@@ -27,7 +27,11 @@ import {
 } from '@tests/factories/scenario';
 import { expectForbidden, expectNotFound } from '@tests/utils/assertions';
 
-/** A committee lead cannot read or modify another committee's members or points. */
+/**
+ * A committee lead reads the members of the committees they lead and runs their points. On the
+ * membership itself they may change only the membership type
+ * (docs/adr/0017-member-permissions.md); everything else belongs to the club's officers.
+ */
 describe('committee lead scope', () => {
   let s: Scenario;
   let leadA1: Actor;
@@ -63,22 +67,23 @@ describe('committee lead scope', () => {
   it('cannot read or modify another committee’s members', async () => {
     await expectNotFound(getMember(leadA1, s.memberships.memberA2));
     await expectNotFound(
-      updateMember(leadA1, s.memberships.memberA2, { fullName: 'تعديل غير مسموح' }),
+      updateMember(leadA1, s.memberships.memberA2, { membershipTypeId: s.types.a2 }),
     );
     await expectNotFound(
       removeMemberFromCommittee(leadA1, s.memberships.memberA2, s.committees.a2.id),
     );
     await expectNotFound(addMemberToCommittee(leadA1, s.memberships.memberA1, s.committees.a2.id));
+    // The committee is outside the lead's scope, so it does not exist for them — checked before
+    // the role, which would otherwise answer 403.
     await expectNotFound(
-      createMember(leadA1, {
-        clubId: s.clubA.id,
+      createMember(leadA1, s.clubA.id, {
         person: { uniEmail: 's900000777@st.uqu.edu.sa', fullName: 'شخص جديد' },
         profile: {},
         committeeIds: [s.committees.a2.id],
       }),
     );
-    const row = await db.user.findUniqueOrThrow({ where: { id: s.users.memberA2.id } });
-    expect(row.fullName).toBe('عضو أ2');
+    const row = await db.membership.findUniqueOrThrow({ where: { id: s.memberships.memberA2 } });
+    expect(row.membershipTypeId).toBe(s.types.a);
   });
 
   it('cannot read or modify another committee’s points', async () => {
@@ -111,24 +116,56 @@ describe('committee lead scope', () => {
     ).resolves.toMatchObject({ amount: 20, status: 'ACTIVE' });
   });
 
-  it('is refused club-level actions on members it can see (403)', async () => {
-    await expectForbidden(removeMember(leadA1, s.memberships.memberA1), 'club_management_required');
+  it('is refused every membership write on the members it can see (403)', async () => {
+    const before = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.memberA1 },
+      include: { user: true, committeeMemberships: true },
+    });
+
     await expectForbidden(
-      updateMember(leadA1, s.memberships.memberA1, { membershipTypeId: s.types.a2 }),
+      createMember(leadA1, s.clubA.id, {
+        person: { uniEmail: 's900000555@st.uqu.edu.sa', fullName: 'طالب جديد' },
+        profile: {},
+        committeeIds: [s.committees.a1.id],
+      }),
+      'club_management_required',
+    );
+    await expectForbidden(
+      updateMember(leadA1, s.memberships.memberA1, { major: 'علوم الحاسب' }),
+      'club_management_required',
+    );
+    await expectForbidden(
+      updateMember(leadA1, s.memberships.memberA1, { fullName: 'اسم جديد' }),
+      'club_management_required',
+    );
+    await expectForbidden(
+      updateMember(leadA1, s.memberships.memberA1, { uniEmail: 's900000556@st.uqu.edu.sa' }),
+      'club_management_required',
+    );
+    await expectForbidden(
+      removeMemberFromCommittee(leadA1, s.memberships.memberA1, s.committees.a1.id),
       'club_management_required',
     );
     await expectForbidden(
       removeMemberFromCommittee(leadA1, s.memberships.coLeadA1, s.committees.a1.id),
-      'removing_a_lead_requires_officer',
+      'club_management_required',
     );
+    await expectForbidden(removeMember(leadA1, s.memberships.memberA1), 'club_management_required');
+
+    // Nothing was written, and no account was created for the person they tried to add.
+    const after = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.memberA1 },
+      include: { user: true, committeeMemberships: true },
+    });
+    expect(after).toEqual(before);
+    expect(await db.user.count({ where: { uniEmail: 's900000555@st.uqu.edu.sa' } })).toBe(0);
   });
 
-  it('manages its own committee: profiles, points, adding and removing members', async () => {
+  it('may change the membership type of a member of its committee, and its points', async () => {
     await expect(
-      updateMember(leadA1, s.memberships.memberA1, { major: 'علوم الحاسب' }),
-    ).resolves.toMatchObject({
-      profile: { major: 'علوم الحاسب' },
-    });
+      updateMember(leadA1, s.memberships.memberA1, { membershipTypeId: s.types.a2 }),
+    ).resolves.toMatchObject({ membershipType: { id: s.types.a2 } });
+
     const transaction = await createPointTransaction(leadA1, {
       memberId: s.memberships.memberA1,
       committeeId: s.committees.a1.id,
@@ -139,54 +176,5 @@ describe('committee lead scope', () => {
     await expect(
       updatePointTransaction(leadA1, transaction.id, { amount: 20 }),
     ).resolves.toMatchObject({ amount: 20 });
-
-    // Adds a brand-new person straight into their committee.
-    const added = await createMember(leadA1, {
-      clubId: s.clubA.id,
-      person: { uniEmail: 's900000555@st.uqu.edu.sa', fullName: 'طالب جديد' },
-      profile: {},
-      committeeIds: [s.committees.a1.id],
-    });
-    expect(added.committees.map((committee) => committee.id)).toEqual([s.committees.a1.id]);
-
-    // …and removes them from the committee (not from the club).
-    await removeMemberFromCommittee(leadA1, added.id, s.committees.a1.id);
-    const membership = await db.membership.findUniqueOrThrow({ where: { id: added.id } });
-    expect(membership.removedAt).toBeNull();
-    await expectNotFound(getMember(leadA1, added.id));
-  });
-
-  it('cannot pull club members it cannot see into its committee by email (404)', async () => {
-    // memberA2 is only in A2; removedOfficer was removed from the club by an officer.
-    for (const person of [s.users.memberA2, s.users.removedOfficer]) {
-      await expectNotFound(
-        createMember(leadA1, {
-          clubId: s.clubA.id,
-          person: { uniEmail: person.uniEmail, fullName: person.fullName },
-          profile: {},
-          committeeIds: [s.committees.a1.id],
-        }),
-      );
-    }
-    expect(
-      await db.committeeMembership.count({
-        where: { membershipId: s.memberships.memberA2, committeeId: s.committees.a1.id },
-      }),
-    ).toBe(0);
-    const removed = await db.membership.findUniqueOrThrow({
-      where: { id: s.memberships.removedOfficer },
-    });
-    expect(removed.removedAt).not.toBeNull();
-    await expectNotFound(getMember(leadA1, s.memberships.memberA2));
-  });
-
-  it('may "add" someone already in its committee (nothing changes)', async () => {
-    const added = await createMember(leadA1, {
-      clubId: s.clubA.id,
-      person: { uniEmail: s.users.memberA1.uniEmail, fullName: s.users.memberA1.fullName },
-      profile: {},
-      committeeIds: [s.committees.a1.id],
-    });
-    expect(added.id).toBe(s.memberships.memberA1);
   });
 });

@@ -76,8 +76,7 @@ describe('club officer scope', () => {
 
   it('cannot add people to another club', async () => {
     await expectNotFound(
-      createMember(officerA, {
-        clubId: s.clubB.id,
+      createMember(officerA, s.clubB.id, {
         person: { uniEmail: 's900000999@st.uqu.edu.sa', fullName: 'شخص جديد' },
         profile: {},
         committeeIds: [],

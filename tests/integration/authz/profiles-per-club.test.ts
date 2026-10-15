@@ -60,11 +60,10 @@ describe('member profiles are per club', () => {
   });
 
   it("linking someone from another club neither shows nor changes that club's copy", async () => {
-    const leadA1 = await actorFor(s.users.leadA1.id);
+    const officerA = await actorFor(s.users.officerA.id);
     const before = await db.membership.findUniqueOrThrow({ where: { id: s.memberships.memberB1 } });
 
-    const added = await createMember(leadA1, {
-      clubId: s.clubA.id,
+    const added = await createMember(officerA, s.clubA.id, {
       person: { uniEmail: s.users.memberB1.uniEmail, fullName: 'اسم آخر' },
       profile: { college: 'كلية الهندسة' },
       committeeIds: [s.committees.a1.id],
@@ -83,10 +82,9 @@ describe('member profiles are per club', () => {
   });
 
   it('answers a new email and an existing account in the same shape', async () => {
-    const leadA1 = await actorFor(s.users.leadA1.id);
+    const officerA = await actorFor(s.users.officerA.id);
     const add = (uniEmail: string) =>
-      createMember(leadA1, {
-        clubId: s.clubA.id,
+      createMember(officerA, s.clubA.id, {
         person: { uniEmail, fullName: 'طالب' },
         profile: {},
         committeeIds: [s.committees.a1.id],

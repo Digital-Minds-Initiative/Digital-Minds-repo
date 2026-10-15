@@ -62,15 +62,22 @@ describe('sign-in mocks', () => {
   it('ask the unregistered persona to confirm their name, then sign them in', async () => {
     const { client } = browser();
     const email = unregistered?.uniEmail ?? '';
+    const stored = unregistered?.fullName ?? '';
     expect(await client.request(verifyOtpEndpoint, { body: { email, code: '١٢٣ ٤٥٦' } })).toEqual({
       step: 'confirm_name',
-      fullName: unregistered?.fullName,
+      fullName: stored,
     });
     await expect(client.request(meEndpoint, {})).rejects.toMatchObject({ status: 401 });
-    expect(await client.request(completeNameEndpoint, { body: { fullName: 'اسم مصحح' } })).toEqual({
+
+    // The step only confirms: the name an admin stored cannot be changed here.
+    await expect(
+      client.request(completeNameEndpoint, { body: { fullName: 'اسم مصحح' } }),
+    ).rejects.toMatchObject({ status: 422 });
+
+    expect(await client.request(completeNameEndpoint, { body: { fullName: stored } })).toEqual({
       step: 'signed_in',
     });
-    expect((await client.request(meEndpoint, {})).user.fullName).toBe('اسم مصحح');
+    expect((await client.request(meEndpoint, {})).user.fullName).toBe(stored);
   });
 
   it('ask a new address for a name', async () => {

@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { ClubScope, CommitteeScope, MemberScope, MembershipTypeScope } from '@/server/authz';
-import { db, type Database } from '@/server/db/client';
+import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
 import type { ClubCommitteeRef, ClubRef } from '@/shared/contracts/clubs';
@@ -13,9 +13,6 @@ import type { ClubCommitteeRef, ClubRef } from '@/shared/contracts/clubs';
  * Clubs themselves are the root of the tree: creating one has no parent row to check, and only
  * full admins get that far (policies.ts), so `insertClub` takes no scope.
  */
-
-/** The client inside `db.$transaction(…)`: the extended client minus what a transaction forbids. */
-type Tx = Omit<Database, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
 // ─── Read models ─────────────────────────────────────────────
 
@@ -339,7 +336,7 @@ export async function membershipTypeNameTaken(
  * it is created with one (`insertClub`) and its last one can never be deleted. Two transactions
  * therefore always contend over at least one row.
  */
-async function lockMembershipTypes(tx: Tx, clubId: string): Promise<string[]> {
+async function lockMembershipTypes(tx: TransactionClient, clubId: string): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
     SELECT "id" FROM "MembershipType" WHERE "clubId" = ${clubId}::uuid ORDER BY "id" FOR UPDATE
   `;
@@ -470,7 +467,11 @@ export async function reorderMembershipTypes(
 }
 
 /** Rewrites the orders of a club's types as 0, 1, 2… keeping their current sequence. */
-async function renumber(tx: Tx, scope: MembershipTypeScope, clubId: string): Promise<void> {
+async function renumber(
+  tx: TransactionClient,
+  scope: MembershipTypeScope,
+  clubId: string,
+): Promise<void> {
   const rows = await tx.membershipType.findMany({
     where: { AND: [scope, { clubId }] },
     select: { id: true, order: true },

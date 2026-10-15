@@ -14,16 +14,24 @@ export abstract class AppError extends Error {
   readonly issues?: ValidationIssue[];
   /** Sent as `error.retryAfterSeconds` and the `Retry-After` header. */
   readonly retryAfterSeconds?: number;
+  /** Sent as `error.details`: ids the client needs to act on the error, never personal data. */
+  readonly details?: Record<string, string>;
 
   constructor(
     message: string,
-    options?: { reason?: string; issues?: ValidationIssue[]; retryAfterSeconds?: number },
+    options?: {
+      reason?: string;
+      issues?: ValidationIssue[];
+      retryAfterSeconds?: number;
+      details?: Record<string, string>;
+    },
   ) {
     super(message);
     this.name = new.target.name;
     this.reason = options?.reason;
     this.issues = options?.issues;
     this.retryAfterSeconds = options?.retryAfterSeconds;
+    this.details = options?.details;
   }
 }
 
@@ -60,11 +68,15 @@ export class NotFoundError extends AppError {
   }
 }
 
+/**
+ * `details` carries the ids a client needs to resolve the conflict — for example the member that
+ * already exists, so the UI can offer to open their profile instead of adding them again.
+ */
 export class ConflictError extends AppError {
   readonly code = 'CONFLICT';
 
-  constructor(message: string, reason: string) {
-    super(message, { reason });
+  constructor(message: string, reason: string, details?: Record<string, string>) {
+    super(message, { reason, details });
   }
 }
 

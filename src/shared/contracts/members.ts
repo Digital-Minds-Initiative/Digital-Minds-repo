@@ -24,15 +24,18 @@ import {
  * A "member" is a person's membership in ONE club. A person in two clubs is two members with
  * the same `user.id`. The member id in URLs is the membership id.
  *
- * Who may do what (enforced in src/server/modules/members/policies.ts):
- *   read members .................... officer: the club · lead: members of their committee
- *   add a person .................... officer: any committees · lead: only into their committee
- *   edit profile fields ............. officer · lead (members of their committee)
- *   change membership type .......... officer
- *   add to / remove from committee .. officer · lead (their committee; not other leads)
+ * Who may do what (enforced in src/server/modules/members/policies.ts, reasoned in
+ * docs/adr/0017-member-permissions.md). Full admins can do everything everywhere:
+ *   read and search members ......... officer: the club · lead: members of their committees
+ *   add a person to the club ........ officer
+ *   edit this club's fields ......... officer        (phone, personal email, college, major, level)
+ *   edit the full name .............. officer        (nobody edits their own)
+ *   edit the university email ....... officer while the person has not registered; after that a
+ *                                     full admin only — and every session of theirs ends
+ *   change membership type .......... officer · lead (members of their committees)
+ *   add to / remove from committee .. officer
  *   remove from the club ............ officer
  *   CSV import ...................... officer
- * Full admins can do everything everywhere.
  */
 
 // ─── Roles ───────────────────────────────────────────────────
@@ -134,13 +137,13 @@ export const getMemberEndpoint = defineEndpoint({
 // ─── Create ──────────────────────────────────────────────────
 
 /** The shared identity, matched by university email. */
-export const newPersonSchema = z.object({
+export const newPersonSchema = z.strictObject({
   uniEmail: universityEmailSchema,
   fullName: personNameSchema,
 });
 
 /** This club's copy of the person's contact and study details. */
-export const newProfileSchema = z.object({
+export const newProfileSchema = z.strictObject({
   personalEmail: personalEmailSchema.optional(),
   phone: phoneSchema.optional(),
   college: shortTextSchema.optional(),
@@ -148,33 +151,34 @@ export const newProfileSchema = z.object({
   level: academicLevelSchema.optional(),
 });
 
-export const createMemberBodySchema = z.object({
-  clubId: idSchema,
+export const createMemberBodySchema = z.strictObject({
   /**
    * A new email creates an unregistered account that the person claims when they sign up; an
    * existing account is linked and keeps its name.
    */
   person: newPersonSchema,
-  /**
-   * Saved when the person joins (or rejoins) this club. For someone already active in the club it
-   * is ignored — edit the member instead.
-   */
+  /** Saved on the membership this club gets — a new one, or the removed one that is restored. */
   profile: newProfileSchema.default({}),
   /** Defaults to the club's first membership type. */
   membershipTypeId: idSchema.optional(),
-  /** Committees to add the person to. A committee lead must pass only their own committee. */
+  /** Committees to add the person to; a removed committee membership is restored with its points. */
   committeeIds: z.array(idSchema).max(20).default([]),
 });
 export type CreateMemberBody = z.output<typeof createMemberBodySchema>;
 
 /**
- * 201 with the member — the same answer whether the email was new, already had an account, or was
- * already in this club, so it never reveals which (docs/adr/0012-member-profiles-per-club.md).
+ * 201 with the member, whether the email was new to the platform or already had an account
+ * elsewhere, so it never reveals which (docs/adr/0012-member-profiles-per-club.md). A person whose
+ * membership in this club was removed is restored with their history.
+ *
+ * Someone already active in this club is a 409 `already_in_club` whose `error.details.memberId`
+ * is that member — nothing is written (docs/adr/0017-member-permissions.md).
  */
 export const createMemberEndpoint = defineEndpoint({
   method: 'POST',
-  path: '/api/v1/members',
+  path: '/api/v1/clubs/:clubId/members',
   access: 'actor',
+  params: z.object({ clubId: idSchema }),
   body: createMemberBodySchema,
   response: memberSchema,
   successStatus: 201,
@@ -183,18 +187,19 @@ export const createMemberEndpoint = defineEndpoint({
 // ─── Update ──────────────────────────────────────────────────
 
 export const updateMemberBodySchema = requireAnyField(
-  z.object({
+  z.strictObject({
     // Shared by every club the person belongs to.
-    /** Only while the person has not registered (409 `uni_email_locked` afterwards). */
+    /** Officers only while the person has not registered; a full admin at any time. */
     uniEmail: universityEmailSchema.optional(),
+    /** Officers and full admins; never the person themselves. */
     fullName: personNameSchema.optional(),
-    // This club's copy only.
+    // This club's copy only (officers and full admins). Null clears the field.
     personalEmail: personalEmailSchema.nullable().optional(),
     phone: phoneSchema.nullable().optional(),
     college: shortTextSchema.nullable().optional(),
     major: shortTextSchema.nullable().optional(),
     level: academicLevelSchema.nullable().optional(),
-    /** Club officers and full admins only. */
+    /** Officers and full admins; also the lead of a committee this member is in. */
     membershipTypeId: idSchema.optional(),
   }),
 );
@@ -203,6 +208,11 @@ export type UpdateMemberBody = z.output<typeof updateMemberBodySchema>;
 /**
  * The name and university email are the person's shared account, so editing them shows in every
  * club. Contact and study details change only this club's copy.
+ *
+ * The body is strict: an unknown field is a 422 (`unrecognized_keys`). A field the actor may not
+ * change is a 403 naming the rule, and nothing is written — but only when it would really change
+ * something: a field whose value already equals the stored one (compared after normalising) is
+ * not an edit, so a form that posts every field is not refused over the ones it leaves alone.
  */
 export const updateMemberEndpoint = defineEndpoint({
   method: 'PATCH',
