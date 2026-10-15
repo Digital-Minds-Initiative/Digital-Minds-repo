@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { isFutureDate } from '@/shared/lib/dates';
+import { normalizeEntityName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 
 /*
@@ -51,6 +52,16 @@ export const academicLevelSchema = z.number().int().min(1).max(12);
 
 export const shortTextSchema = z.string().trim().min(1).max(120);
 export const longTextSchema = z.string().trim().min(1).max(1000);
+
+/**
+ * The name of something that must be unique among its siblings (a club, a committee in a club, a
+ * membership type in a club). Normalised with `normalizeEntityName`, which the services apply
+ * again before they compare or store a name.
+ */
+export const entityNameSchema = z
+  .string()
+  .transform(normalizeEntityName)
+  .pipe(z.string().min(1).max(120));
 
 /** For PATCH bodies whose fields are all optional: rejects an update that changes nothing. */
 export function requireAnyField<T extends z.ZodObject>(schema: T) {

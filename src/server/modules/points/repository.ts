@@ -200,6 +200,7 @@ export async function findActiveCommitteeMembership(
   clubId: string;
   committeeId: string;
   committeeArchived: boolean;
+  clubArchived: boolean;
 } | null> {
   const row = await db.committeeMembership.findFirst({
     where: {
@@ -217,7 +218,7 @@ export async function findActiveCommitteeMembership(
       id: true,
       clubId: true,
       committeeId: true,
-      committee: { select: { archivedAt: true } },
+      committee: { select: { archivedAt: true, club: { select: { archivedAt: true } } } },
     },
   });
   return row
@@ -226,6 +227,7 @@ export async function findActiveCommitteeMembership(
         clubId: row.clubId,
         committeeId: row.committeeId,
         committeeArchived: row.committee.archivedAt !== null,
+        clubArchived: row.committee.club.archivedAt !== null,
       }
     : null;
 }

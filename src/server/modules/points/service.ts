@@ -99,6 +99,8 @@ export async function createPointTransaction(
   if (!target) throw new NotFoundError('Committee member');
 
   assertCanWritePoints(actor, { clubId: target.clubId, committeeId: target.committeeId });
+  // An archived club closes all of its committees to new points (ADR 0015).
+  if (target.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
   if (target.committeeArchived) {
     throw new ConflictError('The committee is archived.', 'committee_archived');
   }

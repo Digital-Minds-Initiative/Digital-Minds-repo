@@ -8,6 +8,7 @@ import {
   committeesScope,
   hasDashboardAccess,
   membersScope,
+  membershipTypesScope,
   pointTransactionsScope,
   type Actor,
 } from '../index';
@@ -74,6 +75,7 @@ describe('scopes', () => {
     for (const build of [
       clubsScope,
       committeesScope,
+      membershipTypesScope,
       membersScope,
       committeeMembershipsScope,
       pointTransactionsScope,
@@ -87,6 +89,7 @@ describe('scopes', () => {
       for (const build of [
         clubsScope,
         committeesScope,
+        membershipTypesScope,
         membersScope,
         committeeMembershipsScope,
         pointTransactionsScope,
@@ -110,6 +113,8 @@ describe('scopes', () => {
     // Being a plain member of A2 grants nothing in A2.
     expect(JSON.stringify(committeesScope(leadA1))).not.toContain(A2);
     expect(clubsScope(leadA1)).toEqual({ id: { in: [CLUB_A] } });
+    // Types are club-wide: a lead reads their club's types for filters and dropdowns.
+    expect(membershipTypesScope(leadA1)).toEqual({ clubId: { in: [CLUB_A] } });
   });
 
   it('give a mixed actor officer scope in A and nothing in B', () => {

@@ -18,6 +18,7 @@ type Scope<TWhere> = TWhere & { readonly [scopeBrand]: true };
 export type UserScope = Scope<Prisma.UserWhereInput>;
 export type ClubScope = Scope<Prisma.ClubWhereInput>;
 export type CommitteeScope = Scope<Prisma.CommitteeWhereInput>;
+export type MembershipTypeScope = Scope<Prisma.MembershipTypeWhereInput>;
 export type MemberScope = Scope<Prisma.MembershipWhereInput>;
 export type CommitteeMembershipScope = Scope<Prisma.CommitteeMembershipWhereInput>;
 export type PointTransactionScope = Scope<Prisma.PointTransactionWhereInput>;
@@ -36,11 +37,26 @@ export function selfScope(actor: Actor): UserScope {
   return scope({ id: actor.userId });
 }
 
+/** The clubs an actor can see at all: clubs they manage, and clubs of committees they lead. */
+function visibleClubIds(actor: Actor): string[] {
+  return [...new Set([...officerClubIds(actor), ...clubIdsWithLedCommittees(actor)])];
+}
+
 /** Clubs the actor can see: clubs they manage, and clubs of committees they lead. */
 export function clubsScope(actor: Actor): ClubScope {
   if (actor.isFullAdmin) return scope({});
-  const clubIds = [...new Set([...officerClubIds(actor), ...clubIdsWithLedCommittees(actor)])];
+  const clubIds = visibleClubIds(actor);
   return scope(clubIds.length > 0 ? { id: { in: clubIds } } : noRows());
+}
+
+/**
+ * Membership types of clubs the actor can see. Reading them is club-wide (leads need them for
+ * filters and dropdowns); managing them is an officer action, checked by the clubs policies.
+ */
+export function membershipTypesScope(actor: Actor): MembershipTypeScope {
+  if (actor.isFullAdmin) return scope({});
+  const clubIds = visibleClubIds(actor);
+  return scope(clubIds.length > 0 ? { clubId: { in: clubIds } } : noRows());
 }
 
 /** Committees the actor manages: every committee of their clubs, plus the ones they lead. */

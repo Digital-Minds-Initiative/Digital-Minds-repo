@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   defineEndpoint,
+  entityNameSchema,
   idSchema,
   isoDateSchema,
   isoDateTimeSchema,
@@ -13,18 +14,22 @@ import {
   queryBoolean,
   refinePeriod,
   requireAnyField,
-  shortTextSchema,
 } from '@/shared/contracts/core';
 
 /*
  * Clubs, their committees and membership types, and each committee's public view-only link.
  *
- * Who may do what (policies arrive with the clubs feature, in src/server/modules/clubs/policies.ts):
- *   create / archive clubs ............ full admin
- *   edit club details ................. club officer of that club, full admin
- *   committees, membership types ...... club officer of that club, full admin
- *   rotate / disable a view link ...... club officer of that club, full admin
- *   read a committee's view link ...... also that committee's lead (to share it)
+ * Who may do what (src/server/modules/clubs/policies.ts):
+ *   create / rename / archive / restore a club ......... full admin
+ *   create / rename / archive / restore a committee .... full admin
+ *   membership types of a club ......................... club officer of that club, full admin
+ *   read clubs, committees and membership types ........ anyone, limited to their own scope
+ *   rotate / disable a view link ....................... club officer of that club, full admin
+ *   read a committee's view link ....................... also that committee's lead (to share it)
+ *
+ * Clubs and committees are never deleted — members and points history depend on them. They are
+ * archived instead: hidden from lists by default, closed to new members, committee memberships
+ * and points, but fully readable (docs/adr/0015-archive-instead-of-delete.md).
  */
 
 // ─── References embedded in other modules' responses ─────────
@@ -38,8 +43,24 @@ export const committeeRefSchema = z.object({ id: idSchema, name: z.string() });
 export const clubCommitteeRefSchema = committeeRefSchema.extend({ clubId: idSchema });
 export type ClubCommitteeRef = z.infer<typeof clubCommitteeRefSchema>;
 
+// ─── Shared params and query ─────────────────────────────────
+
+const clubParamsSchema = z.object({ clubId: idSchema });
+const committeeParamsSchema = z.object({ committeeId: idSchema });
+const membershipTypeParamsSchema = z.object({ membershipTypeId: idSchema });
+
+/**
+ * Archived clubs and committees are left out unless asked for. Available to every actor inside
+ * their own scope: an officer whose club was archived must still be able to open it.
+ */
+export const includeArchivedQuerySchema = z.object({
+  includeArchived: queryBoolean().default(false),
+});
+export type IncludeArchivedQuery = z.output<typeof includeArchivedQuerySchema>;
+
 // ─── Clubs ───────────────────────────────────────────────────
 
+/** Fixed at creation: it is the club's stable key and the future `data-brand` value. */
 export const clubSlugSchema = z
   .string()
   .trim()
@@ -53,12 +74,26 @@ export const clubSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  /** Set while the club is archived: read-only, closed to new members and points. */
   archivedAt: isoDateTimeSchema.nullable(),
 });
 export type Club = z.infer<typeof clubSchema>;
 
-const clubParamsSchema = z.object({ clubId: idSchema });
-const includeArchivedQuerySchema = z.object({ includeArchived: queryBoolean().default(false) });
+export const createClubBodySchema = z.object({
+  name: entityNameSchema,
+  slug: clubSlugSchema,
+  description: longTextSchema.optional(),
+});
+export type CreateClubBody = z.output<typeof createClubBodySchema>;
+
+/** Strict: the slug cannot change, so sending it is a 422 instead of being silently dropped. */
+export const updateClubBodySchema = requireAnyField(
+  z.strictObject({
+    name: entityNameSchema.optional(),
+    description: longTextSchema.nullable().optional(),
+  }),
+);
+export type UpdateClubBody = z.output<typeof updateClubBodySchema>;
 
 export const listClubsEndpoint = defineEndpoint({
   method: 'GET',
@@ -68,42 +103,47 @@ export const listClubsEndpoint = defineEndpoint({
   response: z.object({ items: z.array(clubSchema) }),
 });
 
+/**
+ * Full admins only. The club starts with one membership type, `عضو`, so officers can add members
+ * straight away. 409 `name_taken` / `slug_taken` when either is in use.
+ */
 export const createClubEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/clubs',
   access: 'actor',
-  body: z.object({
-    name: shortTextSchema,
-    slug: clubSlugSchema,
-    description: longTextSchema.optional(),
-    /** Initial membership types, in display order (e.g. ["مستفيد", "عضو فعال"]). */
-    membershipTypes: z.array(shortTextSchema).min(1).max(20),
-  }),
+  body: createClubBodySchema,
   response: clubSchema,
   successStatus: 201,
 });
 
-export const getClubEndpoint = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/clubs/:clubId',
-  access: 'actor',
-  params: clubParamsSchema,
-  response: clubSchema,
-});
-
+/** Full admins only. The slug never changes, so sending it is a 422 (`unrecognized_keys`). */
 export const updateClubEndpoint = defineEndpoint({
   method: 'PATCH',
   path: '/api/v1/clubs/:clubId',
   access: 'actor',
   params: clubParamsSchema,
-  body: requireAnyField(
-    z.object({
-      name: shortTextSchema.optional(),
-      description: longTextSchema.nullable().optional(),
-      /** Archiving makes the club read-only; full admins only. */
-      archived: z.boolean().optional(),
-    }),
-  ),
+  body: updateClubBodySchema,
+  response: clubSchema,
+});
+
+/**
+ * Full admins only. Idempotent. Archiving a club also closes all of its committees to new
+ * members and points; nothing is deleted and nothing about the committees changes.
+ */
+export const archiveClubEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/clubs/:clubId/archive',
+  access: 'actor',
+  params: clubParamsSchema,
+  response: clubSchema,
+});
+
+/** Full admins only. Idempotent. Brings the club back exactly as it was. */
+export const restoreClubEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/clubs/:clubId/restore',
+  access: 'actor',
+  params: clubParamsSchema,
   response: clubSchema,
 });
 
@@ -115,13 +155,25 @@ export const committeeSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   archivedAt: isoDateTimeSchema.nullable(),
-  /** Whether a public view-only link is currently enabled. */
-  hasViewLink: z.boolean(),
 });
 export type Committee = z.infer<typeof committeeSchema>;
 
-const committeeParamsSchema = z.object({ committeeId: idSchema });
+export const createCommitteeBodySchema = z.object({
+  name: entityNameSchema,
+  description: longTextSchema.optional(),
+});
+export type CreateCommitteeBody = z.output<typeof createCommitteeBodySchema>;
 
+/** Strict: a committee cannot move to another club, so `clubId` is not accepted. */
+export const updateCommitteeBodySchema = requireAnyField(
+  z.strictObject({
+    name: entityNameSchema.optional(),
+    description: longTextSchema.nullable().optional(),
+  }),
+);
+export type UpdateCommitteeBody = z.output<typeof updateCommitteeBodySchema>;
+
+/** Committees of archived clubs are left out unless `includeArchived` is set. */
 export const listCommitteesEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/clubs/:clubId/committees',
@@ -131,46 +183,87 @@ export const listCommitteesEndpoint = defineEndpoint({
   response: z.object({ items: z.array(committeeSchema) }),
 });
 
+/** Full admins only. 409 `name_taken` when the club already has a committee with that name. */
 export const createCommitteeEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/clubs/:clubId/committees',
   access: 'actor',
   params: clubParamsSchema,
-  body: z.object({ name: shortTextSchema, description: longTextSchema.optional() }),
+  body: createCommitteeBodySchema,
   response: committeeSchema,
   successStatus: 201,
 });
 
+/** Full admins only. A committee cannot move to another club, so `clubId` is not editable. */
 export const updateCommitteeEndpoint = defineEndpoint({
   method: 'PATCH',
   path: '/api/v1/committees/:committeeId',
   access: 'actor',
   params: committeeParamsSchema,
-  body: requireAnyField(
-    z.object({
-      name: shortTextSchema.optional(),
-      description: longTextSchema.nullable().optional(),
-      /** Archived committees are read-only and their public link stops working. */
-      archived: z.boolean().optional(),
-    }),
-  ),
+  body: updateCommitteeBodySchema,
+  response: committeeSchema,
+});
+
+/** Full admins only. Idempotent. */
+export const archiveCommitteeEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/committees/:committeeId/archive',
+  access: 'actor',
+  params: committeeParamsSchema,
+  response: committeeSchema,
+});
+
+/** Full admins only. Idempotent. 409 `club_archived` while the club itself is archived. */
+export const restoreCommitteeEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/committees/:committeeId/restore',
+  access: 'actor',
+  params: committeeParamsSchema,
   response: committeeSchema,
 });
 
 // ─── Membership types ────────────────────────────────────────
 // Descriptive levels defined and ordered by each club. They never grant permissions.
+// Managed by that club's officers and full admins; committee leads may only read them.
+
+/**
+ * The membership type every new club starts with, so its officers can add members before they
+ * have defined their own levels. Created with the club (`POST /api/v1/clubs`).
+ */
+export const DEFAULT_MEMBERSHIP_TYPE_NAME = 'عضو';
 
 export const membershipTypeSchema = z.object({
   id: idSchema,
   clubId: idSchema,
   name: z.string(),
+  /** Display order inside the club, ascending and gapless (0, 1, 2…). */
   order: z.number().int().min(0),
-  /** Active members currently holding this type. */
-  memberCount: z.number().int().min(0),
+  /** Members currently holding this type. Removed memberships are not counted. */
+  activeMemberCount: z.number().int().min(0),
+  /**
+   * Whether any membership still references the type — including removed ones, which keep their
+   * type for history. Deleting a type in use needs `moveMembersTo`.
+   */
+  inUse: z.boolean(),
 });
 export type MembershipType = z.infer<typeof membershipTypeSchema>;
 
-const membershipTypeParamsSchema = z.object({ membershipTypeId: idSchema });
+/** The only editable field; creating and renaming take the same body. */
+export const membershipTypeBodySchema = z.strictObject({ name: entityNameSchema });
+export type CreateMembershipTypeBody = z.output<typeof membershipTypeBodySchema>;
+export type UpdateMembershipTypeBody = z.output<typeof membershipTypeBodySchema>;
+
+export const deleteMembershipTypeQuerySchema = z.object({ moveMembersTo: idSchema.optional() });
+export type DeleteMembershipTypeQuery = z.output<typeof deleteMembershipTypeQuerySchema>;
+
+export const reorderMembershipTypesBodySchema = z.object({
+  ids: z
+    .array(idSchema)
+    .min(1)
+    .max(50)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'duplicate_ids' }),
+});
+export type ReorderMembershipTypesBody = z.output<typeof reorderMembershipTypesBodySchema>;
 
 export const listMembershipTypesEndpoint = defineEndpoint({
   method: 'GET',
@@ -180,13 +273,13 @@ export const listMembershipTypesEndpoint = defineEndpoint({
   response: z.object({ items: z.array(membershipTypeSchema) }),
 });
 
-/** Adds a type at the end of the club's order. */
+/** Added at the end of the club's order. 409 `name_taken` within the club. */
 export const createMembershipTypeEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/clubs/:clubId/membership-types',
   access: 'actor',
   params: clubParamsSchema,
-  body: z.object({ name: shortTextSchema }),
+  body: membershipTypeBodySchema,
   response: membershipTypeSchema,
   successStatus: 201,
 });
@@ -196,36 +289,47 @@ export const updateMembershipTypeEndpoint = defineEndpoint({
   path: '/api/v1/membership-types/:membershipTypeId',
   access: 'actor',
   params: membershipTypeParamsSchema,
-  body: z.object({ name: shortTextSchema }),
+  body: membershipTypeBodySchema,
   response: membershipTypeSchema,
 });
 
-/** 409 `membership_type_in_use` while any membership (including removed ones) still uses it. */
+/**
+ * Deletes the type. Unlike clubs and committees, membership types carry no history of their own,
+ * so they can go — but no membership may be left without one:
+ *
+ * - unused (`inUse: false`) → deleted;
+ * - in use → `moveMembersTo` must name another type of the same club; the memberships move and
+ *   the type is deleted in one transaction. Without it: 409 `membership_type_in_use`;
+ * - the club's last type → 409 `last_membership_type`, always.
+ *
+ * `moveMembersTo` from another club is a 422 (`membership_type_not_in_club`).
+ */
 export const deleteMembershipTypeEndpoint = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/membership-types/:membershipTypeId',
   access: 'actor',
   params: membershipTypeParamsSchema,
+  query: deleteMembershipTypeQuerySchema,
   response: null,
 });
 
-/** Sets the full display order. `ids` must list every type of the club exactly once. */
+/**
+ * Sets the whole display order in one transaction. `ids` must list every membership type of the
+ * club exactly once: a missing id, an extra one or another club's id is a 422 `order_mismatch`,
+ * duplicates are a 422 `duplicate_ids`. Concurrent reorders are serialised, so the stored order
+ * is always one of the requested ones — never a mix.
+ */
 export const reorderMembershipTypesEndpoint = defineEndpoint({
   method: 'PUT',
   path: '/api/v1/clubs/:clubId/membership-types/order',
   access: 'actor',
   params: clubParamsSchema,
-  body: z.object({
-    ids: z
-      .array(idSchema)
-      .min(1)
-      .max(50)
-      .refine((ids) => new Set(ids).size === ids.length, { message: 'duplicate_ids' }),
-  }),
+  body: reorderMembershipTypesBodySchema,
   response: z.object({ items: z.array(membershipTypeSchema) }),
 });
 
 // ─── Committee view-only link ────────────────────────────────
+// Draft for task 10 (the committee view link and its token). No routes yet.
 
 /** 32 URL-safe characters (192 random bits). */
 export const viewTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{32}$/);
@@ -263,7 +367,7 @@ export const disableCommitteeViewLinkEndpoint = defineEndpoint({
 });
 
 // ─── Public committee view (no login) ────────────────────────
-// Members search their own name and read their points history.
+// Draft for task 10. Members search their own name and read their points history.
 // NEVER add contact data (phone, emails) or internal user ids to these schemas: responses are
 // parsed through them, so anything not listed here is stripped before it leaves the server.
 

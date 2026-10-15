@@ -184,15 +184,23 @@ export async function findManageableCommittees(
   return rows.map((row) => ({ id: row.id, archived: row.archivedAt !== null }));
 }
 
+/** An archived club closes all of its committees, so its state travels with the committee. */
 export async function findCommitteeForMember(
   scope: CommitteeScope,
   committeeId: string,
-): Promise<{ id: string; clubId: string; archived: boolean } | null> {
+): Promise<{ id: string; clubId: string; archived: boolean; clubArchived: boolean } | null> {
   const row = await db.committee.findFirst({
     where: { AND: [scope, { id: committeeId }] },
-    select: { id: true, clubId: true, archivedAt: true },
+    select: { id: true, clubId: true, archivedAt: true, club: { select: { archivedAt: true } } },
   });
-  return row ? { id: row.id, clubId: row.clubId, archived: row.archivedAt !== null } : null;
+  return row
+    ? {
+        id: row.id,
+        clubId: row.clubId,
+        archived: row.archivedAt !== null,
+        clubArchived: row.club.archivedAt !== null,
+      }
+    : null;
 }
 
 export async function membershipTypeBelongsToClub(
