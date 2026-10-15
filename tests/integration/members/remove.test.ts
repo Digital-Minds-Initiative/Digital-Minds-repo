@@ -152,6 +152,27 @@ describe('removing a member', () => {
       ).toMatchObject({ balance: 10 });
     });
 
+    it('brings someone back as a member, never as the lead they once were', async () => {
+      // staleLead is an active member of club A whose A1 lead row is removed (see the scenario).
+      const before = await db.committeeMembership.findFirstOrThrow({
+        where: { membershipId: s.memberships.staleLead, committeeId: s.committees.a1.id },
+      });
+      expect(before).toMatchObject({ role: 'LEAD', removedAt: expect.any(Date) });
+
+      const back = await addMemberToCommittee(
+        officerA,
+        s.memberships.staleLead,
+        s.committees.a1.id,
+      );
+      expect(back.committees).toEqual([
+        expect.objectContaining({ id: s.committees.a1.id, role: 'MEMBER' }),
+      ]);
+      const actor = await actorFor(s.users.staleLead.id);
+      expect(actor.memberships[0]?.committees).toEqual([
+        expect.objectContaining({ committeeId: s.committees.a1.id, role: 'MEMBER' }),
+      ]);
+    });
+
     it('is a 404 for a committee the member is not in', async () => {
       const member = await createMember(officerA, s.clubA.id, {
         person: newPerson(),

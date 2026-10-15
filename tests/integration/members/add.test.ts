@@ -191,6 +191,41 @@ describe('adding a member', () => {
     expect(await db.committeeMembership.count({ where: { membershipId: readded.id } })).toBe(1);
   });
 
+  it('never restores a role, even one left on the removed rows', async () => {
+    // removedOfficer was removed from club A with their CLUB_OFFICER role, and their committee
+    // membership of A1, still marked LEAD, left behind on purpose (see the scenario).
+    const stale = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.removedOfficer },
+      include: { committeeMemberships: true },
+    });
+    expect(stale.role).toBe('CLUB_OFFICER');
+    expect(stale.committeeMemberships.map((row) => row.role)).toEqual(['LEAD']);
+
+    const readded = await createMember(officerA, s.clubA.id, {
+      person: {
+        uniEmail: s.users.removedOfficer.uniEmail,
+        fullName: s.users.removedOfficer.fullName,
+      },
+      profile: {},
+      committeeIds: [s.committees.a1.id],
+    });
+
+    expect(readded.id).toBe(s.memberships.removedOfficer);
+    expect(readded.role).toBe('MEMBER');
+    expect(readded.committees).toEqual([
+      expect.objectContaining({ id: s.committees.a1.id, role: 'MEMBER' }),
+    ]);
+    // The actor built from that membership holds nothing beyond an ordinary member's.
+    const actor = await actorFor(s.users.removedOfficer.id);
+    expect(actor.memberships).toEqual([
+      expect.objectContaining({
+        clubId: s.clubA.id,
+        role: 'MEMBER',
+        committees: [expect.objectContaining({ committeeId: s.committees.a1.id, role: 'MEMBER' })],
+      }),
+    ]);
+  });
+
   it('restores the club membership without the committees it was not asked for', async () => {
     const member = await createMember(officerA, s.clubA.id, {
       person: newPerson(),

@@ -446,7 +446,9 @@ export async function addToCommittee(
         committeeId: target.committeeId,
         clubId: target.clubId,
       },
-      update: { removedAt: null },
+      // The restored row keeps its points but never its role: whoever comes back to a committee
+      // comes back as a member, and leading it again is an appointment of its own.
+      update: { removedAt: null, role: 'MEMBER' },
     });
   });
 }
