@@ -227,14 +227,17 @@ export async function updateMember(
   // address already used by someone else is caught by the unique constraint (409 already_exists).
   if (uniEmail !== undefined) assertUniversityEmail(uniEmail);
 
+  // Nothing really changes: answer with the member rather than open a transaction that would
+  // write nothing.
   if (Object.values(changes).some((value) => value !== undefined)) {
     await saveMemberChanges(
       membersScope(actor),
       memberId,
       changes,
-      // Moving a registered person's account to another address invalidates what they signed in
-      // with, so every session of theirs ends with the change, not after it.
-      uniEmail !== undefined && isRegistered ? (tx) => endUserSessions(tx, row.user.id) : undefined,
+      // Moving the account to another address invalidates what the person signed in with, so
+      // every session of theirs ends with the change, not after it — including a sign-in that is
+      // half-done (an unregistered person waiting on the name step holds a session too).
+      uniEmail !== undefined ? (tx) => endUserSessions(tx, row.user.id) : undefined,
     );
   }
   return getMember(actor, memberId);

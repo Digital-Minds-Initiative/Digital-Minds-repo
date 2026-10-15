@@ -190,11 +190,23 @@ describe('editing a member', () => {
       expect(await db.session.count({ where: { userId: otherPerson.user.id } })).toBe(2);
     });
 
-    it('keeps the sessions of an unregistered person’s correction (they have none to end)', async () => {
+    it('ends a half-finished sign-in too when an officer corrects the address', async () => {
+      // Someone an admin added who has entered their code but not yet confirmed their name holds
+      // a session already, opened against the address that code proved.
       const member = await added();
-      await expect(updateMember(admin, member.id, { uniEmail: newEmail() })).resolves.toMatchObject(
-        { user: { isRegistered: false } },
-      );
+      await db.session.create({
+        data: {
+          tokenHash: `hash-pending-${member.id}`,
+          email: member.user.uniEmail,
+          userId: member.user.id,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+
+      await expect(
+        updateMember(officerA, member.id, { uniEmail: newEmail() }),
+      ).resolves.toMatchObject({ user: { isRegistered: false } });
+      expect(await db.session.count({ where: { userId: member.user.id } })).toBe(0);
     });
 
     it('stays unique across people (409), changing nothing', async () => {

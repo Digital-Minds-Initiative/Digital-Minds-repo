@@ -55,8 +55,10 @@ pure function.
 **Editing the university email.** An officer may correct it while the person has not signed in
 yet (an admin typing a student's address wrongly is the common case). Once `registeredAt` is set,
 moving the account to another address is a full admin's call (403 `uni_email_requires_full_admin`
-for an officer), and it ends **all** of that person's sessions in the same transaction: what they
-signed in with no longer identifies them. Addresses stay unique across people — the constraint
+for an officer). Either way, the change ends **all** of that person's sessions in the same
+transaction: what they signed in with no longer identifies them. That includes a sign-in that is
+only half-done — an unregistered person waiting on the name step already holds a session, opened
+against the address their code proved. Addresses stay unique across people — the constraint
 answers 409 `already_exists` — and the services lower-case and trim what they store, so a direct
 call cannot write a spelling that would fail the CHECK constraint.
 
@@ -114,6 +116,11 @@ after its own scoped updates, so it cannot run for a member the actor could not 
   wrongly, an officer fixes it; the UI should say so on the confirm step.
 - `error.details` is new on the envelope and carries ids only, never personal data: the caller may
   not be allowed to see the person behind the conflict.
+- Only a real change is an edit: every field is compared with what the member holds, after
+  normalising, and the ones that already hold the submitted value are neither checked nor
+  written. A form may therefore post all of its fields — an officer editing a registered member's
+  phone is not refused over the email it leaves alone — and a body that changes nothing writes
+  nothing.
 - The transaction-client pattern keeps table ownership intact without a service layer that can
   open transactions. It only works one call deep, which is enough for this case; a chain of them
   would mean the modules are drawn wrongly.
