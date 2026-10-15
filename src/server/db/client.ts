@@ -41,6 +41,18 @@ function createClient() {
 
 export type Database = ReturnType<typeof createClient>;
 
+/**
+ * The client inside `db.$transaction(…)`: the extended client minus what a transaction forbids.
+ *
+ * It is also the handle a module passes to another module's write function when both must happen
+ * in one transaction (see `endUserSessions` in the auth module and
+ * docs/adr/0017-member-permissions.md).
+ */
+export type TransactionClient = Omit<
+  Database,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;
+
 // Reuse one client across hot reloads in development instead of opening a pool per reload.
 const globalForDb = globalThis as unknown as { dmDb?: Database };
 

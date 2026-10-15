@@ -7,7 +7,7 @@ import { z } from 'zod';
  *
  * `code` is stable and meant for programs (the UI translates it); `message` is English and meant
  * for developers. `issues` is present only for VALIDATION_FAILED, `retryAfterSeconds` only for
- * RATE_LIMITED.
+ * RATE_LIMITED, `details` only for CONFLICT.
  */
 const errorCodes = [
   'BAD_REQUEST',
@@ -70,6 +70,12 @@ export const errorEnvelopeSchema = z.object({
     /** Machine-readable detail, e.g. `transaction_cancelled` (CONFLICT), `resend_cooldown` (RATE_LIMITED). */
     reason: z.string().optional(),
     issues: z.array(validationIssueSchema).optional(),
+    /**
+     * CONFLICT only: ids the client needs to act on the conflict, for example the `memberId` of
+     * the member that already exists (`already_in_club`). Ids only — never personal data, which
+     * the caller may not be allowed to see.
+     */
+    details: z.record(z.string(), z.string()).optional(),
     /** RATE_LIMITED only: seconds until a retry can succeed (also sent as `Retry-After`). */
     retryAfterSeconds: z.number().int().nonnegative().optional(),
   }),

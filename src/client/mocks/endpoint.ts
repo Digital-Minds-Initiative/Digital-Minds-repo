@@ -24,6 +24,8 @@ interface MockErrorDetails {
   reason?: string;
   issues?: ValidationIssue[];
   retryAfterSeconds?: number;
+  /** CONFLICT only: ids the client needs to act on the conflict (`error.details`). */
+  details?: Record<string, string>;
 }
 
 export class MockError {

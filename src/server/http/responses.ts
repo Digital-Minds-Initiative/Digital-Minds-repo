@@ -40,6 +40,7 @@ export function errorResponse(error: unknown, requestId: string): Response {
         requestId,
         ...(error.reason ? { reason: error.reason } : {}),
         ...(error.issues ? { issues: error.issues } : {}),
+        ...(error.details ? { details: error.details } : {}),
         ...(error.retryAfterSeconds !== undefined
           ? { retryAfterSeconds: error.retryAfterSeconds }
           : {}),

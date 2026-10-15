@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { isFutureDate } from '@/shared/lib/dates';
-import { normalizeEntityName } from '@/shared/lib/names';
+import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 
 /*
@@ -41,10 +41,10 @@ export const phoneSchema = z
   .refine((value) => normalizePhone(value) !== null, { message: 'invalid_phone' })
   .transform((value) => normalizePhone(value) ?? value);
 
+/** A person's full name, spacing normalised with `normalizePersonName` (applied again in services). */
 export const personNameSchema = z
   .string()
-  .trim()
-  .transform((value) => value.replace(/\s+/g, ' '))
+  .transform(normalizePersonName)
   .pipe(z.string().min(2).max(120));
 
 /** Academic level (المستوى). */
