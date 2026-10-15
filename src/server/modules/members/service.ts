@@ -186,16 +186,30 @@ export async function updateMember(
     committeeIds: row.committeeMemberships.map((membership) => membership.committee.id),
   };
 
-  const { fullName: submittedName, membershipTypeId, ...rest } = body;
-  const { uniEmail: submittedEmail, ...clubFields } = rest;
   // The services normalise what they store too, so a direct call (a script, the CSV import)
   // cannot write a spelling the contract would have rejected — an address that is not lower-case
   // would fail the CHECK constraint on User.uniEmail.
-  const uniEmail = submittedEmail === undefined ? undefined : normalizeEmail(submittedEmail);
-  const fullName = submittedName === undefined ? undefined : normalizePersonName(submittedName);
+  const changes = {
+    uniEmail: changed(
+      body.uniEmail === undefined ? undefined : normalizeEmail(body.uniEmail),
+      row.user.uniEmail,
+    ),
+    fullName: changed(
+      body.fullName === undefined ? undefined : normalizePersonName(body.fullName),
+      row.user.fullName,
+    ),
+    personalEmail: changed(body.personalEmail, row.personalEmail),
+    phone: changed(body.phone, row.phone),
+    college: changed(body.college, row.college),
+    major: changed(body.major, row.major),
+    level: changed(body.level, row.level),
+    membershipTypeId: changed(body.membershipTypeId, row.membershipType.id),
+  };
+  const { uniEmail, fullName, membershipTypeId, ...clubFields } = changes;
   const isRegistered = row.user.registeredAt !== null;
-  const changesUniEmail = uniEmail !== undefined && uniEmail !== row.user.uniEmail;
 
+  // Only a real change is a change: a form that posts every field must not be refused over the
+  // ones it is leaving as they are.
   if (uniEmail !== undefined) {
     assertCanEditUniEmail(actor, { clubId: member.clubId, isRegistered });
   }
@@ -211,21 +225,28 @@ export async function updateMember(
   }
   // Which domains are allowed is configuration, so the server checks it, not the contract. An
   // address already used by someone else is caught by the unique constraint (409 already_exists).
-  if (changesUniEmail) assertUniversityEmail(uniEmail);
+  if (uniEmail !== undefined) assertUniversityEmail(uniEmail);
 
-  await saveMemberChanges(
-    membersScope(actor),
-    memberId,
-    {
-      ...body,
-      ...(uniEmail !== undefined ? { uniEmail } : {}),
-      ...(fullName !== undefined ? { fullName } : {}),
-    },
-    // Moving a registered person's account to another address invalidates what they signed in
-    // with, so every session of theirs ends with the change, not after it.
-    changesUniEmail && isRegistered ? (tx) => endUserSessions(tx, row.user.id) : undefined,
-  );
+  if (Object.values(changes).some((value) => value !== undefined)) {
+    await saveMemberChanges(
+      membersScope(actor),
+      memberId,
+      changes,
+      // Moving a registered person's account to another address invalidates what they signed in
+      // with, so every session of theirs ends with the change, not after it.
+      uniEmail !== undefined && isRegistered ? (tx) => endUserSessions(tx, row.user.id) : undefined,
+    );
+  }
   return getMember(actor, memberId);
+}
+
+/**
+ * The submitted value, or undefined when the field was not sent or already holds it. Comparison
+ * is on the normalised value, so a differently spaced name or a capitalised address is the same
+ * value, not an edit.
+ */
+function changed<T>(submitted: T | undefined, stored: T): T | undefined {
+  return submitted === undefined || submitted === stored ? undefined : submitted;
 }
 
 /** Removes the person from this club only. Idempotent. */

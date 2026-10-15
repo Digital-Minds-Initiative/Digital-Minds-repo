@@ -134,13 +134,43 @@ describe('editing a member', () => {
       expect(await db.session.count({ where: { userId: member.user.id } })).toBe(2);
     });
 
-    it('is refused even when the officer sends the address it already has', async () => {
+    it('is not an edit when the officer sends the address it already has', async () => {
       const member = await added();
       await register(member.user.id);
+      const before = await db.user.findUniqueOrThrow({ where: { id: member.user.id } });
+
+      // A form posts every field. The email the member already has is not a change, so an
+      // officer editing a registered member is not refused over it...
+      await expect(
+        updateMember(officerA, member.id, {
+          uniEmail: member.user.uniEmail,
+          phone: '+966557770000',
+        }),
+      ).resolves.toMatchObject({
+        user: { uniEmail: member.user.uniEmail },
+        profile: { phone: '+966557770000' },
+      });
+      // ...and the account itself was left alone.
+      expect(await db.user.findUniqueOrThrow({ where: { id: member.user.id } })).toEqual(before);
+      expect(await db.session.count({ where: { userId: member.user.id } })).toBe(2);
+
+      // A different address is still refused.
       await expectForbidden(
-        updateMember(officerA, member.id, { uniEmail: member.user.uniEmail }),
+        updateMember(officerA, member.id, { uniEmail: newEmail(), phone: '+966557770000' }),
         'uni_email_requires_full_admin',
       );
+    });
+
+    it('is the same address however it is typed, so neither case nor spacing is an edit', async () => {
+      const member = await added();
+      await register(member.user.id);
+      const before = await db.user.findUniqueOrThrow({ where: { id: member.user.id } });
+
+      await expect(
+        updateMember(officerA, member.id, { uniEmail: ` ${member.user.uniEmail.toUpperCase()} ` }),
+      ).resolves.toMatchObject({ user: { uniEmail: member.user.uniEmail } });
+      expect(await db.user.findUniqueOrThrow({ where: { id: member.user.id } })).toEqual(before);
+      expect(await db.session.count({ where: { userId: member.user.id } })).toBe(2);
     });
 
     it('is a full admin’s to change after registration, and ends every session of that person', async () => {
@@ -201,6 +231,50 @@ describe('editing a member', () => {
 
     it('rejects an update that changes nothing', () => {
       expect(updateMemberBodySchema.safeParse({}).success).toBe(false);
+    });
+
+    it('is a no-op when every field already holds the submitted value', async () => {
+      const member = await added('ثابتة البيانات');
+      await updateMember(officerA, member.id, { phone: '+966558880000', level: 2 });
+      const before = await db.membership.findUniqueOrThrow({
+        where: { id: member.id },
+        include: { user: true },
+      });
+
+      const unchanged = await updateMember(officerA, member.id, {
+        fullName: '  ثابتة   البيانات ',
+        phone: '+966558880000',
+        level: 2,
+        membershipTypeId: member.membershipType.id,
+      });
+
+      expect(unchanged.id).toBe(member.id);
+      // Nothing was written at all: not even updatedAt moved.
+      expect(
+        await db.membership.findUniqueOrThrow({
+          where: { id: member.id },
+          include: { user: true },
+        }),
+      ).toEqual(before);
+    });
+
+    it('checks only the fields that really change', async () => {
+      const leadA1 = await actorFor(s.users.leadA1.id);
+      const stored = await db.membership.findUniqueOrThrow({
+        where: { id: s.memberships.memberA1 },
+        include: { user: true },
+      });
+
+      // A lead may change the type. Sending the member's own phone and name alongside it is not
+      // an edit of either, so the request goes through.
+      await expect(
+        updateMember(leadA1, s.memberships.memberA1, {
+          membershipTypeId: s.types.a2,
+          phone: stored.phone,
+          fullName: stored.user.fullName,
+        }),
+      ).resolves.toMatchObject({ membershipType: { id: s.types.a2 } });
+      await updateMember(officerA, s.memberships.memberA1, { membershipTypeId: s.types.a });
     });
 
     it('refuses the whole request when one field is not the actor’s to change', async () => {

@@ -209,9 +209,10 @@ export type UpdateMemberBody = z.output<typeof updateMemberBodySchema>;
  * The name and university email are the person's shared account, so editing them shows in every
  * club. Contact and study details change only this club's copy.
  *
- * Send only the fields you are changing. The body is strict in both directions: an unknown field
- * is a 422 (`unrecognized_keys`), and a field the actor may not change is a 403 naming the rule —
- * even when the value equals the stored one, and nothing is written either way.
+ * The body is strict: an unknown field is a 422 (`unrecognized_keys`). A field the actor may not
+ * change is a 403 naming the rule, and nothing is written — but only when it would really change
+ * something: a field whose value already equals the stored one (compared after normalising) is
+ * not an edit, so a form that posts every field is not refused over the ones it leaves alone.
  */
 export const updateMemberEndpoint = defineEndpoint({
   method: 'PATCH',
