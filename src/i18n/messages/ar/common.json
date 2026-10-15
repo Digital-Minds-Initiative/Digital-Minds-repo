@@ -65,7 +65,7 @@
     "amount_zero": "لا يمكن أن تكون النقاط صفراً",
     "at_least_one_field": "عدّل حقلاً واحداً على الأقل",
     "period_end_before_start": "تاريخ النهاية يسبق تاريخ البداية",
-    "email_domain_not_allowed": "استخدم بريدك الجامعي",
+    "email_domain_not_allowed": "اكتب بريدك الجامعي، ينتهي بـ uqu.edu.sa",
     "invalid_code_format": "الرمز من ٦ أرقام",
     "name_mismatch": "لا يمكن تعديل الاسم في هذه الخطوة. تواصل مع مسؤول النادي لتصحيحه",
     "invalid_code": "الرمز غير صحيح",

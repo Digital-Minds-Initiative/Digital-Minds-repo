@@ -29,7 +29,9 @@
     "status": "الحالة",
     "statusActive": "الأعضاء الحاليون",
     "statusRemoved": "الأعضاء المُزالون",
-    "statusAll": "الجميع"
+    "statusAll": "الجميع",
+    "committeesSelected": "{count, plural, one {لجنة واحدة} two {لجنتان} few {# لجان} many {# لجنة} other {# لجنة}}",
+    "committeeHint": "اختر لجنة أو أكثر"
   },
   "status": {
     "registered": "مسجّل",

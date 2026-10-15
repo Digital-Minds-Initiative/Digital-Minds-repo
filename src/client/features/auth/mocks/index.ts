@@ -45,8 +45,12 @@ const MOCK_CODES: Record<string, OtpRejection | 'ok'> = {
 
 const lastRequested = new Map<string, number>();
 
-const cookie = (name: string, value: string) =>
-  `${name}=${encodeURIComponent(value)}; Path=/; SameSite=Lax`;
+/**
+ * MSW writes a mocked response's cookie into the browser itself and encodes the value while doing
+ * so; encoding it here as well would store `a%2540b` and the actor would never be recognised. The
+ * values are university emails, which are valid cookie values as they are.
+ */
+const cookie = (name: string, value: string) => `${name}=${value}; Path=/; SameSite=Lax`;
 const clearCookie = (name: string) => `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
 
 const domainNotAllowed = () =>

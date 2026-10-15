@@ -68,12 +68,16 @@ export function DropdownMenuCheckboxItem({
   return (
     <DropdownMenuPrimitive.CheckboxItem
       data-slot="dropdown-menu-checkbox-item"
-      className={cn(itemClasses, 'ps-8', className)}
+      className={cn(itemClasses, 'group ps-9', className)}
       {...props}
     >
-      <span className="absolute start-2 flex size-4 items-center justify-center">
+      {/* A visible box, so it is clear the list allows several choices. */}
+      <span
+        aria-hidden
+        className="absolute start-2 flex size-4 items-center justify-center rounded-[4px] border border-border-strong text-primary-fg transition-colors group-data-[state=checked]:border-primary group-data-[state=checked]:bg-primary"
+      >
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check className="size-4" aria-hidden />
+          <Check className="size-3" strokeWidth={3} />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

@@ -6,6 +6,7 @@ import { useState, type ReactNode } from 'react';
 
 import { createQueryClient } from '@/client/lib/query-client';
 import { MockGate } from '@/client/mocks/mock-gate';
+import { NavigationTracker } from '@/components/providers/navigation-tracker';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -26,6 +27,7 @@ export function AppProviders({
       <QueryClientProvider client={queryClient}>
         <Direction.Provider dir={direction}>
           <TooltipProvider delayDuration={300}>
+            <NavigationTracker />
             {children}
             <Toaster />
           </TooltipProvider>

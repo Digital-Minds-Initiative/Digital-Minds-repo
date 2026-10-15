@@ -9,7 +9,11 @@ import { cn } from '@/client/lib/utils';
  */
 export interface MarqueeChip {
   name: string;
+  /** The club's own supplied mark, shown unaltered beside its name. */
   logoSrc?: string;
+  /** The file's real pixel size, so the mark keeps its proportions. */
+  logoWidth?: number;
+  logoHeight?: number;
 }
 
 export interface MarqueeProps {
@@ -17,14 +21,24 @@ export interface MarqueeProps {
   className?: string;
 }
 
-function Chip({ name, logoSrc }: MarqueeChip) {
+function Chip({ name, logoSrc, logoWidth = 96, logoHeight = 32 }: MarqueeChip) {
   return (
     <span
       dir="rtl"
       className="inline-flex h-14 items-center rounded-cell border border-paper-rule bg-paper-cream px-5 font-serif text-xl font-semibold whitespace-nowrap text-on-paper"
     >
       {logoSrc ? (
-        <Image src={logoSrc} alt={name} height={32} width={96} className="block h-8 w-auto" />
+        <span className="inline-flex items-center gap-3">
+          {/* The name is right beside it, so the mark itself is decorative. */}
+          <Image
+            src={logoSrc}
+            alt=""
+            width={logoWidth}
+            height={logoHeight}
+            className="block h-8 w-auto"
+          />
+          {name}
+        </span>
       ) : (
         name
       )}

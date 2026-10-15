@@ -1,4 +1,4 @@
-import { Amiri, IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Newsreader } from 'next/font/google';
+import { Amiri, Caveat, IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Newsreader } from 'next/font/google';
 
 /**
  * The app fonts, self-hosted by next/font. Each exposes the CSS variable that a
@@ -34,5 +34,13 @@ export const fontMono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
   variable: '--font-ibm-plex-mono',
+  display: 'swap',
+});
+
+/** Handwriting for the short English headings on the paper notes (YOUR MOVE, DONE!…). Latin only. */
+export const fontHand = Caveat({
+  subsets: ['latin'],
+  weight: ['500', '700'],
+  variable: '--font-caveat',
   display: 'swap',
 });

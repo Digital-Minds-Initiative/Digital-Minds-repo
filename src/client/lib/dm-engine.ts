@@ -117,6 +117,36 @@ const ICONS = {
     '...##...',
     '...##...',
   ],
+  trophy: [
+    '########',
+    '#.####.#',
+    '#.####.#',
+    '.######.',
+    '..####..',
+    '...##...',
+    '..####..',
+    '.######.',
+  ],
+  building: [
+    '.######.',
+    '.#.##.#.',
+    '.######.',
+    '.#.##.#.',
+    '.######.',
+    '.#.##.#.',
+    '.######.',
+    '.##..##.',
+  ],
+  shield: [
+    '########',
+    '########',
+    '###..###',
+    '###..###',
+    '.######.',
+    '.######.',
+    '..####..',
+    '...##...',
+  ],
 };
 
 const FONT_5X7 = {
@@ -183,7 +213,7 @@ export function glyphCells(
   return out;
 }
 
-/** An 8x8 icon (home/grid/people/card/search/plus), used by Dock. */
+/** An 8x8 pixel icon (see ICONS), used by PixelIcon and Dock. */
 export function iconCells(name: IconName, s: number): CellRect[] {
   const rows = ICONS[name];
   const out: CellRect[] = [];
@@ -457,6 +487,10 @@ export function attachStack(scroller: HTMLElement): () => void {
   return () => scroller.removeEventListener('scroll', onScroll);
 }
 
+/** Controls on a piece (buttons, links, inputs) keep their own clicks and focus; they never drag it. */
+const DRAG_EXEMPT =
+  'button, a[href], input, select, textarea, label, [role="checkbox"], [data-no-drag]';
+
 /** Fragments drag engine: pointer-down lifts and straightens a piece; pointer-up settles with its own tilt. */
 export function attachDrag(el: HTMLElement, restingTilt: number): () => void {
   let x = 0;
@@ -475,6 +509,8 @@ export function attachDrag(el: HTMLElement, restingTilt: number): () => void {
   el.tabIndex = 0;
 
   const onPointerDown = (e: PointerEvent) => {
+    // A press on a control belongs to the control: no capture, no preventDefault, no drag.
+    if (e.target instanceof Element && e.target.closest(DRAG_EXEMPT)) return;
     on = true;
     sx = e.clientX;
     sy = e.clientY;
@@ -504,6 +540,8 @@ export function attachDrag(el: HTMLElement, restingTilt: number): () => void {
     paint(false);
   };
   const onKeydown = (e: KeyboardEvent) => {
+    // Arrow keys move the paper only when the paper itself is focused, not a control inside it.
+    if (e.target !== el) return;
     const step: Record<string, [number, number]> = {
       ArrowLeft: [-12, 0],
       ArrowRight: [12, 0],

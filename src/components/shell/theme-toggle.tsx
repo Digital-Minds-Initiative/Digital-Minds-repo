@@ -38,13 +38,24 @@ function subscribe(onChange: () => void): () => void {
 }
 
 function saveTheme(theme: Theme): void {
-  document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
-  document.documentElement.setAttribute('data-theme', theme);
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  const apply = () => {
+    document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
+    document.documentElement.setAttribute('data-theme', theme);
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  };
+  // Where the browser supports it, the whole page cross-fades between the two themes instead of
+  // flipping every colour at once (the fade's length is set in globals.css). Reduced motion and
+  // older browsers switch immediately.
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduced && typeof document.startViewTransition === 'function') {
+    document.startViewTransition(apply);
+  } else {
+    apply();
+  }
 }
 
 /** One button: shows the current theme's icon and switches between light and dark. */
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   const t = useTranslations('common.theme');
   // Unknown on the server when no choice is saved; settled right after hydration.
   const theme = useSyncExternalStore(subscribe, appliedTheme, () => null);
@@ -53,13 +64,22 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
+      className={className}
       aria-label={t('dark')}
       aria-pressed={theme === 'dark'}
       onClick={() => saveTheme(appliedTheme() === 'dark' ? 'light' : 'dark')}
     >
       {/* The icon follows the applied theme via CSS, so it is right on the first paint. */}
-      <Sun className="dark:hidden" aria-hidden />
-      <Moon className="hidden dark:block" aria-hidden />
+      <span className="grid place-items-center *:col-start-1 *:row-start-1">
+        <Sun
+          aria-hidden
+          className="transition-[rotate,scale,opacity] duration-700 ease-out motion-reduce:transition-none dark:scale-50 dark:-rotate-90 dark:opacity-0"
+        />
+        <Moon
+          aria-hidden
+          className="scale-50 rotate-90 opacity-0 transition-[rotate,scale,opacity] duration-700 ease-out motion-reduce:transition-none dark:scale-100 dark:rotate-0 dark:opacity-100"
+        />
+      </span>
     </Button>
   );
 }

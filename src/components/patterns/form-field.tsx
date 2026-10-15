@@ -87,12 +87,12 @@ export function FormField<TValues extends FieldValues, TName extends FieldPath<T
               },
             })}
             {description ? (
-              <p id={descriptionId} className="text-xs text-fg-muted">
+              <p id={descriptionId} data-slot="form-description" className="text-xs text-fg-muted">
                 {description}
               </p>
             ) : null}
             {fieldState.error ? (
-              <p id={errorId} className="text-xs font-medium text-danger">
+              <p id={errorId} data-slot="form-error" className="text-xs font-medium text-danger">
                 {validationMessage(fieldState.error)}
               </p>
             ) : null}
