@@ -2,8 +2,6 @@ import 'server-only';
 
 import type { ClubRole, CommitteeRole } from '@/server/db/generated/enums';
 
-export type { CommitteeRole };
-
 /** One active committee membership of the actor. */
 interface ActorCommitteeMembership {
   readonly committeeMembershipId: string;
