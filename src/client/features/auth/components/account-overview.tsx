@@ -1,12 +1,13 @@
 'use client';
 
-import { ArrowRight, Building2, ShieldCheck, Users } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DirectionalIcon } from '@/components/ui/directional-icon';
+import { PixelIcon } from '@/components/ui/pixel-icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from '@/i18n/navigation';
 
@@ -40,7 +41,7 @@ export function AccountOverview() {
     <div className="grid gap-4 md:grid-cols-3">
       <Card>
         <CardHeader className="flex-row items-center gap-2">
-          <ShieldCheck className="size-5 text-primary" aria-hidden />
+          <PixelIcon name="shield" className="text-primary" />
           <CardTitle>{t('roles')}</CardTitle>
         </CardHeader>
         <CardContent>
@@ -73,7 +74,7 @@ export function AccountOverview() {
 
       <Card>
         <CardHeader className="flex-row items-center gap-2">
-          <Building2 className="size-5 text-primary" aria-hidden />
+          <PixelIcon name="building" className="text-primary" />
           <CardTitle>{t('access')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -110,7 +111,7 @@ export function AccountOverview() {
           {me.access.canAccessDashboard ? (
             <Button asChild variant="outline" size="sm" className="justify-self-start">
               <Link href="/dashboard/members">
-                <Users aria-hidden />
+                <PixelIcon name="people" className="size-4" />
                 {t('membersLink')}
                 <DirectionalIcon icon={ArrowRight} />
               </Link>
@@ -121,7 +122,7 @@ export function AccountOverview() {
 
       <Card>
         <CardHeader className="flex-row items-center gap-2">
-          <Users className="size-5 text-primary" aria-hidden />
+          <PixelIcon name="people" className="text-primary" />
           <CardTitle>{t('memberships')}</CardTitle>
         </CardHeader>
         <CardContent>

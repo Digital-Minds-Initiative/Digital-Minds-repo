@@ -35,7 +35,7 @@ function StatCell({ value, label }: StatItem) {
     <div className="flex flex-col gap-1 border-t border-ink pt-3">
       <b
         ref={ref}
-        className="text-end font-serif text-[64px] leading-[72px] font-medium [font-variant-numeric:lining-nums_tabular-nums] [direction:ltr]"
+        className="text-end font-serif text-[clamp(2.5rem,1.5rem+4vw,4rem)] leading-[1.1] font-medium [font-variant-numeric:lining-nums_tabular-nums] [direction:ltr]"
       >
         0
       </b>
@@ -46,7 +46,7 @@ function StatCell({ value, label }: StatItem) {
 
 export function Stat({ items, className }: StatProps) {
   return (
-    <div className={cn('grid grid-cols-2 gap-4 sm:grid-cols-4', className)}>
+    <div className={cn('grid grid-cols-2 gap-4 md:grid-cols-4', className)}>
       {items.map((item) => (
         <StatCell key={item.label} {...item} />
       ))}

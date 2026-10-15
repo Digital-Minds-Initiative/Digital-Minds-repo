@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { useMe } from '../hooks/use-me';
+import { useLogout } from '../hooks/use-sign-in';
 
 function initials(fullName: string): string {
   const parts = fullName.split(' ').filter(Boolean);
@@ -28,6 +29,7 @@ export function UserMenu() {
   const t = useTranslations('auth');
   const tRoles = useTranslations('common.roles');
   const { data: me } = useMe();
+  const logout = useLogout();
   if (!me) return null;
 
   const roles = [
@@ -75,7 +77,7 @@ export function UserMenu() {
           </>
         ) : null}
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled title={t('userMenu.signOutSoon')}>
+        <DropdownMenuItem disabled={logout.isPending} onSelect={() => logout.mutate()}>
           <LogOut aria-hidden className="rtl:-scale-x-100" />
           {t('userMenu.signOut')}
         </DropdownMenuItem>

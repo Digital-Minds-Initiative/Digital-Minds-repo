@@ -7,7 +7,7 @@ import { AppProviders } from '@/components/providers/app-providers';
 import { parseTheme, THEME_COOKIE, themeInitScript } from '@/components/shell/theme';
 import { resolveLocale } from '@/i18n/locale';
 import { localeDirection, routing } from '@/i18n/routing';
-import { fontArabicSerif, fontMono, fontSans, fontSerif } from '@/styles/fonts';
+import { fontArabicSerif, fontHand, fontMono, fontSans, fontSerif } from '@/styles/fonts';
 
 import '@/styles/globals.css';
 
@@ -35,7 +35,7 @@ export default async function LocaleLayout({ children, params }: LayoutProps<'/[
       lang={locale}
       dir={direction}
       data-theme={theme ?? undefined}
-      className={`${fontSans.variable} ${fontSerif.variable} ${fontArabicSerif.variable} ${fontMono.variable}`}
+      className={`${fontSans.variable} ${fontSerif.variable} ${fontArabicSerif.variable} ${fontMono.variable} ${fontHand.variable}`}
       // The theme script may set data-theme before React hydrates.
       suppressHydrationWarning
     >

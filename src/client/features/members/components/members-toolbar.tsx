@@ -16,6 +16,8 @@ import {
 import type { Me } from '@/shared/contracts/auth';
 import { memberStatusSchema, type ListMembersQuery } from '@/shared/contracts/members';
 
+import { CommitteeFilter } from './committee-filter';
+
 const ALL = 'all';
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -42,9 +44,9 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
   const committees = (access?.committees ?? []).filter(
     (committee) => !query.clubId || committee.clubId === query.clubId,
   );
-  const selectedCommittee = query.committeeId?.[0];
+  const selectedCommittees = query.committeeId ?? [];
   const hasFilters = Boolean(
-    query.q || query.clubId || selectedCommittee || query.status !== 'active',
+    query.q || query.clubId || selectedCommittees.length > 0 || query.status !== 'active',
   );
 
   return (
@@ -86,22 +88,11 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
       ) : null}
 
       {committees.length > 0 ? (
-        <Select
-          value={selectedCommittee ?? ALL}
-          onValueChange={(value) => onChange({ committeeId: value === ALL ? undefined : [value] })}
-        >
-          <SelectTrigger className="w-full sm:w-44" aria-label={t('committee')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('allCommittees')}</SelectItem>
-            {committees.map((committee) => (
-              <SelectItem key={committee.id} value={committee.id}>
-                {committee.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CommitteeFilter
+          committees={committees}
+          selected={selectedCommittees}
+          onChange={(committeeId) => onChange({ committeeId })}
+        />
       ) : null}
 
       <Select

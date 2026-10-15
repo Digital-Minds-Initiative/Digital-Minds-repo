@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from 'react';
 
-import { attachDock, iconCells, type IconName } from '@/client/lib/dm-engine';
+import { attachDock, type IconName } from '@/client/lib/dm-engine';
 import { cn } from '@/client/lib/utils';
+import { PixelIcon } from '@/components/ui/pixel-icon';
 
 /**
  * Floating navigation for compact screens: a few pixel icons on a dark slab that
@@ -22,17 +23,6 @@ export interface DockProps {
   items: DockItem[];
   renderLink: (item: DockItem, children: React.ReactNode) => React.ReactNode;
   className?: string;
-}
-
-function DockIcon({ name }: { name: IconName }) {
-  const cells = iconCells(name, 6);
-  return (
-    <svg viewBox="0 0 48 48" width={22} height={22} aria-hidden>
-      {cells.map((c, i) => (
-        <rect key={i} x={c.x} y={c.y} width={c.s} height={c.s} rx={c.rx} fill="currentColor" />
-      ))}
-    </svg>
-  );
 }
 
 export function Dock({ items, renderLink, className }: DockProps) {
@@ -73,7 +63,7 @@ export function Dock({ items, renderLink, className }: DockProps) {
                 item.active && 'bg-slab-2',
               )}
             >
-              <DockIcon name={item.icon} />
+              <PixelIcon name={item.icon} className="size-[22px]" />
               {item.active && (
                 <span
                   className="absolute bottom-1 size-1.5 rounded-[1px] bg-tuwaiq-lilac"

@@ -21,7 +21,8 @@ import { cn } from '@/client/lib/utils';
 export interface TowerProps {
   pages?: SamplePage[];
   className?: string;
-  height?: number;
+  /** Pixels, or any CSS length (for example a variable a breakpoint class sets). */
+  height?: number | string;
   cardWidth?: number;
   cardHeight?: number;
   onHandle?: (handle: TowerHandle) => void;
@@ -32,11 +33,11 @@ function PageCard({ page, width, height }: { page: SamplePage; width: number; he
   return (
     <div
       data-tower-card
-      className="absolute start-1/2 top-1/2 flex flex-col justify-between rounded-cell border border-paper-rule p-4 px-5"
+      className="absolute inset-x-0 top-1/2 mx-auto flex flex-col justify-between rounded-cell border border-paper-rule p-4 px-5"
       style={{
-        width,
+        // Never wider than the stage, so narrow screens keep the card whole.
+        width: `min(${width}px, 88%)`,
         height,
-        marginInlineStart: -width / 2,
         marginTop: -height / 2,
         background: page.bg,
         color: page.fg,
@@ -104,7 +105,7 @@ export function Tower({
     >
       <div
         data-tower
-        className="absolute inset-x-0 top-[96px] h-full"
+        className="absolute inset-x-0 top-[18%] h-full"
         style={{
           transformStyle: 'preserve-3d',
           transform: 'rotateX(calc(var(--tilt-tower) + var(--rx, 0deg))) rotateY(var(--ry, 0deg))',

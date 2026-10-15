@@ -10,10 +10,13 @@ import { cn } from '@/client/lib/utils';
 export function Logo({
   className,
   showName = true,
+  nameClassName,
   tone = 'default',
 }: {
   className?: string;
   showName?: boolean;
+  /** Extra classes for the name, for example to hide it on narrow screens. */
+  nameClassName?: string;
   tone?: 'default' | 'on-deep';
 }) {
   const t = useTranslations('common');
@@ -34,7 +37,11 @@ export function Logo({
           maskPosition: 'center',
         }}
       />
-      {showName ? <span className="text-base">{t('appName')}</span> : null}
+      {showName ? (
+        <span className={cn('text-sm whitespace-nowrap sm:text-base', nameClassName)}>
+          {t('appName')}
+        </span>
+      ) : null}
     </span>
   );
 }

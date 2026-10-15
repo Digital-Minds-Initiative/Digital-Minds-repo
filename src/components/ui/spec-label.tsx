@@ -10,7 +10,7 @@ import { cn } from '@/client/lib/utils';
 export interface SpecLabelProps extends React.ComponentProps<'span'> {
   arrow?: '→' | '↓' | '↗' | '·';
   index?: string;
-  tone?: 'default' | 'on-deep';
+  tone?: 'default' | 'on-deep' | 'on-hero';
 }
 
 export function SpecLabel({
@@ -26,7 +26,11 @@ export function SpecLabel({
       dir="ltr"
       className={cn(
         'font-mono text-[11px] leading-4 font-medium tracking-[0.08em] uppercase [unicode-bidi:isolate]',
-        tone === 'on-deep' ? 'text-on-deep-muted' : 'text-muted',
+        tone === 'on-deep'
+          ? 'text-on-deep-muted'
+          : tone === 'on-hero'
+            ? 'text-on-hero-muted'
+            : 'text-muted',
         className,
       )}
       {...props}

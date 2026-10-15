@@ -23,6 +23,10 @@
   --canvas: #f4f1ea;
   --surface: #fbf9f4;
   --surface-sunken: #eae6dc;
+  --surface-3: var(--paper-cream);
+  --hero-surface: #e9e2f6;
+  --on-hero: var(--ink);
+  --on-hero-muted: var(--muted);
   --slab: #14121a;
   --slab-2: #24212e;
   --slab-3: #3a3647;
@@ -66,6 +70,10 @@
   --canvas: #121019;
   --surface: #1b1924;
   --surface-sunken: #0c0b11;
+  --surface-3: #2a2736;
+  --hero-surface: var(--deep);
+  --on-hero: var(--on-deep);
+  --on-hero-muted: var(--on-deep-muted);
   --slab: #1b1824;
   --slab-2: #272333;
   --slab-3: #3a3647;
@@ -185,6 +193,10 @@
   --color-deep: var(--deep);
   --color-on-deep: var(--on-deep);
   --color-on-deep-muted: var(--on-deep-muted);
+  /* The landing's feature surfaces: lavender-tinted in light, deep purple in dark. */
+  --color-hero: var(--hero-surface);
+  --color-on-hero: var(--on-hero);
+  --color-on-hero-muted: var(--on-hero-muted);
 
   --color-slab: var(--slab);
   --color-slab-2: var(--slab-2);
@@ -244,7 +256,7 @@
   --color-fg-inverse: var(--on-slab);
   --color-surface-1: var(--surface);
   --color-surface-2: var(--surface-sunken);
-  --color-surface-3: var(--paper-cream);
+  --color-surface-3: var(--surface-3);
   --color-overlay: var(--surface);
   --color-backdrop: color-mix(in oklch, var(--deep) 55%, transparent);
   --color-border: var(--line);
@@ -291,6 +303,7 @@
    */
   --font-serif:
     'Thmanyah Serif Display', var(--font-newsreader), var(--font-ibm-plex-sans-arabic), serif;
+  --font-hand: var(--font-caveat), 'Bradley Hand', 'Segoe Script', cursive;
   --font-reading: 'Thmanyah Serif Text', var(--font-newsreader), var(--font-amiri), serif;
   --font-mono:
     'Thmanyah Mono', var(--font-ibm-plex-mono), ui-monospace, 'SFMono-Regular', Menlo, Consolas,

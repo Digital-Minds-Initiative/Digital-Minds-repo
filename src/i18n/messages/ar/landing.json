@@ -1,23 +1,113 @@
 {
   "hero": {
     "specLine": "DIGITAL MINDS · المرحلة الأولى",
-    "titleStart": "الأعضاء",
-    "titleEnd": "والنقاط",
-    "subtitle": "مكان واحد تدير فيه الأندية التقنية بجامعة أم القرى أعضاءها ولجانها ونقاطها، بوضوح وشفافية.",
-    "primaryCta": "الدخول إلى لوحة التحكم",
-    "secondaryCta": "شوف المزايا"
+    "titleStart": "نظّم ناديك،",
+    "titleEnd": "وثّق شغل أعضاءك.",
+    "subtitle": "العقول الرقمية (Digital Minds) منصة للأندية الجامعية: تنظّم أعضاءك ولجانك، وتتابع شغلهم، وتدير نقاطهم، وتوثّق إنجازاتهم في مكان واحد.",
+    "secondaryCta": "تعرّف على Digital Minds",
+    "cards": {
+      "members": {
+        "headline": "كل عقل يصنع فرقًا.",
+        "lines": ["أعضاء يصنعون الأثر", "فرق تجمع المواهب", "أفكار تبدأ من هنا"],
+        "spec": "→ 01 · MEMBERS"
+      },
+      "points": {
+        "headline": "كل جهد له أثر.",
+        "lines": ["+ إنجاز يُحتسب", "+ عطاء لا يُنسى", "↗ صدارة هذا الشهر"],
+        "spec": "→ 02 · POINTS"
+      },
+      "roles": {
+        "headline": "لكل دور أثر.",
+        "lines": ["◆ يشرف · المسؤول العام", "◆ يقود · مدير النادي", "◆ ينجز · قائد اللجنة"],
+        "spec": "→ 03 · ROLES"
+      },
+      "showcase": {
+        "headline": "من الفكرة إلى الأثر.",
+        "lines": ["↗ أعمال تستحق أن تُرى", "↗ إنجازات تستحق أن تُروى", "↗ رابط يجمع الحكاية"],
+        "spec": "→ 04 · SHOWCASE"
+      }
+    }
   },
-  "stats": {
-    "sectionLabel": "↓₀₁ NUMBERS · SAMPLE",
-    "title": "بيانات العرض التوضيحي",
-    "caption": "أرقام من مجموعة البيانات التجريبية المرفقة مع المنصة.",
-    "clubs": "أندية",
-    "committees": "لجان",
-    "members": "عضو في البيانات التجريبية",
-    "registered": "مسجّلون فعليًا"
+  "folders": {
+    "sectionLabel": "↓₀₁ IDEAS · TEAMS · WINS",
+    "title": "نخلي الأفكار إنجازات.",
+    "body1": "لأن ناديك مليان عقول مبدعة وأفكار تستاهل تطلع للنور، وتحتاج مكان يجمعها وينظّمها ويحوّلها لإنجازات على أرض الواقع.",
+    "body2": "هنا يجي دور العقول الرقمية؛ يجمع المواهب، يرتّب الجهود، ويسهّل إدارة الفرق والمشاريع، عشان كل فكرة تاخذ فرصتها وكل عقل يقدر يبدع ويترك بصمته.",
+    "items": {
+      "ideas": {
+        "title": "أفكار",
+        "label": "Ideas"
+      },
+      "teams": {
+        "title": "فرق",
+        "label": "Teams"
+      },
+      "wins": {
+        "title": "إنجازات",
+        "label": "Wins"
+      }
+    }
+  },
+  "points": {
+    "sectionLabel": "↓₀₃ POINTS · SAMPLE",
+    "title": "نقاط بسجل ما ينمحي.",
+    "labels": {
+      "balance": "BALANCE · الرصيد",
+      "date": "تاريخ العمل",
+      "reason": "السبب",
+      "points": "النقاط",
+      "cancelled": "VOID"
+    },
+    "rows": [
+      {
+        "date": "2026-10-02",
+        "reason": "حضور ورشة التصميم",
+        "points": 20
+      },
+      {
+        "date": "2026-09-28",
+        "reason": "تغطية الفعالية",
+        "points": 35
+      },
+      {
+        "date": "2026-09-25",
+        "reason": "إدخال مكرر",
+        "points": 20,
+        "voided": true
+      },
+      {
+        "date": "2026-09-20",
+        "reason": "تأخر عن موعد التسليم",
+        "points": -10
+      },
+      {
+        "date": "2026-09-14",
+        "reason": "إنجاز مهمة اللجنة",
+        "points": 30
+      }
+    ]
+  },
+  "filter": {
+    "sectionLabel": "↓₀₄ LEADERBOARD · SAMPLE",
+    "title": "مين الأعلى هالشهر؟",
+    "panelLabel": "TOP · OCTOBER",
+    "rows": [
+      {
+        "label": "MEMBER 01",
+        "points": 85
+      },
+      {
+        "label": "MEMBER 02",
+        "linked": true
+      },
+      {
+        "label": "MEMBER 03",
+        "points": 60
+      }
+    ]
   },
   "features": {
-    "sectionLabel": "↓₀₂ MEMBERS · POINTS · PERMISSIONS",
+    "sectionLabel": "↓₀₅ MEMBERS · POINTS · PERMISSIONS",
     "title": "ماذا تقدّم المنصة؟",
     "members": {
       "title": "الأعضاء",
@@ -42,17 +132,71 @@
       "titleMuted": "للجمهور",
       "tags": ["بدون تسجيل دخول", "الاسم والنقاط بس", "لكل لجنة رابط خاص بها"],
       "body": "رابط عرض عام لكل لجنة: الاسم والنقاط فقط، بدون تفاصيل خاصة، وبدون تسجيل دخول."
+    },
+    "desk": {
+      "game": {
+        "heading": {
+          "turn": "YOUR MOVE",
+          "win": "YOU WIN!",
+          "lose": "MY WIN!",
+          "draw": "A DRAW"
+        },
+        "status": {
+          "yourTurn": "دورك الآن",
+          "thinking": "أفكّر…",
+          "win": "فزت! أحسنت",
+          "lose": "فزتُ هذه المرة",
+          "draw": "تعادل، جولة أخرى؟"
+        },
+        "play": "العب بـ",
+        "restart": "ابدأ من جديد",
+        "cell": "الخانة {n}",
+        "empty": "فارغة"
+      },
+      "idea": {
+        "label": "A LITTLE IDEA",
+        "action": "NEW IDEA",
+        "prompts": [
+          "ماذا لو صار لكل لجنة لوحة شرف أسبوعية؟",
+          "جرّب أن تعلّم زميلاً مهارة جديدة في ١٠ دقائق.",
+          "اكتب فكرة مشروع تتمنى أن يراه ناديك.",
+          "أي لقاء قادم يمكن أن يصبح ورشة عملية؟",
+          "شكر عضواً لم يُشكر منذ فترة.",
+          "ارسم الفكرة على ورقة قبل أن تكتبها."
+        ]
+      },
+      "mission": {
+        "title": "TODAY'S MISSION",
+        "items": ["ارفع نقطة لعضو يستحقها", "اقرأ سجل لجنتك", "رحّب بعضو جديد"],
+        "done": "DONE!",
+        "progress": "{done}/{total}",
+        "footnote": "تجربة فقط، لا يُحفظ شيء."
+      },
+      "moment": {
+        "caption": "MOMENT CAPTURED",
+        "line": "إنجاز يستحق التوثيق",
+        "date": "SAMPLE · 2026"
+      },
+      "labels": {
+        "idea": "IDEA #024",
+        "draft": "DRAFT 01",
+        "keep": "KEEP THIS"
+      }
     }
   },
   "marquee": {
-    "sectionLabel": "↓₀₃ CLUBS · COMMITTEES · SAMPLE"
+    "sectionLabel": "↓₀₂ CLUBS · COMMITTEES · SAMPLE"
   },
   "ledger": {
     "sectionLabel": "↓₀₄ MEMBERS LEDGER · SAMPLE",
     "title": "سجل الأعضاء والنقاط",
     "body": "كل عضو له صف: نوع عضويته، لجنته، نقاطه، وأختام إنجازه. بيانات تجريبية من نفس القاعدة المرفقة.",
     "searchPlaceholder": "ابحث بالاسم…",
-    "filters": { "all": "الكل", "computing": "الحاسبات", "tuwaiq": "طويق" },
+    "filters": {
+      "all": "الكل",
+      "computing": "الحاسبات",
+      "tuwaiq": "طويق"
+    },
     "import": "استيراد",
     "add": "إضافة عضو"
   },
@@ -64,15 +208,12 @@
     "role": "رئيس النادي · القيادة",
     "name": "زياد"
   },
-  "dock": {
-    "home": "الرئيسية",
-    "features": "المزايا",
-    "ledger": "الأعضاء",
-    "card": "البطاقة"
-  },
   "closing": {
     "title": "جاهز تبدأ؟",
-    "body": "ادخل لوحة التحكم وشوف كيف تدير أعضاء ناديك من مكان واحد.",
-    "cta": "الدخول إلى لوحة التحكم"
+    "body": "سجّل دخولك أو أنشئ حسابك ببريدك الجامعي، وشوف كيف تدير أعضاء ناديك من مكان واحد."
+  },
+  "cta": {
+    "signIn": "تسجيل الدخول",
+    "signUp": "إنشاء حساب"
   }
 }

@@ -1,25 +1,53 @@
 import { getTranslations } from 'next-intl/server';
 
-import type { SamplePage } from '@/client/lib/dm-engine';
-import { LandingDock } from '@/components/shell/landing-dock';
 import { Button } from '@/components/ui/button';
 import { DitherSeam } from '@/components/ui/dither-seam';
+import { FolderStack, type FolderItem } from '@/components/ui/folder-stack';
 import { Fragments, type FragmentPiece } from '@/components/ui/fragments';
 import { Hero } from '@/components/ui/hero';
+import { IdeaNote } from '@/components/ui/idea-note';
 import { Marquee } from '@/components/ui/marquee';
+import { MissionNote } from '@/components/ui/mission-note';
+import { MomentScrap } from '@/components/ui/moment-scrap';
+import { PaperCards, type PaperCardItem } from '@/components/ui/paper-cards';
+import { PixelSticker } from '@/components/ui/pixel-sticker';
+import { type PointsLedgerRow } from '@/components/ui/points-ledger';
+import { PointsSystem } from '@/components/ui/points-system';
+import { ScrapLabel } from '@/components/ui/scrap-label';
 import { SpecLabel } from '@/components/ui/spec-label';
-import { Stat } from '@/components/ui/stat';
+import { TicTacToeNote } from '@/components/ui/tic-tac-toe-note';
 import { resolveLocale } from '@/i18n/locale';
 import { Link } from '@/i18n/navigation';
-import { demoClubs, demoPeople } from '@/shared/demo/demo';
+import { demoClubs } from '@/shared/demo/demo';
 
-const TOWER_PAGES: SamplePage[] = [
-  { bg: 'var(--brand)', fg: 'var(--on-brand)', code: 'M1', title: 'الأعضاء' },
-  { bg: 'var(--paper-teal)', fg: 'var(--on-paper)', code: 'C1', title: 'اللجان' },
-  { bg: 'var(--slab)', fg: 'var(--on-slab)', code: 'P1', title: 'سجل النقاط' },
-  { bg: 'var(--paper-peach)', fg: 'var(--on-paper)', code: 'R1', title: 'الصلاحيات' },
-  { bg: 'var(--uqu-deep-teal)', fg: '#FFFFFF', code: 'K1', title: 'الأندية' },
-];
+/**
+ * Clubs' own marks, exactly as supplied (public/clubs). A club without a file here shows its name
+ * only; never draw a stand-in.
+ */
+const CLUB_LOGOS: Record<string, { logoSrc: string; logoWidth: number; logoHeight: number }> = {
+  tuwaiq: { logoSrc: '/clubs/tuwaiq-club-logo.png', logoWidth: 420, logoHeight: 293 },
+};
+
+/** Lilac is the platform's primary action colour on the dark surfaces. */
+const PRIMARY_ACTION = 'border-tuwaiq-lilac bg-tuwaiq-lilac text-deep hover:bg-tuwaiq-lilac/85';
+
+/** Create an account (primary) and sign in (secondary), side by side and stacked on small screens. */
+function AuthCtas({ signUp, signIn }: { signUp: string; signIn: string }) {
+  return (
+    <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+      <Button asChild className={PRIMARY_ACTION}>
+        <Link href="/register">{signUp}</Link>
+      </Button>
+      <Button
+        asChild
+        variant="outline"
+        className="border-on-hero text-on-hero hover:bg-on-hero/10 hover:text-on-hero"
+      >
+        <Link href="/login">{signIn}</Link>
+      </Button>
+    </div>
+  );
+}
 
 export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
   await resolveLocale(params);
@@ -45,7 +73,140 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
     </>
   );
 
+  const deskPieces: FragmentPiece[] = [
+    // Scraps first: they sit behind the notes until someone picks them up.
+    {
+      key: 'scrap-idea',
+      kind: 'custom',
+      tiltDeg: -5,
+      top: 70,
+      start: 420,
+      desktopOnly: true,
+      content: <ScrapLabel text={t('features.desk.labels.idea')} tint="teal" torn tape="lilac" />,
+    },
+    {
+      key: 'scrap-draft',
+      kind: 'custom',
+      tiltDeg: 4,
+      top: 36,
+      start: 650,
+      desktopOnly: true,
+      content: <ScrapLabel text={t('features.desk.labels.draft')} tint="peach" fold star />,
+    },
+    {
+      key: 'scrap-keep',
+      kind: 'custom',
+      tiltDeg: -3,
+      top: 640,
+      start: 20,
+      desktopOnly: true,
+      content: <ScrapLabel text={t('features.desk.labels.keep')} tint="lilac" torn tape="teal" />,
+    },
+    {
+      key: 'sticker-bulb',
+      kind: 'custom',
+      tiltDeg: 8,
+      top: 560,
+      start: 640,
+      desktopOnly: true,
+      className: 'lg:w-12',
+      content: <PixelSticker name="bulb" className="w-full" />,
+    },
+    {
+      key: 'sticker-heart',
+      kind: 'custom',
+      tiltDeg: -10,
+      top: 120,
+      start: 990,
+      desktopOnly: true,
+      className: 'lg:w-9',
+      content: <PixelSticker name="heart" className="w-full" />,
+    },
+  ];
+
+  const deskNotes: FragmentPiece[] = [
+    {
+      key: 'game',
+      kind: 'custom',
+      tiltDeg: 3,
+      top: 110,
+      start: 770,
+      className: 'lg:w-[220px]',
+      content: (
+        <TicTacToeNote
+          labels={{
+            heading: {
+              turn: t('features.desk.game.heading.turn'),
+              win: t('features.desk.game.heading.win'),
+              lose: t('features.desk.game.heading.lose'),
+              draw: t('features.desk.game.heading.draw'),
+            },
+            status: {
+              yourTurn: t('features.desk.game.status.yourTurn'),
+              thinking: t('features.desk.game.status.thinking'),
+              win: t('features.desk.game.status.win'),
+              lose: t('features.desk.game.status.lose'),
+              draw: t('features.desk.game.status.draw'),
+            },
+            play: t('features.desk.game.play'),
+            restart: t('features.desk.game.restart'),
+            cell: t('features.desk.game.cell'),
+            empty: t('features.desk.game.empty'),
+          }}
+        />
+      ),
+    },
+    {
+      key: 'idea',
+      kind: 'custom',
+      tiltDeg: -4,
+      top: 450,
+      start: 20,
+      className: 'lg:w-[230px]',
+      content: (
+        <IdeaNote
+          label={t('features.desk.idea.label')}
+          action={t('features.desk.idea.action')}
+          prompts={t.raw('features.desk.idea.prompts') as string[]}
+        />
+      ),
+    },
+    {
+      key: 'mission',
+      kind: 'custom',
+      tiltDeg: 2,
+      top: 545,
+      start: 300,
+      className: 'lg:w-[250px]',
+      content: (
+        <MissionNote
+          title={t('features.desk.mission.title')}
+          items={t.raw('features.desk.mission.items') as string[]}
+          done={t('features.desk.mission.done')}
+          progress={t('features.desk.mission.progress')}
+          footnote={t('features.desk.mission.footnote')}
+        />
+      ),
+    },
+    {
+      key: 'moment',
+      kind: 'custom',
+      tiltDeg: -6,
+      top: 400,
+      start: 560,
+      className: 'lg:w-[150px]',
+      content: (
+        <MomentScrap
+          caption={t('features.desk.moment.caption')}
+          line={t('features.desk.moment.line')}
+          date={t('features.desk.moment.date')}
+        />
+      ),
+    },
+  ];
+
   const featurePieces: FragmentPiece[] = [
+    ...deskPieces,
     {
       key: 'members',
       kind: 'lib',
@@ -66,69 +227,91 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
       key: 'permissions',
       kind: 'note',
       tiltDeg: 6,
-      top: 210,
-      start: 480,
+      top: 190,
+      start: 540,
       content: featurePieceContent('permissions', '→03 · ROLES'),
     },
     {
       key: 'viewLink',
       kind: 'photo',
       tiltDeg: -3,
-      top: 360,
-      start: 560,
+      top: 470,
+      start: 720,
       content: featurePieceContent('viewLink', '→04 · VIEW'),
     },
+    ...deskNotes,
   ];
 
-  const committeesCount = demoClubs.reduce((sum, club) => sum + club.committees.length, 0);
-  const registeredCount = demoPeople.filter((p) => p.registered).length;
-  const statItems = [
-    { value: demoClubs.length, label: t('stats.clubs') },
-    { value: committeesCount, label: t('stats.committees') },
-    { value: demoPeople.length, label: t('stats.members') },
-    { value: registeredCount, label: t('stats.registered') },
-  ];
+  const heroCards: PaperCardItem[] = (
+    [
+      { key: 'members', tint: 'lilac' },
+      { key: 'points', tint: 'peach' },
+      { key: 'roles', tint: 'teal' },
+      { key: 'showcase', tint: 'cream' },
+    ] as const
+  ).map(({ key, tint }) => ({
+    key,
+    tint,
+    headline: t(`hero.cards.${key}.headline`),
+    lines: t.raw(`hero.cards.${key}.lines`) as string[],
+    spec: t(`hero.cards.${key}.spec`),
+  }));
+
+  const folders: FolderItem[] = [
+    { key: 'ideas', tone: 'indigo' },
+    { key: 'teams', tone: 'lilac' },
+    { key: 'wins', tone: 'orange' },
+  ].map(({ key, tone }) => ({
+    key,
+    tone: tone as FolderItem['tone'],
+    title: t(`folders.items.${key as 'ideas' | 'teams' | 'wins'}.title`),
+    label: t(`folders.items.${key as 'ideas' | 'teams' | 'wins'}.label`),
+  }));
+
+  const ledgerRows = (
+    t.raw('points.rows') as Array<{
+      date: string;
+      reason: string;
+      points: number;
+      voided?: boolean;
+    }>
+  ).map((row, index): PointsLedgerRow => ({ id: String(index), ...row }));
+  const topRows = t.raw('filter.rows') as Array<{
+    label: string;
+    points?: number;
+    linked?: boolean;
+  }>;
 
   const marqueeChips = demoClubs.flatMap((club) => [
-    { name: club.name },
+    { name: club.name, ...CLUB_LOGOS[club.slug] },
     ...club.committees.map((c) => ({ name: c.name })),
   ]);
 
-  const dockItems = [
-    { key: 'home', label: t('dock.home'), icon: 'home' as const, href: '#top' },
-    { key: 'features', label: t('dock.features'), icon: 'grid' as const, href: '#features' },
-  ];
-
   return (
     <>
-      <section id="top" className="relative overflow-hidden bg-deep text-on-deep">
+      <section id="top" className="relative overflow-hidden bg-hero text-on-hero">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-[0.07]"
           style={{
             backgroundImage:
-              'linear-gradient(var(--on-deep-muted) 1px, transparent 1px), linear-gradient(90deg, var(--on-deep-muted) 1px, transparent 1px)',
+              'linear-gradient(var(--on-hero-muted) 1px, transparent 1px), linear-gradient(90deg, var(--on-hero-muted) 1px, transparent 1px)',
             backgroundSize: '24px 24px',
           }}
         />
-        <div className="relative px-4 py-16 sm:py-24">
+        <div className="relative px-4 py-12 sm:py-16 lg:py-24">
           <div className="mx-auto w-full max-w-6xl">
             <Hero
-              tone="on-deep"
+              tone="on-hero"
               specLine={t('hero.specLine')}
               headline={t('hero.titleStart')}
               headlineMuted={t('hero.titleEnd')}
               body={t('hero.subtitle')}
-              pages={TOWER_PAGES}
-              primaryAction={
-                <Button asChild className="border-on-deep bg-on-deep text-deep hover:bg-on-deep/90">
-                  <Link href="/dashboard">{t('hero.primaryCta')}</Link>
-                </Button>
-              }
+              visual={<PaperCards cards={heroCards} />}
               secondaryLink={
                 <a
-                  href="#features"
-                  className="text-[15px] font-semibold text-on-deep underline underline-offset-4"
+                  href="#about"
+                  className="inline-flex min-h-11 items-center text-[15px] font-semibold text-on-hero underline underline-offset-4"
                 >
                   {t('hero.secondaryCta')}
                 </a>
@@ -138,29 +321,64 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
         </div>
       </section>
 
-      <DitherSeam from="var(--deep)" to="var(--canvas)" cell={8} cols={150} rows={2} />
+      <DitherSeam from="var(--hero-surface)" to="var(--canvas)" cell={8} cols={150} rows={2} />
 
-      <section className="px-4 py-16 sm:py-24">
-        <div className="mx-auto w-full max-w-6xl">
-          <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <SpecLabel className="mb-2 block">{t('stats.sectionLabel')}</SpecLabel>
-              <h2 className="font-serif text-3xl font-semibold">{t('stats.title')}</h2>
-            </div>
-            <p className="text-sm text-muted">{t('stats.caption')}</p>
+      <section id="about" className="scroll-mt-4 px-4 py-12 sm:py-16 lg:py-24">
+        <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <div className="order-2 mx-auto w-full max-w-xl lg:order-1">
+            <FolderStack items={folders} />
           </div>
-          <Stat items={statItems} />
+          <div className="order-1 lg:order-2">
+            <SpecLabel className="mb-4 block">{t('folders.sectionLabel')}</SpecLabel>
+            <h2 className="mb-5 font-serif text-[clamp(2rem,1.4rem+2.6vw,3.5rem)] leading-[1.25] font-medium text-balance">
+              {t('folders.title')}
+            </h2>
+            <p className="mb-4 max-w-xl text-base leading-8 text-muted sm:text-lg">
+              {t('folders.body1')}
+            </p>
+            <p className="max-w-xl text-base leading-8 text-muted sm:text-lg">
+              {t('folders.body2')}
+            </p>
+          </div>
         </div>
       </section>
 
-      <section id="features" className="px-4 py-16 sm:py-24">
+      <section className="px-4 py-8 sm:py-10">
+        <div className="mx-auto w-full max-w-6xl">
+          <SpecLabel className="mb-4 block">{t('marquee.sectionLabel')}</SpecLabel>
+          <Marquee chips={marqueeChips} />
+        </div>
+      </section>
+
+      <PointsSystem
+        ledger={{
+          sectionLabel: t('points.sectionLabel'),
+          title: t('points.title'),
+          rows: ledgerRows,
+          labels: {
+            balance: t('points.labels.balance'),
+            date: t('points.labels.date'),
+            reason: t('points.labels.reason'),
+            points: t('points.labels.points'),
+            cancelled: t('points.labels.cancelled'),
+          },
+        }}
+        board={{
+          sectionLabel: t('filter.sectionLabel'),
+          title: t('filter.title'),
+          panelLabel: t('filter.panelLabel'),
+          entries: topRows.map((row, index) => ({ id: `m${index + 1}`, ...row })),
+        }}
+      />
+
+      <section id="features" className="px-4 py-12 sm:py-16 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">
           <Fragments
             pieces={featurePieces}
             className="rounded-card"
             header={
               <>
-                <SpecLabel tone="on-deep" className="mb-2 block">
+                <SpecLabel tone="on-hero" className="mb-2 block">
                   {t('features.sectionLabel')}
                 </SpecLabel>
                 <h2 className="font-serif text-3xl font-semibold">{t('features.title')}</h2>
@@ -170,24 +388,15 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
         </div>
       </section>
 
-      <section className="px-4 py-10">
-        <div className="mx-auto w-full max-w-6xl">
-          <SpecLabel className="mb-4 block">{t('marquee.sectionLabel')}</SpecLabel>
-          <Marquee chips={marqueeChips} />
-        </div>
-      </section>
-
-      <section className="bg-deep px-4 py-16 text-on-deep sm:py-24">
+      <section className="bg-hero px-4 py-12 text-on-hero sm:py-16 lg:py-24">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-start gap-6">
-          <h2 className="font-serif text-3xl font-semibold">{t('closing.title')}</h2>
-          <p className="max-w-xl text-lg leading-8 text-on-deep-muted">{t('closing.body')}</p>
-          <Button asChild className="border-on-deep bg-on-deep text-deep hover:bg-on-deep/90">
-            <Link href="/dashboard">{t('closing.cta')}</Link>
-          </Button>
+          <h2 className="font-serif text-3xl font-semibold sm:text-4xl">{t('closing.title')}</h2>
+          <p className="max-w-xl text-base leading-8 text-on-hero-muted sm:text-lg">
+            {t('closing.body')}
+          </p>
+          <AuthCtas signIn={t('cta.signIn')} signUp={t('cta.signUp')} />
         </div>
       </section>
-
-      <LandingDock items={dockItems} />
     </>
   );
 }

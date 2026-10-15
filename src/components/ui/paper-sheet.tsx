@@ -10,7 +10,7 @@ import { cn } from '@/client/lib/utils';
  * renders). Tilt is at most `sheet-tilt` (4deg) — only one sheet in a group exceeds 3deg.
  */
 
-const sheetVariants = cva(
+export const paperSheetVariants = cva(
   'relative flex overflow-hidden rounded-cell border border-paper-rule text-on-paper',
   {
     variants: {
@@ -25,7 +25,25 @@ const sheetVariants = cva(
   },
 );
 
-export interface PaperSheetProps extends VariantProps<typeof sheetVariants> {
+/** Tractor-feed punch holes on the inline-start edge. */
+export function PunchRail({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        'w-[26px] shrink-0 border-e border-dashed border-paper-rule bg-(--sheet-p)',
+        className,
+      )}
+      style={{
+        WebkitMask:
+          'radial-gradient(circle at 13px 9px, transparent 4.2px, black 4.8px) 0 0/26px 18px repeat-y',
+        mask: 'radial-gradient(circle at 13px 9px, transparent 4.2px, black 4.8px) 0 0/26px 18px repeat-y',
+      }}
+      aria-hidden
+    />
+  );
+}
+
+export interface PaperSheetProps extends VariantProps<typeof paperSheetVariants> {
   code: string;
   titleAr: string;
   titleEn: string;
@@ -53,7 +71,7 @@ export function PaperSheet({
   const marks = punchMarks(seed ?? `${code}${titleEn}`, 18, 2, 7);
   return (
     <div
-      className={cn(sheetVariants({ tint }), className)}
+      className={cn(paperSheetVariants({ tint }), className)}
       style={{
         width,
         minHeight: height,
@@ -61,15 +79,7 @@ export function PaperSheet({
         background: 'var(--sheet-p)',
       }}
     >
-      <div
-        className="w-[26px] shrink-0 border-e border-dashed border-paper-rule bg-(--sheet-p)"
-        style={{
-          WebkitMask:
-            'radial-gradient(circle at 13px 9px, transparent 4.2px, black 4.8px) 0 0/26px 18px repeat-y',
-          mask: 'radial-gradient(circle at 13px 9px, transparent 4.2px, black 4.8px) 0 0/26px 18px repeat-y',
-        }}
-        aria-hidden
-      />
+      <PunchRail />
       <div className="flex min-w-0 flex-1 flex-col gap-2.5 bg-(--sheet-p) px-4 py-3.5">
         <span className="font-mono text-xs text-on-paper-muted" dir="ltr">
           {code}

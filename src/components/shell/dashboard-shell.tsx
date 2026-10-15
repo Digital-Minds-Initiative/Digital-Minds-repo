@@ -1,15 +1,17 @@
 'use client';
 
-import { LogIn, Menu, RotateCw, ShieldOff } from 'lucide-react';
+import { LogIn, Menu, PanelLeftClose, PanelLeftOpen, RotateCw, ShieldOff } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { useState, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { useMe, UserMenu } from '@/client/features/auth';
 import { ApiError } from '@/client/lib/api-client';
+import { cn } from '@/client/lib/utils';
 import { EmptyState } from '@/components/patterns/empty-state';
 import { Button } from '@/components/ui/button';
+import { DirectionalIcon } from '@/components/ui/directional-icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from '@/i18n/navigation';
 
@@ -23,10 +25,43 @@ const DevActorSwitcher =
     ? () => null
     : dynamic(() => import('./dev-actor-switcher'), { ssr: false });
 
+const SIDEBAR_KEY = 'dm-sidebar-collapsed';
+const SIDEBAR_EVENT = 'dm-sidebar-change';
+
+function subscribeSidebar(onChange: () => void): () => void {
+  window.addEventListener(SIDEBAR_EVENT, onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener(SIDEBAR_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveSidebarCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+  } catch {
+    // Storage can be blocked; the toggle still works for this visit through the event below.
+  }
+  window.dispatchEvent(new Event(SIDEBAR_EVENT));
+}
+
 /** Admin area layout: sidebar (start side), header, and content gated on the signed-in actor. */
 export function DashboardShell({ children }: { children: ReactNode }) {
   const t = useTranslations('shell');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // The desktop sidebar can shrink to an icon rail to give the page more width; the choice is remembered.
+  const collapsed = useSyncExternalStore(subscribeSidebar, readSidebarCollapsed, () => false);
+  // Slide only once the user has used the toggle, so a saved choice does not animate on load.
+  const [animate, setAnimate] = useState(false);
 
   return (
     <div className="flex min-h-dvh">
@@ -37,14 +72,44 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         {t('skipToContent')}
       </a>
 
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 border-e border-border bg-surface-2 p-4 lg:flex">
-        <Link
-          href="/"
-          className="rounded-md px-2 outline-none focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          <Logo />
-        </Link>
-        <DashboardNav />
+      <aside
+        id="dashboard-sidebar"
+        className={cn(
+          'sticky top-0 hidden h-dvh shrink-0 overflow-hidden border-e border-border bg-surface-2 lg:block',
+          animate &&
+            'motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-in-out',
+          // Collapsed it is not hidden: it shrinks to a rail with one icon per page.
+          collapsed ? 'w-[4.5rem]' : 'w-64',
+        )}
+      >
+        <div className="flex h-full flex-col gap-6 p-4">
+          <div
+            className={cn('flex items-center', collapsed ? 'justify-center' : 'justify-between')}
+          >
+            {collapsed ? null : (
+              <Link
+                href="/"
+                className="rounded-md px-2 outline-none focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <Logo />
+              </Link>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+              aria-expanded={!collapsed}
+              aria-controls="dashboard-sidebar"
+              onClick={() => {
+                setAnimate(true);
+                saveSidebarCollapsed(!collapsed);
+              }}
+            >
+              <DirectionalIcon icon={collapsed ? PanelLeftOpen : PanelLeftClose} />
+            </Button>
+          </div>
+          <DashboardNav collapsed={collapsed} />
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -108,6 +173,11 @@ function ActorGate({ children }: { children: ReactNode }) {
         title={t('signedOut.title')}
         description={
           process.env.NODE_ENV === 'production' ? t('signedOut.body') : t('signedOut.devBody')
+        }
+        action={
+          <Button asChild>
+            <Link href="/login">{t('signedOut.action')}</Link>
+          </Button>
         }
       />
     );

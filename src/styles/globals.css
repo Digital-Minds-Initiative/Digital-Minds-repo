@@ -55,6 +55,99 @@
     unicode-bidi: isolate;
   }
 
+  /* Leaderboard: a row that changed place glows once; its rank number slides in. */
+  @keyframes rank-glow {
+    0% {
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes rank-swap {
+    0% {
+      opacity: 0;
+      transform: translateY(-40%);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Points ledger: the +/- note floats up and fades. See src/components/ui/points-ledger.tsx. */
+  @keyframes ledger-pop {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-14px);
+    }
+  }
+
+  /* Theme switch: the page cross-fades between light and dark (see theme-toggle.tsx). */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 800ms;
+    animation-timing-function: ease-in-out;
+  }
+
+  /* The paper desk: a pencil stroke drawing itself, a stamp landing, a note card flipping in. */
+  @keyframes draw-stroke {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes stamp-pop {
+    0% {
+      opacity: 0;
+      scale: 1.9;
+    }
+    60% {
+      opacity: 1;
+      scale: 0.92;
+    }
+    100% {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+  @keyframes note-flip {
+    from {
+      opacity: 0;
+      transform: perspective(500px) rotateX(-65deg) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: perspective(500px) rotateX(0) translateY(0);
+    }
+  }
+
+  /* Pixel stickers: a slow bob with a slight sway. Length and delay are set per sticker. */
+  @keyframes sticker-bob {
+    50% {
+      translate: 2px -8px;
+    }
+  }
+
+  /* Folder stack: a slow bob. See src/components/ui/folder-stack.tsx. */
+  @keyframes folder-float {
+    50% {
+      translate: 0 -10px;
+    }
+  }
+
   /* Marquee: a slow, infinite strip. See src/components/ui/marquee.tsx. */
   @keyframes marquee {
     from {
