@@ -19,6 +19,7 @@ import type {
   Member,
   UpdateMemberBody,
 } from '@/shared/contracts/members';
+import { normalizeEmail } from '@/shared/lib/email-domains';
 import { normalizePersonName } from '@/shared/lib/names';
 
 import { toMember } from './mappers';
@@ -119,11 +120,15 @@ export async function createMember(
   // The role check comes before the email is looked up, so a refusal never depends on who it is.
   assertCanAddMember(actor, club.id);
 
-  assertUniversityEmail(body.person.uniEmail, ['body', 'person', 'uniEmail']);
+  const person = {
+    uniEmail: normalizeEmail(body.person.uniEmail),
+    fullName: normalizePersonName(body.person.fullName),
+  };
+  assertUniversityEmail(person.uniEmail, ['body', 'person', 'uniEmail']);
   // Unscoped on purpose: one account per person, so adding must find the existing one. It returns
   // ids only, and only a club's officers and full admins get here — they see every membership of
   // the club anyway, removed ones included. The restore itself still goes through their scope.
-  const existing = await findAccountByUniEmail(body.person.uniEmail, club.id);
+  const existing = await findAccountByUniEmail(person.uniEmail, club.id);
   if (existing?.membership && !existing.membership.removed) {
     throw alreadyInClub(existing.membership.id);
   }
@@ -149,7 +154,7 @@ export async function createMember(
       members: membersScope(actor),
     },
     {
-      person: { ...body.person, fullName: normalizePersonName(body.person.fullName) },
+      person,
       profile: body.profile,
       existing: existing ? { userId: existing.userId } : null,
       clubId: club.id,
@@ -181,7 +186,13 @@ export async function updateMember(
     committeeIds: row.committeeMemberships.map((membership) => membership.committee.id),
   };
 
-  const { uniEmail, fullName, membershipTypeId, ...clubFields } = body;
+  const { fullName: submittedName, membershipTypeId, ...rest } = body;
+  const { uniEmail: submittedEmail, ...clubFields } = rest;
+  // The services normalise what they store too, so a direct call (a script, the CSV import)
+  // cannot write a spelling the contract would have rejected — an address that is not lower-case
+  // would fail the CHECK constraint on User.uniEmail.
+  const uniEmail = submittedEmail === undefined ? undefined : normalizeEmail(submittedEmail);
+  const fullName = submittedName === undefined ? undefined : normalizePersonName(submittedName);
   const isRegistered = row.user.registeredAt !== null;
   const changesUniEmail = uniEmail !== undefined && uniEmail !== row.user.uniEmail;
 
@@ -202,14 +213,14 @@ export async function updateMember(
   // address already used by someone else is caught by the unique constraint (409 already_exists).
   if (changesUniEmail) assertUniversityEmail(uniEmail);
 
-  const changes: UpdateMemberBody = {
-    ...body,
-    ...(fullName !== undefined ? { fullName: normalizePersonName(fullName) } : {}),
-  };
   await saveMemberChanges(
     membersScope(actor),
     memberId,
-    changes,
+    {
+      ...body,
+      ...(uniEmail !== undefined ? { uniEmail } : {}),
+      ...(fullName !== undefined ? { fullName } : {}),
+    },
     // Moving a registered person's account to another address invalidates what they signed in
     // with, so every session of theirs ends with the change, not after it.
     changesUniEmail && isRegistered ? (tx) => endUserSessions(tx, row.user.id) : undefined,

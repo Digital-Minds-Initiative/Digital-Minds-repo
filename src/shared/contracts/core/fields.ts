@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { isFutureDate } from '@/shared/lib/dates';
+import { normalizeEmail } from '@/shared/lib/email-domains';
 import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 
@@ -30,9 +31,9 @@ export const pastOrTodayDateSchema = isoDateSchema.refine((value) => !isFutureDa
  * ALLOWED_EMAIL_DOMAINS setting, so that check runs on the server (`assertUniversityEmail` in
  * src/server/email-policy.ts).
  */
-export const universityEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
+export const universityEmailSchema = z.string().transform(normalizeEmail).pipe(z.email().max(254));
 
-export const personalEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
+export const personalEmailSchema = z.string().transform(normalizeEmail).pipe(z.email().max(254));
 
 /** Stored as E.164 (`+9665XXXXXXXX`); accepts the local formats people type. */
 export const phoneSchema = z
