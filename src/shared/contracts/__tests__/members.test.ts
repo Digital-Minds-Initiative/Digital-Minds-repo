@@ -35,7 +35,6 @@ describe('listMembersQuerySchema', () => {
 describe('createMemberBodySchema', () => {
   it('normalises the person', () => {
     const parsed = createMemberBodySchema.parse({
-      clubId: ID,
       person: { uniEmail: '  S443001102@ST.UQU.EDU.SA ', fullName: ' سارة   القحطاني ' },
       profile: { phone: '0551234567' },
     });
@@ -46,11 +45,30 @@ describe('createMemberBodySchema', () => {
     expect(parsed.profile).toEqual({ phone: '+966551234567' });
     expect(parsed.committeeIds).toEqual([]);
   });
+
+  it('rejects anything the body does not define — the club comes from the path', () => {
+    const body = {
+      person: { uniEmail: 's443001102@st.uqu.edu.sa', fullName: 'سارة القحطاني' },
+    };
+    expect(createMemberBodySchema.safeParse(body).success).toBe(true);
+    expect(createMemberBodySchema.safeParse({ ...body, clubId: ID }).success).toBe(false);
+    expect(createMemberBodySchema.safeParse({ ...body, role: 'CLUB_OFFICER' }).success).toBe(false);
+    expect(
+      createMemberBodySchema.safeParse({ ...body, profile: { phone: '0551234567', nickname: 'x' } })
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe('updateMemberBodySchema', () => {
   it('allows clearing optional fields with null, but not an empty update', () => {
     expect(updateMemberBodySchema.safeParse({ phone: null }).success).toBe(true);
     expect(updateMemberBodySchema.safeParse({}).success).toBe(false);
+  });
+
+  it('rejects unknown fields instead of ignoring them', () => {
+    const parsed = updateMemberBodySchema.safeParse({ phone: '0551234567', role: 'CLUB_OFFICER' });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.code)).toContain('unrecognized_keys');
   });
 });

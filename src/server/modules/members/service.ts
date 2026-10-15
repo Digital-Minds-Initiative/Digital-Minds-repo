@@ -9,6 +9,7 @@ import {
 } from '@/server/authz';
 import { assertUniversityEmail } from '@/server/email-policy';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
+import { endUserSessions } from '@/server/modules/auth';
 import { getActivePointsByMember } from '@/server/modules/points';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import type {
@@ -18,18 +19,22 @@ import type {
   Member,
   UpdateMemberBody,
 } from '@/shared/contracts/members';
+import { normalizePersonName } from '@/shared/lib/names';
 
 import { toMember } from './mappers';
 import {
   assertCanAddMember,
   assertCanAddToCommittee,
   assertCanChangeMembershipType,
-  assertCanEditMemberProfile,
+  assertCanEditClubFields,
+  assertCanEditFullName,
+  assertCanEditUniEmail,
   assertCanRemoveFromClub,
   assertCanRemoveFromCommittee,
 } from './policies';
 import {
   addToCommittee,
+  alreadyInClub,
   findAccountByUniEmail,
   findClubForMembers,
   findCommitteeForMember,
@@ -48,6 +53,8 @@ import {
  * Members service. Every function takes the Actor first and reads through its scopes:
  *   - anything outside the scope → NotFoundError (404), even when addressed by id
  *   - visible, but the role does not allow the action → AuthzError (403)
+ *
+ * The rules themselves are in policies.ts and docs/adr/0017-member-permissions.md.
  */
 
 export async function listMembers(
@@ -88,14 +95,18 @@ export async function getMember(actor: Actor, memberId: string): Promise<Member>
 /**
  * Adds a person to a club, matched by university email: creates an unregistered account if the
  * email is new, links the existing account otherwise, and adds the requested committees. The
- * answer is the same member either way, so it never reveals whether the account existed.
+ * answer is the same either way, so it never reveals whether the account already existed.
  *
- * Someone who already has a membership in this club (active or removed) can only be added by an
- * actor who can see that membership; for anyone else it does not exist (404). So a lead cannot
- * pull a member of another committee into theirs, or restore someone an officer removed.
+ * A membership this club removed earlier is restored with its history instead of a new one being
+ * created; someone already active in the club is a 409 `already_in_club` carrying their member id
+ * (the UI offers to open their profile), and nothing is written.
  */
-export async function createMember(actor: Actor, body: CreateMemberBody): Promise<Member> {
-  const club = await findClubForMembers(clubsScope(actor), body.clubId);
+export async function createMember(
+  actor: Actor,
+  clubId: string,
+  body: CreateMemberBody,
+): Promise<Member> {
+  const club = await findClubForMembers(clubsScope(actor), clubId);
   if (!club) throw new NotFoundError('Club');
   if (club.archived) throw new ConflictError('The club is archived.', 'club_archived');
 
@@ -105,16 +116,17 @@ export async function createMember(actor: Actor, body: CreateMemberBody): Promis
   if (committees.some((committee) => committee.archived)) {
     throw new ConflictError('One of the committees is archived.', 'committee_archived');
   }
-  // Role checks come before the email is looked up, so a refusal never depends on who it is.
-  assertCanAddMember(actor, {
-    clubId: club.id,
-    committeeIds,
-    choosesMembershipType: body.membershipTypeId !== undefined,
-  });
+  // The role check comes before the email is looked up, so a refusal never depends on who it is.
+  assertCanAddMember(actor, club.id);
 
   assertUniversityEmail(body.person.uniEmail, ['body', 'person', 'uniEmail']);
+  // Unscoped on purpose: one account per person, so adding must find the existing one. It returns
+  // ids only, and only a club's officers and full admins get here — they see every membership of
+  // the club anyway, removed ones included. The restore itself still goes through their scope.
   const existing = await findAccountByUniEmail(body.person.uniEmail, club.id);
-  if (existing?.membership) await loadVisibleMember(actor, existing.membership.id);
+  if (existing?.membership && !existing.membership.removed) {
+    throw alreadyInClub(existing.membership.id);
+  }
 
   if (
     body.membershipTypeId !== undefined &&
@@ -130,24 +142,31 @@ export async function createMember(actor: Actor, body: CreateMemberBody): Promis
     );
   }
 
-  const scopes = {
-    club: clubsScope(actor),
-    committees: committeesScope(actor),
-    members: membersScope(actor),
-  };
-  const memberId = await saveNewMember(scopes, {
-    person: body.person,
-    profile: body.profile,
-    existing,
-    clubId: club.id,
-    membershipTypeId,
-    overrideType: body.membershipTypeId !== undefined,
-    committeeIds,
-  });
+  const memberId = await saveNewMember(
+    {
+      club: clubsScope(actor),
+      committees: committeesScope(actor),
+      members: membersScope(actor),
+    },
+    {
+      person: { ...body.person, fullName: normalizePersonName(body.person.fullName) },
+      profile: body.profile,
+      existing: existing ? { userId: existing.userId } : null,
+      clubId: club.id,
+      membershipTypeId,
+      committeeIds,
+    },
+  );
   return getMember(actor, memberId);
 }
 
-/** The name and university email are shared by the person's clubs; everything else is this club's. */
+/**
+ * The name and university email are shared by the person's clubs; everything else is this club's.
+ *
+ * Each group of fields is checked against its own rule, in the order below, and a field the actor
+ * may not change is a 403 — never silently dropped. Unknown fields never get here: the contract
+ * body is strict, so the route wrapper answers 422.
+ */
 export async function updateMember(
   actor: Actor,
   memberId: string,
@@ -157,32 +176,44 @@ export async function updateMember(
   if (row.removedAt) {
     throw new ConflictError('The member was removed from this club.', 'member_removed');
   }
+  const member = {
+    clubId: row.club.id,
+    committeeIds: row.committeeMemberships.map((membership) => membership.committee.id),
+  };
 
-  const { membershipTypeId, ...profile } = body;
-  const editsProfile = Object.values(profile).some((value) => value !== undefined);
-  if (editsProfile) {
-    assertCanEditMemberProfile(actor, {
-      clubId: row.club.id,
-      committeeIds: row.committeeMemberships.map((membership) => membership.committee.id),
-    });
+  const { uniEmail, fullName, membershipTypeId, ...clubFields } = body;
+  const isRegistered = row.user.registeredAt !== null;
+  const changesUniEmail = uniEmail !== undefined && uniEmail !== row.user.uniEmail;
+
+  if (uniEmail !== undefined) {
+    assertCanEditUniEmail(actor, { clubId: member.clubId, isRegistered });
+  }
+  if (fullName !== undefined) assertCanEditFullName(actor, member.clubId);
+  if (Object.values(clubFields).some((value) => value !== undefined)) {
+    assertCanEditClubFields(actor, member.clubId);
   }
   if (membershipTypeId !== undefined) {
-    assertCanChangeMembershipType(actor, row.club.id);
-    if (!(await membershipTypeBelongsToClub(row.club.id, membershipTypeId))) {
+    assertCanChangeMembershipType(actor, member);
+    if (!(await membershipTypeBelongsToClub(member.clubId, membershipTypeId))) {
       throw membershipTypeNotInClub();
     }
   }
-  if (profile.uniEmail !== undefined && profile.uniEmail !== row.user.uniEmail) {
-    if (row.user.registeredAt) {
-      throw new ConflictError(
-        'The university email cannot change after the person has registered.',
-        'uni_email_locked',
-      );
-    }
-    assertUniversityEmail(profile.uniEmail);
-  }
+  // Which domains are allowed is configuration, so the server checks it, not the contract. An
+  // address already used by someone else is caught by the unique constraint (409 already_exists).
+  if (changesUniEmail) assertUniversityEmail(uniEmail);
 
-  await saveMemberChanges(membersScope(actor), memberId, body);
+  const changes: UpdateMemberBody = {
+    ...body,
+    ...(fullName !== undefined ? { fullName: normalizePersonName(fullName) } : {}),
+  };
+  await saveMemberChanges(
+    membersScope(actor),
+    memberId,
+    changes,
+    // Moving a registered person's account to another address invalidates what they signed in
+    // with, so every session of theirs ends with the change, not after it.
+    changesUniEmail && isRegistered ? (tx) => endUserSessions(tx, row.user.id) : undefined,
+  );
   return getMember(actor, memberId);
 }
 
@@ -214,7 +245,7 @@ export async function addMemberToCommittee(
       },
     ]);
   }
-  assertCanAddToCommittee(actor, { clubId: committee.clubId, committeeId: committee.id });
+  assertCanAddToCommittee(actor, committee.clubId);
   if (committee.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
   if (committee.archived)
     throw new ConflictError('The committee is archived.', 'committee_archived');
@@ -242,11 +273,7 @@ export async function removeMemberFromCommittee(
   );
   if (!committeeMembership) throw new NotFoundError('Committee member');
 
-  assertCanRemoveFromCommittee(actor, {
-    clubId: row.club.id,
-    committeeId,
-    memberRole: committeeMembership.role,
-  });
+  assertCanRemoveFromCommittee(actor, row.club.id);
   await removeFromCommittee(committeeMembershipsScope(actor), { memberId, committeeId });
 }
 

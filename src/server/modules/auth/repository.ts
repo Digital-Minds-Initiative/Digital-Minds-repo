@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { UserScope } from '@/server/authz';
-import { db } from '@/server/db/client';
+import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { normalizeForSearch } from '@/shared/lib/arabic';
 
@@ -167,6 +167,19 @@ export async function extendSession(sessionId: string, expiresAt: Date): Promise
 
 export async function deleteSessionByTokenHash(tokenHash: string): Promise<void> {
   await db.session.deleteMany({ where: { tokenHash } });
+}
+
+/**
+ * Signs the person out of every browser. Takes the transaction client instead of opening its own,
+ * because the reason to end the sessions is always another module's write (a full admin moving the
+ * account to a new university email) and the two must commit together — the auth module owns the
+ * `Session` table, so the write happens here (docs/adr/0017-member-permissions.md).
+ *
+ * The caller has authorised the change; the user id comes from a row it read through its scope.
+ */
+export async function endUserSessions(tx: TransactionClient, userId: string): Promise<number> {
+  const { count } = await tx.session.deleteMany({ where: { userId } });
+  return count;
 }
 
 /**

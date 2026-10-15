@@ -1,20 +1,23 @@
 import 'server-only';
 
-import {
-  AuthzError,
-  canManageClub,
-  canManageCommittee,
-  isLeadOf,
-  ledCommitteeIds,
-  type Actor,
-  type CommitteeRole,
-  type CommitteeTarget,
-} from '@/server/authz';
+import { AuthzError, canManageClub, isLeadOf, type Actor } from '@/server/authz';
 
 /*
- * What an actor may do with members. Officers (and full admins) manage everything in their club.
- * Committee leads manage the members of their own committee: add people to it, edit their
- * profiles, and remove them from it. Club-level actions stay with officers.
+ * What an actor may do with members (docs/adr/0017-member-permissions.md).
+ *
+ * A club's membership is run by its officers and by full admins: they add people, edit this
+ * club's copy of their details, move them between committees, change their type and remove them.
+ *
+ * Committee leads read the members of the committees they lead (through the scopes) and may
+ * change their membership type — nothing else. Types are club-level, so that one change applies
+ * to the whole club membership; it is still the lead's call, because the lead already sees and
+ * runs that member's work.
+ *
+ * Nobody edits their own name or university email here: those belong to the shared account, and
+ * an ordinary member sees no member at all (the scopes make every member a 404 for them).
+ *
+ * Reading has no policy: the scopes in src/server/authz decide what each actor sees, and anything
+ * outside them is a 404 — thrown before any of these checks runs.
  */
 
 /** A member as the policies see it: their club and the committees visible to the actor. */
@@ -23,53 +26,58 @@ export interface MemberTarget {
   committeeIds: readonly string[];
 }
 
-/** Name, contact details, college, major, level — and the university email before registration. */
-export function assertCanEditMemberProfile(actor: Actor, member: MemberTarget): void {
-  const allowed =
-    canManageClub(actor, member.clubId) ||
-    member.committeeIds.some((committeeId) => isLeadOf(actor, committeeId));
-  if (!allowed) throw new AuthzError('profile_edit_not_allowed');
-}
-
-/** Membership types are club-level. */
-export function assertCanChangeMembershipType(actor: Actor, clubId: string): void {
+/** Everything club-level: one rule, one reason, so the UI can treat them alike. */
+function assertClubManagement(actor: Actor, clubId: string): void {
   if (!canManageClub(actor, clubId)) throw new AuthzError('club_management_required');
 }
 
-/** Removing someone from the whole club stays with officers and above. */
-export function assertCanRemoveFromClub(actor: Actor, clubId: string): void {
-  if (!canManageClub(actor, clubId)) throw new AuthzError('club_management_required');
+/** Adding a person to the club, in any committees of it and with any of its membership types. */
+export function assertCanAddMember(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
+}
+
+/** This club's copy of the contact and study details: phone, personal email, college, major, level. */
+export function assertCanEditClubFields(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
+}
+
+/** The name on the shared account — it shows in every club the person belongs to. */
+export function assertCanEditFullName(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
 }
 
 /**
- * Adding a person to the club. Officers: any committees, any type. Leads: only into committees
- * they lead (at least one), with the club's default type. (People who already have a membership
- * the lead cannot see — another committee's members, removed members — are a 404 in the
- * service, not a 403 here, so the answer does not reveal that they exist.)
+ * The university email is the identity sign-in matches on. An officer may correct it while the
+ * person has not signed in yet; once they have registered, moving the account to another address
+ * is a full admin's call (and ends every session the person has).
  */
-export function assertCanAddMember(
+export function assertCanEditUniEmail(
   actor: Actor,
-  target: { clubId: string; committeeIds: readonly string[]; choosesMembershipType: boolean },
+  target: { clubId: string; isRegistered: boolean },
 ): void {
-  if (canManageClub(actor, target.clubId)) return;
-  const led = new Set(ledCommitteeIds(actor));
-  if (target.committeeIds.length === 0 || !target.committeeIds.every((id) => led.has(id))) {
-    throw new AuthzError('lead_can_only_add_to_own_committee');
-  }
-  if (target.choosesMembershipType) throw new AuthzError('membership_type_requires_officer');
+  if (actor.isFullAdmin) return;
+  assertClubManagement(actor, target.clubId);
+  if (target.isRegistered) throw new AuthzError('uni_email_requires_full_admin');
 }
 
-export function assertCanAddToCommittee(actor: Actor, target: CommitteeTarget): void {
-  if (!canManageCommittee(actor, target)) throw new AuthzError('committee_management_required');
+/** The one member action a committee lead has, for the members of the committees they lead. */
+export function assertCanChangeMembershipType(actor: Actor, member: MemberTarget): void {
+  if (canManageClub(actor, member.clubId)) return;
+  if (!member.committeeIds.some((committeeId) => isLeadOf(actor, committeeId))) {
+    throw new AuthzError('membership_type_change_not_allowed');
+  }
 }
 
-/** A lead may remove members from their committee, but not another lead (that is a revocation). */
-export function assertCanRemoveFromCommittee(
-  actor: Actor,
-  target: CommitteeTarget & { memberRole: CommitteeRole },
-): void {
-  if (!canManageCommittee(actor, target)) throw new AuthzError('committee_management_required');
-  if (target.memberRole === 'LEAD' && !canManageClub(actor, target.clubId)) {
-    throw new AuthzError('removing_a_lead_requires_officer');
-  }
+/** Committees belong to the club, so moving people between them is a club-level action. */
+export function assertCanAddToCommittee(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
+}
+
+/** Including another lead: an officer may take anyone out of a committee. */
+export function assertCanRemoveFromCommittee(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
+}
+
+export function assertCanRemoveFromClub(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
 }

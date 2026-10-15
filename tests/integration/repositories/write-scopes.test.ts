@@ -10,6 +10,7 @@ import {
   type Actor,
 } from '@/server/authz';
 import { db } from '@/server/db/client';
+import { endUserSessions } from '@/server/modules/auth';
 import {
   deleteMembershipType,
   insertCommittee,
@@ -73,6 +74,23 @@ describe('repository writes apply the scope themselves', () => {
     expect(await memberA1()).toEqual(before);
   });
 
+  it('saveMemberChanges does not run another module’s write when the scope matches nothing', async () => {
+    let ran = 0;
+    await expectNotFound(
+      saveMemberChanges(
+        membersScope(officerB),
+        s.memberships.memberA1,
+        { uniEmail: 's900000888@st.uqu.edu.sa' },
+        async (tx) => {
+          ran += 1;
+          return endUserSessions(tx, s.users.memberA1.id);
+        },
+      ),
+    );
+    // The hook ends the person's sessions; it must not run for a member out of reach.
+    expect(ran).toBe(0);
+  });
+
   it('removeFromCommittee', async () => {
     const before = await memberA1();
     await expectNotFound(
@@ -122,7 +140,7 @@ describe('repository writes apply the scope themselves', () => {
     expect(await committeeRows(s.memberships.memberA2)).toEqual(beforeA2);
   });
 
-  it('saveNewMember checks the club, the committees and an existing membership', async () => {
+  it('saveNewMember checks the club, the committees and the membership it restores', async () => {
     const officerBScopes = {
       club: clubsScope(officerB),
       committees: committeesScope(officerB),
@@ -138,25 +156,44 @@ describe('repository writes apply the scope themselves', () => {
       existing: null,
       clubId: s.clubA.id,
       membershipTypeId: s.types.a,
-      overrideType: false,
     };
 
     // A club outside the scope.
     await expectNotFound(saveNewMember(officerBScopes, { ...newPerson, committeeIds: [] }));
     // The lead's club, but a committee the lead does not lead.
     await expectNotFound(saveNewMember(lead, { ...newPerson, committeeIds: [s.committees.a2.id] }));
-    // An existing membership in the lead's club that the lead cannot see.
-    const memberA2 = await db.membership.findUniqueOrThrow({
-      where: { id: s.memberships.memberA2 },
-      include: { user: true },
+    // A removed membership in the lead's club: restoring it is a write, so it goes through the
+    // scope — the lead cannot see a member who is in no committee of theirs.
+    const removed = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.removedOfficer },
     });
     await expectNotFound(
       saveNewMember(lead, {
         ...newPerson,
-        person: { uniEmail: memberA2.user.uniEmail, fullName: memberA2.user.fullName },
-        existing: { userId: memberA2.userId, membership: { id: memberA2.id, removed: false } },
+        person: { uniEmail: s.users.removedOfficer.uniEmail, fullName: 'مدير شؤون سابق' },
+        existing: { userId: removed.userId },
         committeeIds: [s.committees.a1.id],
       }),
+    );
+    expect(
+      await db.membership.findUniqueOrThrow({ where: { id: s.memberships.removedOfficer } }),
+    ).toEqual(removed);
+
+    // An active membership is a conflict rather than a second one, whoever asks.
+    const memberA2 = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.memberA2 },
+    });
+    await expectConflict(
+      saveNewMember(lead, {
+        ...newPerson,
+        person: {
+          uniEmail: s.users.memberA2.uniEmail,
+          fullName: s.users.memberA2.fullName,
+        },
+        existing: { userId: memberA2.userId },
+        committeeIds: [s.committees.a1.id],
+      }),
+      'already_in_club',
     );
 
     expect(await db.user.count()).toBe(users);
