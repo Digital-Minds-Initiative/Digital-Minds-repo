@@ -225,17 +225,16 @@ describe('repository writes apply the scope themselves', () => {
     if (!current) throw new Error('scenario transaction is missing');
     const scope = pointTransactionsScope(officerB);
 
-    // Inside the write the scope cannot be told apart from a concurrent change: no row matched.
-    await expectConflict(
+    // Both writes look again when their conditional update matches nothing, so a row this
+    // scope cannot reach is a 404 — never a 409 that would admit the row exists.
+    await expectNotFound(
       updateTransactionWithRevision(scope, current, { amount: 99 }, officerB.userId),
-      'transaction_modified',
     );
-    await expectConflict(
+    await expectNotFound(
       cancelTransactionWithRevision(scope, current, {
         reason: 'محاولة',
         cancelledById: officerB.userId,
       }),
-      'transaction_modified',
     );
 
     const after = await db.pointTransaction.findUniqueOrThrow({

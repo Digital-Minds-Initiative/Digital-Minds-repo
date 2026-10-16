@@ -29,9 +29,7 @@ describe('removed memberships', () => {
     expect((await listMembers(actor, membersQuery({ status: 'all' }))).total).toBe(0);
     await expectNotFound(getMember(actor, s.memberships.memberA1));
     await expectNotFound(
-      createPointTransaction(actor, {
-        memberId: s.memberships.memberA1,
-        committeeId: s.committees.a1.id,
+      createPointTransaction(actor, s.memberships.memberA1, s.committees.a1.id, {
         amount: 10,
         reason: 'محاولة',
         workDate: today(),

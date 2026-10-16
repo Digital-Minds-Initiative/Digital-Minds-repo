@@ -29,9 +29,7 @@ describe('officer in one club, member in another', () => {
       expect.arrayContaining([s.memberships.memberA1, s.memberships.memberA2, s.memberships.plain]),
     );
     await expect(
-      createPointTransaction(mixed, {
-        memberId: s.memberships.memberA1,
-        committeeId: s.committees.a1.id,
+      createPointTransaction(mixed, s.memberships.memberA1, s.committees.a1.id, {
         amount: 10,
         reason: 'مشاركة',
         workDate: today(),
@@ -45,9 +43,7 @@ describe('officer in one club, member in another', () => {
     await expectNotFound(getMember(mixed, s.memberships.memberB1));
     await expectNotFound(getMember(mixed, s.memberships.mixedB)); // not even their own B membership
     await expectNotFound(
-      createPointTransaction(mixed, {
-        memberId: s.memberships.memberB1,
-        committeeId: s.committees.b1.id,
+      createPointTransaction(mixed, s.memberships.memberB1, s.committees.b1.id, {
         amount: 10,
         reason: 'محاولة',
         workDate: today(),

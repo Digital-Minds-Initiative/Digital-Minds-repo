@@ -43,13 +43,16 @@ describe('full admin', () => {
   });
 
   it('manages points in any committee', async () => {
-    const created = await createPointTransaction(admin, {
-      memberId: s.memberships.memberB1,
-      committeeId: s.committees.b1.id,
-      amount: -3,
-      reason: 'تأخر في التسليم',
-      workDate: today(),
-    });
+    const created = await createPointTransaction(
+      admin,
+      s.memberships.memberB1,
+      s.committees.b1.id,
+      {
+        amount: -3,
+        reason: 'تأخر في التسليم',
+        workDate: today(),
+      },
+    );
     await expect(
       cancelPointTransaction(admin, created.id, { reason: 'أضيفت بالخطأ' }),
     ).resolves.toMatchObject({

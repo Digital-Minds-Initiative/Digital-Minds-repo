@@ -65,13 +65,35 @@ export interface MockMembership {
   committees: Array<{ committeeId: string; role: CommitteeRole; removed: boolean }>;
 }
 
-interface MockTransaction {
+interface MockRevision {
+  id: string;
+  action: 'UPDATED' | 'CANCELLED';
+  previousAmount: number;
+  previousReason: string;
+  previousWorkDate: string;
+  previousStatus: PointTransactionStatus;
+  changedById: string;
+  changedAt: string;
+}
+
+/** Enough of a transaction to serve the points endpoints; mutated in place by their handlers. */
+export interface MockTransaction {
   id: string;
   membershipId: string;
   clubId: string;
   committeeId: string;
   amount: number;
+  reason: string;
+  workDate: string;
   status: PointTransactionStatus;
+  batchId: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt: string | null;
+  cancelledById: string | null;
+  cancellationReason: string | null;
+  revisions: MockRevision[];
 }
 
 export interface MockDb {
@@ -141,14 +163,55 @@ export function buildMockDb(today: string): MockDb {
       } satisfies MockMembership;
     }),
   );
-  const transactions: MockTransaction[] = generateDemoTransactions(today).map((transaction) => ({
-    id: transaction.id,
-    membershipId: demoId(demoKeys.membership(transaction.personKey, transaction.clubKey)),
-    clubId: demoId(demoKeys.club(transaction.clubKey)),
-    committeeId: demoId(demoKeys.committee(transaction.clubKey, transaction.committeeKey)),
-    amount: transaction.amount,
-    status: transaction.cancellation ? 'CANCELLED' : 'ACTIVE',
-  }));
+  const transactions: MockTransaction[] = generateDemoTransactions(today).map((transaction) => {
+    const recordedAt = `${addDays(transaction.workDate, transaction.recordedAfterDays)}T09:00:00.000Z`;
+    const changedAt = `${addDays(transaction.workDate, transaction.recordedAfterDays + 1)}T09:00:00.000Z`;
+    const revisions: MockRevision[] = [];
+    if (transaction.edit) {
+      revisions.push({
+        id: `${transaction.id}-r1`,
+        action: 'UPDATED',
+        previousAmount: transaction.edit.previousAmount,
+        previousReason: transaction.edit.previousReason,
+        previousWorkDate: transaction.workDate,
+        previousStatus: 'ACTIVE',
+        changedById: demoId(demoKeys.user(transaction.edit.byKey)),
+        changedAt,
+      });
+    }
+    if (transaction.cancellation) {
+      revisions.push({
+        id: `${transaction.id}-r2`,
+        action: 'CANCELLED',
+        previousAmount: transaction.amount,
+        previousReason: transaction.reason,
+        previousWorkDate: transaction.workDate,
+        previousStatus: 'ACTIVE',
+        changedById: demoId(demoKeys.user(transaction.cancellation.byKey)),
+        changedAt,
+      });
+    }
+    return {
+      id: transaction.id,
+      membershipId: demoId(demoKeys.membership(transaction.personKey, transaction.clubKey)),
+      clubId: demoId(demoKeys.club(transaction.clubKey)),
+      committeeId: demoId(demoKeys.committee(transaction.clubKey, transaction.committeeKey)),
+      amount: transaction.amount,
+      reason: transaction.reason,
+      workDate: transaction.workDate,
+      status: transaction.cancellation ? 'CANCELLED' : 'ACTIVE',
+      batchId: transaction.batchId,
+      createdById: demoId(demoKeys.user(transaction.createdByKey)),
+      createdAt: recordedAt,
+      updatedAt: revisions.length > 0 ? changedAt : recordedAt,
+      cancelledAt: transaction.cancellation ? changedAt : null,
+      cancelledById: transaction.cancellation
+        ? demoId(demoKeys.user(transaction.cancellation.byKey))
+        : null,
+      cancellationReason: transaction.cancellation?.reason ?? null,
+      revisions,
+    } satisfies MockTransaction;
+  });
 
   return {
     users,

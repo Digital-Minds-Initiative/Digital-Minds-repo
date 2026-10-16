@@ -1,3 +1,5 @@
+import { collapseWhitespace } from './text';
+
 /**
  * The one way to write the name of something that must be unique among its siblings: a club, a
  * committee inside a club, a membership type inside a club.
@@ -12,7 +14,7 @@
  * differ by a letter are two names.
  */
 export function normalizeEntityName(value: string): string {
-  return value.trim().replace(/\s+/g, ' ');
+  return collapseWhitespace(value);
 }
 
 /**
@@ -24,5 +26,5 @@ export function normalizeEntityName(value: string): string {
  * directly (a script, the CSV import) cannot store a differently spaced spelling either.
  */
 export function normalizePersonName(value: string): string {
-  return value.trim().replace(/\s+/g, ' ');
+  return collapseWhitespace(value);
 }

@@ -1,9 +1,9 @@
 import 'server-only';
 
-import type { PointTransaction } from '@/shared/contracts/points';
+import type { PointTransaction, PointTransactionRevision } from '@/shared/contracts/points';
 import { dateToDateOnly } from '@/shared/lib/dates';
 
-import type { TransactionRow } from './repository';
+import type { RevisionRow, TransactionRow } from './repository';
 
 /** Database row → API contract (dates become ISO strings, relations become small refs). */
 export function toPointTransaction(row: TransactionRow): PointTransaction {
@@ -26,5 +26,21 @@ export function toPointTransaction(row: TransactionRow): PointTransaction {
     cancelledBy: row.cancelledBy,
     cancellationReason: row.cancellationReason,
     revisionCount: row._count.revisions,
+  };
+}
+
+/** One revision: the values the transaction held before that change. */
+export function toRevision(row: RevisionRow): PointTransactionRevision {
+  return {
+    id: row.id,
+    action: row.action,
+    previous: {
+      amount: row.previousAmount,
+      reason: row.previousReason,
+      workDate: dateToDateOnly(row.previousWorkDate),
+      status: row.previousStatus,
+    },
+    changedBy: row.changedBy,
+    changedAt: row.createdAt.toISOString(),
   };
 }

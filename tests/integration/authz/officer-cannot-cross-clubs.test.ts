@@ -89,9 +89,7 @@ describe('club officer scope', () => {
 
     await expectNotFound(getMemberPoints(officerA, s.memberships.memberB1, pointsQuery()));
     await expectNotFound(
-      createPointTransaction(officerA, {
-        memberId: s.memberships.memberB1,
-        committeeId: s.committees.b1.id,
+      createPointTransaction(officerA, s.memberships.memberB1, s.committees.b1.id, {
         amount: 50,
         reason: 'محاولة',
         workDate: today(),
@@ -124,13 +122,16 @@ describe('club officer scope', () => {
     await expect(getMember(officerA, s.memberships.memberA2)).resolves.toMatchObject({
       id: s.memberships.memberA2,
     });
-    const created = await createPointTransaction(officerA, {
-      memberId: s.memberships.memberA2,
-      committeeId: s.committees.a2.id,
-      amount: 5,
-      reason: 'حضور اجتماع',
-      workDate: today(),
-    });
+    const created = await createPointTransaction(
+      officerA,
+      s.memberships.memberA2,
+      s.committees.a2.id,
+      {
+        amount: 5,
+        reason: 'حضور اجتماع',
+        workDate: today(),
+      },
+    );
     expect(created.amount).toBe(5);
     await expect(
       updateMember(officerA, s.memberships.memberA2, { college: 'كلية الحاسبات' }),

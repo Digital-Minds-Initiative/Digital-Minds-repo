@@ -121,9 +121,7 @@ describe('archiving', () => {
 
     it('refuses new points, even in an active committee', async () => {
       await expectConflict(
-        createPointTransaction(admin, {
-          memberId: a.memberships.memberZ1,
-          committeeId: a.z1.id,
+        createPointTransaction(admin, a.memberships.memberZ1, a.z1.id, {
           amount: 5,
           reason: 'نشاط',
           workDate: today(),
@@ -166,9 +164,7 @@ describe('archiving', () => {
 
     it('refuses new points in it', async () => {
       await expectConflict(
-        createPointTransaction(admin, {
-          memberId: a.memberships.memberA3,
-          committeeId: a.archivedCommittee.id,
+        createPointTransaction(admin, a.memberships.memberA3, a.archivedCommittee.id, {
           amount: 5,
           reason: 'نشاط',
           workDate: today(),

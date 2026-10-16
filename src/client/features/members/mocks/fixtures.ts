@@ -16,14 +16,19 @@ export function toMemberFixture(db: MockDb, actor: MockActor, membership: MockMe
   const user = must(db.usersById.get(membership.userId), 'user');
   const club = must(db.clubsById.get(membership.clubId), 'club');
   const type = must(db.membershipTypesById.get(membership.typeId), 'membership type');
-  const points = db.transactions
-    .filter(
-      (transaction) =>
-        transaction.membershipId === membership.id &&
-        transaction.status === 'ACTIVE' &&
-        canSeeCommittee(actor, transaction.clubId, transaction.committeeId),
-    )
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  // Mirrors the server: the total counts every committee the caller can see, including ones the
+  // member has left, while the per-committee figures hang off the committees still listed.
+  const visible = db.transactions.filter(
+    (transaction) =>
+      transaction.membershipId === membership.id &&
+      transaction.status === 'ACTIVE' &&
+      canSeeCommittee(actor, transaction.clubId, transaction.committeeId),
+  );
+  const points = visible.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const pointsIn = (committeeId: string) =>
+    visible
+      .filter((transaction) => transaction.committeeId === committeeId)
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
 
   return {
     id: membership.id,
@@ -43,6 +48,7 @@ export function toMemberFixture(db: MockDb, actor: MockActor, membership: MockMe
         id: c.committeeId,
         name: must(db.committeesById.get(c.committeeId), 'committee').name,
         role: c.role,
+        points: pointsIn(c.committeeId),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'ar')),
     points,
