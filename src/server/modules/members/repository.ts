@@ -11,6 +11,7 @@ import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
 import type {
   ClubRole,
+  CommitteeRole,
   CreateMemberBody,
   MemberSortField,
   MemberStatus,
@@ -467,4 +468,58 @@ export async function removeFromCommittee(
     data: { removedAt: new Date(), role: 'MEMBER' },
   });
   if (count === 0) throw new NotFoundError('Committee member');
+}
+
+// ─── Roles (written for the permissions module) ──────────────
+// The membership tables are this module's, so the role columns are written here — but the reason
+// to write them is always a grant or a revoke, which the permissions module records in its own
+// history table. Both must commit together, so these take the caller's transaction client the
+// way `endUserSessions` does (docs/adr/0018-granting-roles.md).
+
+/**
+ * Sets the club role, but only while the row still holds `previousRole`, and answers whether it
+ * changed anything. Two requests granting the same role therefore cannot both succeed: the
+ * second waits on the row lock, re-reads the row the first one changed, matches nothing, and is
+ * told it changed nothing — which the service treats as the no-op it is.
+ */
+export async function setClubRole(
+  tx: TransactionClient,
+  scope: MemberScope,
+  input: { memberId: string; previousRole: ClubRole; role: ClubRole },
+): Promise<boolean> {
+  const { count } = await tx.membership.updateMany({
+    where: {
+      AND: [scope, { id: input.memberId, removedAt: null, role: input.previousRole }],
+    },
+    data: { role: input.role },
+  });
+  return count === 1;
+}
+
+/** The same, for the role on one active committee membership. */
+export async function setCommitteeRole(
+  tx: TransactionClient,
+  scope: CommitteeMembershipScope,
+  input: {
+    memberId: string;
+    committeeId: string;
+    previousRole: CommitteeRole;
+    role: CommitteeRole;
+  },
+): Promise<boolean> {
+  const { count } = await tx.committeeMembership.updateMany({
+    where: {
+      AND: [
+        scope,
+        {
+          membershipId: input.memberId,
+          committeeId: input.committeeId,
+          removedAt: null,
+          role: input.previousRole,
+        },
+      ],
+    },
+    data: { role: input.role },
+  });
+  return count === 1;
 }

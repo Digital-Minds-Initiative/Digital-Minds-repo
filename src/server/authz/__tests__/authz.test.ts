@@ -10,6 +10,7 @@ import {
   membersScope,
   membershipTypesScope,
   pointTransactionsScope,
+  roleChangesScope,
   type Actor,
 } from '../index';
 
@@ -79,6 +80,7 @@ describe('scopes', () => {
       membersScope,
       committeeMembershipsScope,
       pointTransactionsScope,
+      roleChangesScope,
     ]) {
       expect(build(admin)).toEqual({});
     }
@@ -93,6 +95,7 @@ describe('scopes', () => {
         membersScope,
         committeeMembershipsScope,
         pointTransactionsScope,
+        roleChangesScope,
       ]) {
         expect(build(actor)).toEqual(NO_ROWS);
       }
@@ -115,6 +118,9 @@ describe('scopes', () => {
     expect(clubsScope(leadA1)).toEqual({ id: { in: [CLUB_A] } });
     // Types are club-wide: a lead reads their club's types for filters and dropdowns.
     expect(membershipTypesScope(leadA1)).toEqual({ clubId: { in: [CLUB_A] } });
+    // Role history is not: who was appointed when is the club's business, not a lead's, so the
+    // lead's own club must not match either (docs/adr/0018-granting-roles.md).
+    expect(roleChangesScope(leadA1)).toEqual(NO_ROWS);
   });
 
   it('give a mixed actor officer scope in A and nothing in B', () => {

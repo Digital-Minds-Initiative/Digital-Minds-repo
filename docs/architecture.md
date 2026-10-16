@@ -106,7 +106,7 @@ Current modules:
 | `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services and endpoints (list/search/get/create/update/remove/committees), UI; CSV import: later |
 | `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)                                                  |
 | `clubs`       | clubs, committees, membership types, view links, public view | contracts, services and endpoints (view links: later)                                                      |
-| `permissions` | appointing officers and leads                                | contracts                                                                                                  |
+| `permissions` | appointing officers and leads, and the history of it         | contracts, services and endpoints                                                                          |
 | `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints, mocks; user menu, overview                                                 |
 | `system`      | health                                                       | full endpoint                                                                                              |
 
@@ -194,6 +194,9 @@ member at all, so every member action is a 404 for them:
 | Rotate / disable a committee's view link                      |  ✓  |                    ✓                    |                     — (may read it)                     |
 | Appoint / revoke committee leads                              |  ✓  |                    ✓                    |                            —                            |
 | Appoint / revoke club officers                                |  ✓  |                    —                    |                            —                            |
+| Read who holds which role, and the role history               | all |               their club                |                            —                            |
+
+**Roles are granted through the API** ([ADR 0018](adr/0018-granting-roles.md)): full admins appoint and revoke club officers, a club's officers appoint and revoke the leads of its committees, and the full-admin flag itself is not grantable at all. Every real change writes one append-only `RoleChange` row; setting a role to the value it already holds writes nothing and answers 200, and because the role write is conditional on the previous role, two simultaneous grants leave one row. A change takes effect on the requester's next request — the Actor is rebuilt from the database every time.
 
 Every club-level refusal on a member carries the same reason, `club_management_required`.
 Removing is always a soft remove and points are never deleted: a person taken out of a committee
@@ -204,7 +207,7 @@ already active in the club is a 409 `already_in_club` carrying their `memberId`.
 
 **Archived clubs and committees** are read-only for anything new: no members, committee memberships, points, committees or membership types can be added to them, and they are left out of lists unless `?includeArchived=true` is passed. Each module refuses its own writes ([ADR 0015](adr/0015-archive-instead-of-delete.md)).
 
-**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `membershipTypesScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
+**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `membershipTypesScope`, `roleChangesScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
 
@@ -214,7 +217,7 @@ already active in the club is a 409 `already_in_club` carrying their `memberId`.
 module's write has to include another's, the owning module exports a function that takes the
 transaction client and the caller passes its own — the members service hands the auth module's
 `endUserSessions(tx, userId)` to the transaction that changes a university email, because auth
-owns `Session` ([ADR 0017](adr/0017-member-permissions.md)).
+owns `Session` ([ADR 0017](adr/0017-member-permissions.md)). It works both ways round: the permissions module owns `RoleChange` and opens the transaction that records a grant, while the role columns on the two membership tables are written by the members module's `setClubRole` / `setCommitteeRole`, called with that transaction's client ([ADR 0018](adr/0018-granting-roles.md)).
 
 **The service pattern** for every write:
 
@@ -243,6 +246,7 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 - `Club` → `Committee`, `MembershipType` (ordered per club). Clubs and committees are **archived, never deleted** (`archivedAt`): hidden from lists by default and closed to anything new, while their members and points history stay readable ([ADR 0015](adr/0015-archive-instead-of-delete.md)). Membership types carry no history of their own and are deleted — a type in use only with a destination for its memberships, and never the club's last one ([ADR 0016](adr/0016-membership-type-deletes-and-order.md)).
 - `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
 - `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
+- `RoleChange` — append-only, one row per real grant or revoke of an officer or lead role: the club, the committee (null for a club role), whose membership, who changed it, both roles and when. Explicit changes only; a role cleared by a removal is recorded by `removedAt` instead ([ADR 0018](adr/0018-granting-roles.md)).
 - `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel).
 - **Composite foreign keys** carry `clubId` down the chain, so a committee membership or a point can never point into another club — even if application code has a bug.
 - **Nothing with history is hard-deleted.** All foreign keys are `Restrict`.

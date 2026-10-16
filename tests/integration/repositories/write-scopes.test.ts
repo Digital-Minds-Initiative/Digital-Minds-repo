@@ -24,6 +24,8 @@ import {
 } from '@/server/modules/clubs/repository';
 import {
   addToCommittee,
+  setClubRole,
+  setCommitteeRole,
   removeFromClub,
   removeFromCommittee,
   saveMemberChanges,
@@ -326,6 +328,78 @@ describe('repository writes apply the scope themselves', () => {
         reorderMembershipTypes(membershipTypesScope(officerB), s.clubA.id, [s.types.a2, s.types.a]),
       ).resolves.toEqual({ matched: false });
       expect(await typesOfA()).toEqual(before);
+    });
+  });
+
+  describe('role writes', () => {
+    const membershipA1 = () =>
+      db.membership.findUniqueOrThrow({ where: { id: s.memberships.memberA1 } });
+    const committeeRowA1 = () =>
+      db.committeeMembership.findUniqueOrThrow({
+        where: {
+          membershipId_committeeId: {
+            membershipId: s.memberships.memberA1,
+            committeeId: s.committees.a1.id,
+          },
+        },
+      });
+
+    it('setClubRole refuses a membership outside the scope', async () => {
+      const before = await membershipA1();
+      const changed = await db.$transaction((tx) =>
+        setClubRole(tx, membersScope(officerB), {
+          memberId: s.memberships.memberA1,
+          previousRole: 'MEMBER',
+          role: 'CLUB_OFFICER',
+        }),
+      );
+      expect(changed).toBe(false);
+      expect(await membershipA1()).toEqual(before);
+    });
+
+    it('setCommitteeRole refuses a committee membership outside the scope', async () => {
+      const before = await committeeRowA1();
+      const changed = await db.$transaction((tx) =>
+        setCommitteeRole(tx, committeeMembershipsScope(officerB), {
+          memberId: s.memberships.memberA1,
+          committeeId: s.committees.a1.id,
+          previousRole: 'MEMBER',
+          role: 'LEAD',
+        }),
+      );
+      expect(changed).toBe(false);
+      expect(await committeeRowA1()).toEqual(before);
+    });
+
+    it('both refuse a role that is no longer the one they were told, and write nothing', async () => {
+      const officerA = await actorFor(s.users.officerA.id);
+      const before = await membershipA1();
+      // The row holds MEMBER, so an update expecting CLUB_OFFICER matches nothing — this is what
+      // makes two concurrent grants leave one history row (docs/adr/0018-granting-roles.md).
+      const changed = await db.$transaction((tx) =>
+        setClubRole(tx, membersScope(officerA), {
+          memberId: s.memberships.memberA1,
+          previousRole: 'CLUB_OFFICER',
+          role: 'MEMBER',
+        }),
+      );
+      expect(changed).toBe(false);
+      expect(await membershipA1()).toEqual(before);
+    });
+
+    it('control: inside the scope, with the right previous role, they change the row', async () => {
+      const officerA = await actorFor(s.users.officerA.id);
+      await expect(
+        db.$transaction((tx) =>
+          setCommitteeRole(tx, committeeMembershipsScope(officerA), {
+            memberId: s.memberships.memberA1,
+            committeeId: s.committees.a1.id,
+            previousRole: 'MEMBER',
+            role: 'LEAD',
+          }),
+        ),
+      ).resolves.toBe(true);
+      expect(await committeeRowA1()).toMatchObject({ role: 'LEAD' });
     });
   });
 
