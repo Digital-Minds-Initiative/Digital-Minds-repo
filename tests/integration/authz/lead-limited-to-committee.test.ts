@@ -89,9 +89,7 @@ describe('committee lead scope', () => {
   it('cannot read or modify another committee’s points', async () => {
     await expectNotFound(getMemberPoints(leadA1, s.memberships.memberA2, pointsQuery()));
     await expectNotFound(
-      createPointTransaction(leadA1, {
-        memberId: s.memberships.memberA2,
-        committeeId: s.committees.a2.id,
+      createPointTransaction(leadA1, s.memberships.memberA2, s.committees.a2.id, {
         amount: 10,
         reason: 'محاولة',
         workDate: today(),
@@ -99,9 +97,7 @@ describe('committee lead scope', () => {
     );
     // Even for a person they can see, only in their own committee.
     await expectNotFound(
-      createPointTransaction(leadA1, {
-        memberId: s.memberships.leadA1,
-        committeeId: s.committees.a2.id,
+      createPointTransaction(leadA1, s.memberships.leadA1, s.committees.a2.id, {
         amount: 10,
         reason: 'محاولة',
         workDate: today(),
@@ -166,13 +162,16 @@ describe('committee lead scope', () => {
       updateMember(leadA1, s.memberships.memberA1, { membershipTypeId: s.types.a2 }),
     ).resolves.toMatchObject({ membershipType: { id: s.types.a2 } });
 
-    const transaction = await createPointTransaction(leadA1, {
-      memberId: s.memberships.memberA1,
-      committeeId: s.committees.a1.id,
-      amount: 15,
-      reason: 'تنظيم ورشة',
-      workDate: today(),
-    });
+    const transaction = await createPointTransaction(
+      leadA1,
+      s.memberships.memberA1,
+      s.committees.a1.id,
+      {
+        amount: 15,
+        reason: 'تنظيم ورشة',
+        workDate: today(),
+      },
+    );
     await expect(
       updatePointTransaction(leadA1, transaction.id, { amount: 20 }),
     ).resolves.toMatchObject({ amount: 20 });

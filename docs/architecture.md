@@ -104,7 +104,7 @@ Current modules:
 | Module        | Owns                                                         | Implemented now                                                                                            |
 | ------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services and endpoints (list/search/get/create/update/remove/committees), UI; CSV import: later |
-| `points`      | the ledger, revisions, balances                              | contracts, services (create/edit/cancel/history/balances)                                                  |
+| `points`      | the ledger, revisions, balances                              | contracts, services and endpoints (bulk entry and reports: later)                                          |
 | `clubs`       | clubs, committees, membership types, view links, public view | contracts, services and endpoints (view links: later)                                                      |
 | `permissions` | appointing officers and leads, and the history of it         | contracts, services and endpoints                                                                          |
 | `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints, mocks; user menu, overview                                                 |
@@ -188,7 +188,8 @@ member at all, so every member action is a 404 for them:
 | Edit the university email                                     |  ✓  | only while the person is not registered |                            —                            |
 | Change membership type                                        |  ✓  |                    ✓                    |           members of the committees they lead           |
 | CSV import                                                    |  ✓  |                    ✓                    |                            —                            |
-| Create / edit / cancel points                                 |  ✓  |                    ✓                    |                     their committee                     |
+| Add points, edit and cancel any transaction                   |  ✓  |                    ✓                    |                     their committee                     |
+| Read a member's points history and balances                   | all |                  club                   |           members of the committees they lead           |
 | Membership types of a club                                    |  ✓  |                    ✓                    |                            —                            |
 | Clubs and committees: create, rename, archive                 |  ✓  |                    —                    |                            —                            |
 | Rotate / disable a committee's view link                      |  ✓  |                    ✓                    |                     — (may read it)                     |
@@ -204,6 +205,8 @@ drops out of its lists and can earn nothing more there, while what they already 
 their club total. Adding someone whose membership was removed **restores that membership**, with
 its committee memberships and their points, and resets every role on the way back in; someone
 already active in the club is a 409 `already_in_club` carrying their `memberId`.
+
+**Points** ([ADR 0004](adr/0004-points-ledger.md), [ADR 0019](adr/0019-points-rules.md)) are a ledger: a balance is the sum of a member's ACTIVE transactions in one committee, never a stored column. A lead runs the ledger of the committees they lead, including transactions somebody else recorded. Nothing is deleted — cancelling marks the row, stops it counting and is final — and every real edit or cancel writes a revision with the values from before. Refusals name what is wrong (409 `member_removed`, `not_in_committee`, `club_archived`, `committee_archived`, `transaction_cancelled`, `transaction_modified`) while 404 stays for what the actor cannot see. The members list carries each member's balance per committee as well as their total, in two queries for a whole page.
 
 **Archived clubs and committees** are read-only for anything new: no members, committee memberships, points, committees or membership types can be added to them, and they are left out of lists unless `?includeArchived=true` is passed. Each module refuses its own writes ([ADR 0015](adr/0015-archive-instead-of-delete.md)).
 
@@ -247,7 +250,7 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 - `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
 - `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
 - `RoleChange` — append-only, one row per real grant or revoke of an officer or lead role: the club, the committee (null for a club role), whose membership, who changed it, both roles and when. Explicit changes only; a role cleared by a removal is recorded by `removedAt` instead ([ADR 0018](adr/0018-granting-roles.md)).
-- `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel).
+- `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel). Amounts are whole numbers in ±1000 and never zero; a balance is the sum of ACTIVE amounts, per committee, computed at read time ([ADR 0004](adr/0004-points-ledger.md), [ADR 0019](adr/0019-points-rules.md)).
 - **Composite foreign keys** carry `clubId` down the chain, so a committee membership or a point can never point into another club — even if application code has a bug.
 - **Nothing with history is hard-deleted.** All foreign keys are `Restrict`.
 - Ids are UUIDv7.

@@ -77,20 +77,21 @@ export async function listMembers(
     { sort: query.sort, order: query.order },
     pageOffset(query.page, query.pageSize),
   );
-  const points = await getActivePointsByMember(
+  // Two queries for the whole page, whatever its size (docs/adr/0019-points-rules.md).
+  const balances = await getActivePointsByMember(
     actor,
     rows.map((row) => row.id),
   );
   return {
-    items: rows.map((row) => toMember(row, points.get(row.id) ?? 0)),
+    items: rows.map((row) => toMember(row, balances.get(row.id))),
     ...pageMeta(total, query.page, query.pageSize),
   };
 }
 
 export async function getMember(actor: Actor, memberId: string): Promise<Member> {
   const row = await loadVisibleMember(actor, memberId);
-  const points = await getActivePointsByMember(actor, [row.id]);
-  return toMember(row, points.get(row.id) ?? 0);
+  const balances = await getActivePointsByMember(actor, [row.id]);
+  return toMember(row, balances.get(row.id));
 }
 
 /**

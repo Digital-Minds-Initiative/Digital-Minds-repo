@@ -16,19 +16,29 @@ import {
   requireAnyField,
   sortShape,
 } from '@/shared/contracts/core';
+import { memberCommitteeParamsSchema, memberParamsSchema } from '@/shared/contracts/members';
+import { collapseWhitespace } from '@/shared/lib/text';
 
 /*
- * Points are a ledger of transactions per member per committee.
- *  - amount: positive adds, negative deducts, never zero
- *  - workDate: the day of the actual activity (Asia/Riyadh), never in the future
- *  - cancel never deletes: the row stays with status CANCELLED and stops counting
- *  - every edit or cancel writes a revision with the previous values
- *  - balance = sum of ACTIVE transactions; period filters use workDate, never createdAt
+ * Points are a ledger of transactions per member per committee (docs/adr/0004-points-ledger.md,
+ * amended by docs/adr/0019-points-rules.md).
  *
- * Managing points in a committee: its lead, officers of its club, full admins.
+ *  - amount: positive adds, negative deducts, never zero, within ±1000
+ *  - workDate: the day of the actual activity (Asia/Riyadh), never in the future, no limit back
+ *  - a balance is the sum of ACTIVE transactions; there is no stored balance anywhere
+ *  - the member and committee of a transaction never change: cancel it and add a new one
+ *  - every real edit or cancel writes a revision with the values before it
+ *  - cancel never deletes and is final; cancelling a cancelled transaction is a 200 no-op
+ *  - period filters use workDate, never createdAt
+ *
+ * Managing points in a committee: its lead, officers of its club, full admins (403
+ * `points_management_required`). Reading follows the same scope, and out of scope is a 404.
  */
 
-export const POINTS_AMOUNT_LIMIT = 10_000;
+/** A single transaction may move at most this many points, in either direction. */
+export const POINTS_AMOUNT_LIMIT = 1000;
+
+export const POINTS_REASON_MAX = 500;
 
 export const pointTransactionStatusSchema = z.enum(['ACTIVE', 'CANCELLED']);
 export type PointTransactionStatus = z.infer<typeof pointTransactionStatusSchema>;
@@ -39,6 +49,7 @@ export const pointRevisionActionSchema = z.enum(['UPDATED', 'CANCELLED']);
 export const pointStatusFilterSchema = z.enum(['active', 'cancelled', 'all']);
 export type PointStatusFilter = z.infer<typeof pointStatusFilterSchema>;
 
+/** A whole number of points, never zero. A decimal is refused, not rounded. */
 export const pointsAmountSchema = z
   .number()
   .int()
@@ -46,7 +57,11 @@ export const pointsAmountSchema = z
   .max(POINTS_AMOUNT_LIMIT)
   .refine((amount) => amount !== 0, { message: 'amount_zero' });
 
-export const pointsReasonSchema = z.string().trim().min(1).max(500);
+/** Free text, required. Trimmed with repeated whitespace collapsed, like every typed field. */
+export const pointsReasonSchema = z
+  .string()
+  .transform(collapseWhitespace)
+  .pipe(z.string().min(1).max(POINTS_REASON_MAX));
 
 /** The date of the activity: today or earlier in Saudi Arabia. */
 export const workDateSchema = pastOrTodayDateSchema;
@@ -76,7 +91,154 @@ export type PointTransaction = z.infer<typeof pointTransactionSchema>;
 
 const transactionParamsSchema = z.object({ transactionId: idSchema });
 
-// ─── Ledger list ─────────────────────────────────────────────
+// ─── Add ─────────────────────────────────────────────────────
+
+export const createPointTransactionBodySchema = z.strictObject({
+  amount: pointsAmountSchema,
+  reason: pointsReasonSchema,
+  workDate: workDateSchema,
+});
+export type CreatePointTransactionBody = z.output<typeof createPointTransactionBodySchema>;
+
+/**
+ * Records points for one member in one committee. The member must hold an active membership in
+ * that committee (409 `not_in_committee`) and in the club (409 `member_removed`), and neither the
+ * club nor the committee may be archived (409 `club_archived` / `committee_archived`).
+ *
+ * A balance is allowed to go below zero: a deduction is never refused for lack of points.
+ */
+export const createPointTransactionEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/members/:memberId/committees/:committeeId/points',
+  access: 'actor',
+  params: memberCommitteeParamsSchema,
+  body: createPointTransactionBodySchema,
+  response: pointTransactionSchema,
+  successStatus: 201,
+});
+
+// ─── Member history and balances ─────────────────────────────
+
+export const memberPointsQuerySchema = z
+  .object({
+    ...paginationShape,
+    ...periodShape,
+    committeeId: idSchema.optional(),
+    /** Cancelled transactions are history, so they are left out unless asked for. */
+    status: pointStatusFilterSchema.default('active'),
+  })
+  .superRefine(refinePeriod);
+export type MemberPointsQuery = z.output<typeof memberPointsQuerySchema>;
+
+const balanceSchema = z.object({
+  /** All active transactions (in the caller's scope). */
+  balance: z.number().int(),
+  /** Active transactions with a work date inside the requested period (= balance without one). */
+  period: z.number().int(),
+});
+
+export const memberPointsSchema = z.object({
+  member: personRefSchema,
+  totals: balanceSchema,
+  /**
+   * One entry per committee the member has points in — including committees they have since
+   * left, because their history is not rewritten when they leave one (ADR 0017).
+   */
+  byCommittee: z.array(balanceSchema.extend({ committee: committeeRefSchema })),
+  /** Newest work date first. */
+  transactions: paginated(pointTransactionSchema),
+});
+export type MemberPoints = z.infer<typeof memberPointsSchema>;
+
+/** A member's points history and balances, limited to the committees the caller can see. */
+export const getMemberPointsEndpoint = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/members/:memberId/points',
+  access: 'actor',
+  params: memberParamsSchema,
+  query: memberPointsQuerySchema,
+  response: memberPointsSchema,
+});
+
+// ─── Edit ────────────────────────────────────────────────────
+
+/**
+ * Strict: the member and committee of a transaction cannot change, so they are not accepted here
+ * — cancel it and add a new one instead. A field whose value equals the stored one is not an
+ * edit: it is not written and it records no revision.
+ */
+export const updatePointTransactionBodySchema = requireAnyField(
+  z.strictObject({
+    amount: pointsAmountSchema.optional(),
+    reason: pointsReasonSchema.optional(),
+    workDate: workDateSchema.optional(),
+  }),
+);
+export type UpdatePointTransactionBody = z.output<typeof updatePointTransactionBodySchema>;
+
+/**
+ * 409 `transaction_cancelled` for a cancelled transaction — it cannot be edited back to life.
+ * 409 `transaction_modified` when somebody else changed it since it was loaded, so a revision
+ * can never describe a change that did not happen.
+ */
+export const updatePointTransactionEndpoint = defineEndpoint({
+  method: 'PATCH',
+  path: '/api/v1/points/:transactionId',
+  access: 'actor',
+  params: transactionParamsSchema,
+  body: updatePointTransactionBodySchema,
+  response: pointTransactionSchema,
+});
+
+// ─── Cancel ──────────────────────────────────────────────────
+
+export const cancelPointTransactionBodySchema = z.strictObject({ reason: pointsReasonSchema });
+export type CancelPointTransactionBody = z.output<typeof cancelPointTransactionBodySchema>;
+
+/**
+ * Cancelling keeps the row and stops it counting in every balance. It is final: there is no
+ * un-cancel, and a transaction cancelled by mistake is replaced by a new one.
+ *
+ * Cancelling a transaction that is already cancelled writes nothing, records no revision and
+ * answers 200 — including when a second request is cancelling it at the same moment.
+ */
+export const cancelPointTransactionEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/points/:transactionId/cancel',
+  access: 'actor',
+  params: transactionParamsSchema,
+  body: cancelPointTransactionBodySchema,
+  response: pointTransactionSchema,
+});
+
+// ─── Revisions ───────────────────────────────────────────────
+
+export const pointTransactionRevisionSchema = z.object({
+  id: idSchema,
+  action: pointRevisionActionSchema,
+  /** Values before this change. */
+  previous: z.object({
+    amount: z.number().int(),
+    reason: z.string(),
+    workDate: isoDateSchema,
+    status: pointTransactionStatusSchema,
+  }),
+  changedBy: personRefSchema,
+  changedAt: isoDateTimeSchema,
+});
+export type PointTransactionRevision = z.infer<typeof pointTransactionRevisionSchema>;
+
+/** Append-only, oldest first: the story of one transaction from how it was first recorded. */
+export const listPointTransactionRevisionsEndpoint = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/points/:transactionId/revisions',
+  access: 'actor',
+  params: transactionParamsSchema,
+  response: z.object({ items: z.array(pointTransactionRevisionSchema) }),
+});
+
+// ─── Drafts for later tasks ──────────────────────────────────
+// No route handlers yet: the ledger list belongs to the reports task, bulk entry to its own.
 
 export const pointTransactionSortFields = ['workDate', 'createdAt', 'amount'] as const;
 
@@ -97,7 +259,7 @@ export type ListPointTransactionsQuery = z.output<typeof listPointTransactionsQu
 
 export const listPointTransactionsEndpoint = defineEndpoint({
   method: 'GET',
-  path: '/api/v1/points/transactions',
+  path: '/api/v1/points',
   access: 'actor',
   query: listPointTransactionsQuerySchema,
   response: paginated(pointTransactionSchema).extend({
@@ -106,33 +268,13 @@ export const listPointTransactionsEndpoint = defineEndpoint({
   }),
 });
 
-// ─── Create ──────────────────────────────────────────────────
-
-export const createPointTransactionBodySchema = z.object({
-  memberId: idSchema,
-  committeeId: idSchema,
-  amount: pointsAmountSchema,
-  reason: pointsReasonSchema,
-  workDate: workDateSchema,
-});
-export type CreatePointTransactionBody = z.output<typeof createPointTransactionBodySchema>;
-
-export const createPointTransactionEndpoint = defineEndpoint({
-  method: 'POST',
-  path: '/api/v1/points/transactions',
-  access: 'actor',
-  body: createPointTransactionBodySchema,
-  response: pointTransactionSchema,
-  successStatus: 201,
-});
-
 /** Same amount, reason and date for many members of one committee (e.g. event attendance). */
 export const bulkCreatePointTransactionsEndpoint = defineEndpoint({
   method: 'POST',
-  path: '/api/v1/points/transactions/bulk',
+  path: '/api/v1/committees/:committeeId/points/bulk',
   access: 'actor',
-  body: z.object({
-    committeeId: idSchema,
+  params: z.object({ committeeId: idSchema }),
+  body: z.strictObject({
     memberIds: z
       .array(idSchema)
       .min(1)
@@ -146,103 +288,6 @@ export const bulkCreatePointTransactionsEndpoint = defineEndpoint({
   response: z.object({ batchId: idSchema, count: z.number().int().min(1) }),
   successStatus: 201,
 });
-
-// ─── Edit / cancel ───────────────────────────────────────────
-
-/** The member and committee cannot change; cancel and create a new transaction instead. */
-export const updatePointTransactionBodySchema = requireAnyField(
-  z.object({
-    amount: pointsAmountSchema.optional(),
-    reason: pointsReasonSchema.optional(),
-    workDate: workDateSchema.optional(),
-  }),
-);
-export type UpdatePointTransactionBody = z.output<typeof updatePointTransactionBodySchema>;
-
-/** 409 `transaction_cancelled` for a cancelled transaction. */
-export const updatePointTransactionEndpoint = defineEndpoint({
-  method: 'PATCH',
-  path: '/api/v1/points/transactions/:transactionId',
-  access: 'actor',
-  params: transactionParamsSchema,
-  body: updatePointTransactionBodySchema,
-  response: pointTransactionSchema,
-});
-
-export const cancelPointTransactionBodySchema = z.object({ reason: pointsReasonSchema });
-export type CancelPointTransactionBody = z.output<typeof cancelPointTransactionBodySchema>;
-
-/** Cancelling is final. 409 `transaction_cancelled` when it already is. */
-export const cancelPointTransactionEndpoint = defineEndpoint({
-  method: 'POST',
-  path: '/api/v1/points/transactions/:transactionId/cancel',
-  access: 'actor',
-  params: transactionParamsSchema,
-  body: cancelPointTransactionBodySchema,
-  response: pointTransactionSchema,
-});
-
-export const pointTransactionRevisionSchema = z.object({
-  id: idSchema,
-  action: pointRevisionActionSchema,
-  /** Values before this change. */
-  previous: z.object({
-    amount: z.number().int(),
-    reason: z.string(),
-    workDate: isoDateSchema,
-    status: pointTransactionStatusSchema,
-  }),
-  changedBy: personRefSchema,
-  changedAt: isoDateTimeSchema,
-});
-export type PointTransactionRevision = z.infer<typeof pointTransactionRevisionSchema>;
-
-export const listPointTransactionRevisionsEndpoint = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/points/transactions/:transactionId/revisions',
-  access: 'actor',
-  params: transactionParamsSchema,
-  response: z.object({ items: z.array(pointTransactionRevisionSchema) }),
-});
-
-// ─── Member history ──────────────────────────────────────────
-
-export const memberPointsQuerySchema = z
-  .object({
-    ...paginationShape,
-    ...periodShape,
-    committeeId: idSchema.optional(),
-    status: pointStatusFilterSchema.default('all'),
-  })
-  .superRefine(refinePeriod);
-export type MemberPointsQuery = z.output<typeof memberPointsQuerySchema>;
-
-const balanceSchema = z.object({
-  /** All active transactions (in the caller's scope). */
-  balance: z.number().int(),
-  /** Active transactions with a work date inside the requested period (= balance without one). */
-  period: z.number().int(),
-});
-
-export const memberPointsSchema = z.object({
-  member: personRefSchema,
-  totals: balanceSchema,
-  byCommittee: z.array(balanceSchema.extend({ committee: committeeRefSchema })),
-  transactions: paginated(pointTransactionSchema),
-});
-export type MemberPoints = z.infer<typeof memberPointsSchema>;
-
-/** A member's points history and balances, limited to the committees the caller can see. */
-export const getMemberPointsEndpoint = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/members/:memberId/points',
-  access: 'actor',
-  params: z.object({ memberId: idSchema }),
-  query: memberPointsQuerySchema,
-  response: memberPointsSchema,
-});
-
-// ─── Committee summary ───────────────────────────────────────
 
 /** Balances of every member of a committee, optionally for a work-date period. */
 export const getCommitteePointsSummaryEndpoint = defineEndpoint({

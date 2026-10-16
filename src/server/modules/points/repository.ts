@@ -1,6 +1,11 @@
 import 'server-only';
 
-import type { CommitteeMembershipScope, MemberScope, PointTransactionScope } from '@/server/authz';
+import type {
+  CommitteeMembershipScope,
+  CommitteeScope,
+  MemberScope,
+  PointTransactionScope,
+} from '@/server/authz';
 import { db } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
@@ -71,16 +76,28 @@ function transactionWhere(
 
 // ─── Reads ───────────────────────────────────────────────────
 
-/** Id and name of a member the actor can see, or null. */
+/** A member the actor can see, or null. `removed` is why points may be refused for them. */
 export async function findVisibleMember(
   scope: MemberScope,
   memberId: string,
-): Promise<{ id: string; fullName: string } | null> {
+): Promise<{ id: string; fullName: string; clubId: string; removed: boolean } | null> {
   const row = await db.membership.findFirst({
     where: { AND: [scope, { id: memberId }] },
-    select: { id: true, user: { select: { fullName: true } } },
+    select: {
+      id: true,
+      clubId: true,
+      removedAt: true,
+      user: { select: { fullName: true } },
+    },
   });
-  return row ? { id: row.id, fullName: row.user.fullName } : null;
+  return row
+    ? {
+        id: row.id,
+        fullName: row.user.fullName,
+        clubId: row.clubId,
+        removed: row.removedAt !== null,
+      }
+    : null;
 }
 
 export async function findTransaction(
@@ -162,18 +179,35 @@ export async function sumActiveByCommittee(
   }));
 }
 
-/** Active point totals per member (membership id) — used by the members list. */
+/** One member's balances: the total, and the part of it earned in each committee. */
+export interface MemberBalances {
+  total: number;
+  /** Keyed by committee id. Committees the member has left are in here too. */
+  byCommittee: Map<string, number>;
+}
+
+/**
+ * Active balances for a page of members — two queries whatever the page size, never one per
+ * member. Used by the members list.
+ *
+ * The committee memberships are read through the actor's scope and deliberately **without** a
+ * `removedAt` filter: a member keeps the points they earned in a committee they have since left,
+ * so those still count towards the club total even though the committee is no longer in their
+ * list (docs/adr/0017-member-permissions.md). The transactions are then summed per committee
+ * membership in one `groupBy`, which the (committeeMembershipId, status, workDate) index serves.
+ */
 export async function sumActiveByMember(
   scope: PointTransactionScope,
   committeeMembershipScope: CommitteeMembershipScope,
   memberIds: string[],
-): Promise<Map<string, number>> {
-  if (memberIds.length === 0) return new Map();
+): Promise<Map<string, MemberBalances>> {
+  const balances = new Map<string, MemberBalances>();
+  if (memberIds.length === 0) return balances;
   const links = await db.committeeMembership.findMany({
     where: { AND: [committeeMembershipScope, { membershipId: { in: memberIds } }] },
-    select: { id: true, membershipId: true },
+    select: { id: true, membershipId: true, committeeId: true },
   });
-  if (links.length === 0) return new Map();
+  if (links.length === 0) return balances;
 
   const groups = await db.pointTransaction.groupBy({
     by: ['committeeMembershipId'],
@@ -182,54 +216,71 @@ export async function sumActiveByMember(
     },
     _sum: { amount: true },
   });
-  const memberByLink = new Map(links.map((link) => [link.id, link.membershipId]));
-  const totals = new Map<string, number>();
+  const linksById = new Map(links.map((link) => [link.id, link]));
   for (const group of groups) {
-    const memberId = memberByLink.get(group.committeeMembershipId);
-    if (memberId) totals.set(memberId, (totals.get(memberId) ?? 0) + (group._sum.amount ?? 0));
+    const link = linksById.get(group.committeeMembershipId);
+    if (!link) continue;
+    const amount = group._sum.amount ?? 0;
+    const current = balances.get(link.membershipId) ?? { total: 0, byCommittee: new Map() };
+    current.total += amount;
+    current.byCommittee.set(
+      link.committeeId,
+      (current.byCommittee.get(link.committeeId) ?? 0) + amount,
+    );
+    balances.set(link.membershipId, current);
   }
-  return totals;
+  return balances;
 }
 
-/** An active committee membership (active member, active committee) the actor can see. */
-export async function findActiveCommitteeMembership(
-  scope: CommitteeMembershipScope,
-  target: { memberId: string; committeeId: string },
-): Promise<{
-  id: string;
-  clubId: string;
+/** Where points would go: the committee, and the member's active membership in it (if any). */
+export interface PointsTarget {
   committeeId: string;
+  clubId: string;
   committeeArchived: boolean;
   clubArchived: boolean;
-} | null> {
-  const row = await db.committeeMembership.findFirst({
-    where: {
-      AND: [
-        scope,
-        {
-          membershipId: target.memberId,
-          committeeId: target.committeeId,
-          removedAt: null,
-          membership: { removedAt: null },
-        },
-      ],
-    },
+  /**
+   * The committee membership to hang the transaction off, or null when the member holds no
+   * *active* membership in this committee — which is a 409, not a 404: the committee and the
+   * member are both in plain sight (docs/adr/0019-points-rules.md).
+   */
+  committeeMembershipId: string | null;
+}
+
+/**
+ * Reads the committee through the actor's committee scope, with the target member's active
+ * membership in it read through the committee-membership scope — so a membership the actor
+ * cannot see is indistinguishable from none. Null when the committee itself is out of reach.
+ */
+export async function findPointsTarget(
+  scopes: { committees: CommitteeScope; committeeMemberships: CommitteeMembershipScope },
+  target: { memberId: string; committeeId: string },
+): Promise<PointsTarget | null> {
+  const row = await db.committee.findFirst({
+    where: { AND: [scopes.committees, { id: target.committeeId }] },
     select: {
       id: true,
       clubId: true,
-      committeeId: true,
-      committee: { select: { archivedAt: true, club: { select: { archivedAt: true } } } },
+      archivedAt: true,
+      club: { select: { archivedAt: true } },
+      committeeMemberships: {
+        where: {
+          AND: [
+            scopes.committeeMemberships,
+            { membershipId: target.memberId, removedAt: null, membership: { removedAt: null } },
+          ],
+        },
+        select: { id: true },
+      },
     },
   });
-  return row
-    ? {
-        id: row.id,
-        clubId: row.clubId,
-        committeeId: row.committeeId,
-        committeeArchived: row.committee.archivedAt !== null,
-        clubArchived: row.committee.club.archivedAt !== null,
-      }
-    : null;
+  if (!row) return null;
+  return {
+    committeeId: row.id,
+    clubId: row.clubId,
+    committeeArchived: row.archivedAt !== null,
+    clubArchived: row.club.archivedAt !== null,
+    committeeMembershipId: row.committeeMemberships[0]?.id ?? null,
+  };
 }
 
 // ─── Writes ──────────────────────────────────────────────────
@@ -301,7 +352,15 @@ export async function updateTransactionWithRevision(
         ...(changes.workDate !== undefined ? { workDate: dateOnlyToDate(changes.workDate) } : {}),
       },
     });
-    if (count !== 1) throw new ConflictError(STALE_MESSAGE, 'transaction_modified');
+    if (count !== 1) {
+      // Why it missed decides the answer: a row this scope cannot reach must look like one that
+      // does not exist, and anything else means somebody changed it since it was read.
+      const reachable = await tx.pointTransaction.count({
+        where: { AND: [scope, { id: current.id }] },
+      });
+      if (reachable === 0) throw new NotFoundError('Point transaction');
+      throw new ConflictError(STALE_MESSAGE, 'transaction_modified');
+    }
 
     await tx.pointTransactionRevision.create({
       data: {
@@ -321,12 +380,20 @@ export async function updateTransactionWithRevision(
   });
 }
 
-/** Cancels (never deletes) and records the previous values, atomically. */
+/**
+ * Cancels (never deletes) and records the previous values, atomically.
+ *
+ * When the conditional update matches nothing, the reason decides the answer. If the row is now
+ * CANCELLED, a request that got here first did the work: this one did nothing, which is the
+ * no-op, and `recorded` says so. If it is still ACTIVE, somebody edited it since it was read,
+ * and cancelling on top of values we never saw would record a revision describing a change that
+ * did not happen — so that is 409 `transaction_modified` (docs/adr/0019-points-rules.md).
+ */
 export async function cancelTransactionWithRevision(
   scope: PointTransactionScope,
   current: RevisableTransaction,
   cancellation: { reason: string; cancelledById: string },
-): Promise<TransactionRow> {
+): Promise<{ row: TransactionRow; recorded: boolean }> {
   return db.$transaction(async (tx) => {
     const { count } = await tx.pointTransaction.updateMany({
       where: { AND: [scope, { id: current.id, status: 'ACTIVE', updatedAt: current.updatedAt }] },
@@ -337,7 +404,16 @@ export async function cancelTransactionWithRevision(
         cancellationReason: cancellation.reason,
       },
     });
-    if (count !== 1) throw new ConflictError(STALE_MESSAGE, 'transaction_modified');
+    if (count !== 1) {
+      // Read committed: this sees the row as the other request left it.
+      const latest = await tx.pointTransaction.findFirst({
+        where: { AND: [scope, { id: current.id }] },
+        select: transactionSelect,
+      });
+      if (!latest) throw new NotFoundError('Point transaction');
+      if (latest.status === 'CANCELLED') return { row: latest, recorded: false };
+      throw new ConflictError(STALE_MESSAGE, 'transaction_modified');
+    }
 
     await tx.pointTransactionRevision.create({
       data: {
@@ -350,9 +426,42 @@ export async function cancelTransactionWithRevision(
         changedById: cancellation.cancelledById,
       },
     });
-    return tx.pointTransaction.findUniqueOrThrow({
+    const row = await tx.pointTransaction.findUniqueOrThrow({
       where: { id: current.id },
       select: transactionSelect,
     });
+    return { row, recorded: true };
+  });
+}
+
+// ─── Revisions ───────────────────────────────────────────────
+
+const revisionSelect = {
+  id: true,
+  action: true,
+  previousAmount: true,
+  previousReason: true,
+  previousWorkDate: true,
+  previousStatus: true,
+  createdAt: true,
+  changedBy: { select: { id: true, fullName: true } },
+} satisfies Prisma.PointTransactionRevisionSelect;
+
+export type RevisionRow = Prisma.PointTransactionRevisionGetPayload<{
+  select: typeof revisionSelect;
+}>;
+
+/**
+ * The revisions of one transaction, oldest first. The transaction itself is read through the
+ * actor's scope by the service first, so this only has to name it.
+ */
+export async function findRevisions(
+  scope: PointTransactionScope,
+  transactionId: string,
+): Promise<RevisionRow[]> {
+  return db.pointTransactionRevision.findMany({
+    where: { transaction: { AND: [scope, { id: transactionId }] } },
+    select: revisionSelect,
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
 }

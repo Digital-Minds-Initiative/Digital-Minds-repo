@@ -22,6 +22,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0016](0016-membership-type-deletes-and-order.md) | Membership types: delete with a destination, order in one request             | Accepted                        |
 | [0017](0017-member-permissions.md)                | Officers run the membership; a removed member is restored                     | Accepted                        |
 | [0018](0018-granting-roles.md)                    | Full admins appoint officers, officers appoint leads; every grant is recorded | Accepted                        |
+| [0019](0019-points-rules.md)                      | What the points endpoints accept, refuse and record                           | Accepted (amends 0004)          |
 
 ## Writing a new ADR
 

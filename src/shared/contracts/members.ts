@@ -49,7 +49,11 @@ export type CommitteeRole = z.infer<typeof committeeRoleSchema>;
 
 // ─── Read model ──────────────────────────────────────────────
 
-export const memberCommitteeSchema = committeeRefSchema.extend({ role: committeeRoleSchema });
+export const memberCommitteeSchema = committeeRefSchema.extend({
+  role: committeeRoleSchema,
+  /** The member's balance in this committee: the sum of its active transactions. */
+  points: z.number().int(),
+});
 
 /**
  * This club's record of the person's contact and study details. Every club keeps its own copy and
@@ -81,7 +85,11 @@ export const memberSchema = z.object({
   role: clubRoleSchema,
   /** Active committee memberships — only the committees the caller is allowed to see. */
   committees: z.array(memberCommitteeSchema),
-  /** Sum of active point transactions in the committees the caller can see. */
+  /**
+   * The member's balance across every committee the caller can see — which can be more than the
+   * committees listed above add up to, because points earned in a committee the person has since
+   * left still count for the club (docs/adr/0017-member-permissions.md).
+   */
   points: z.number().int(),
   joinedAt: isoDateTimeSchema,
   removedAt: isoDateTimeSchema.nullable(),

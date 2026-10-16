@@ -49,9 +49,7 @@ describe('removing a member', () => {
       [s.committees.a1, 10],
       [s.committees.a2, 5],
     ] as const) {
-      await createPointTransaction(officerA, {
-        memberId: member.id,
-        committeeId: committee.id,
+      await createPointTransaction(officerA, member.id, committee.id, {
         amount,
         reason: 'نشاط',
         workDate: today(),
@@ -107,15 +105,15 @@ describe('removing a member', () => {
       );
       expect(inA2.items.map((item) => item.id)).toContain(member.id);
 
-      // And nothing new can be credited to them there.
-      await expectNotFound(
-        createPointTransaction(officerA, {
-          memberId: member.id,
-          committeeId: s.committees.a1.id,
+      // And nothing new can be credited to them there: the member and the committee are both
+      // in plain sight, so this is a conflict, not a 404 (docs/adr/0019-points-rules.md).
+      await expectConflict(
+        createPointTransaction(officerA, member.id, s.committees.a1.id, {
           amount: 5,
           reason: 'بعد الإزالة',
           workDate: today(),
         }),
+        'not_in_committee',
       );
     });
 
@@ -268,14 +266,13 @@ describe('removing a member', () => {
         addMemberToCommittee(officerA, member.id, s.committees.a1.id),
         'member_removed',
       );
-      await expectNotFound(
-        createPointTransaction(officerA, {
-          memberId: member.id,
-          committeeId: s.committees.a1.id,
+      await expectConflict(
+        createPointTransaction(officerA, member.id, s.committees.a1.id, {
           amount: 5,
           reason: 'بعد الإزالة',
           workDate: today(),
         }),
+        'member_removed',
       );
     });
 
