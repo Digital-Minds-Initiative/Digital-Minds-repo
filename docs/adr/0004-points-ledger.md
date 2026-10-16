@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-10
+- Amended by: [ADR 0019](0019-points-rules.md) — the amount range is ±1000, not ±10,000; everything else here stands
 
 ## Context
 
