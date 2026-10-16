@@ -201,8 +201,11 @@ export async function cancelPointTransaction(
   if (!current) throw new NotFoundError('Point transaction');
 
   assertCanWritePoints(actor, { clubId: current.clubId, committeeId: current.committeeId });
-  if (current.status === 'CANCELLED') return toPointTransaction(current);
 
+  // Whether it is already cancelled is decided inside the transaction, by the conditional update
+  // and the look back it does when nothing matches — the same path that makes two simultaneous
+  // cancellations leave one revision. Checking here as well would be a branch no answer could
+  // tell apart (docs/adr/0019-points-rules.md).
   const { row } = await cancelTransactionWithRevision(scope, current, {
     reason: collapseWhitespace(body.reason),
     cancelledById: actor.userId,

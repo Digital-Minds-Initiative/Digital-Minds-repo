@@ -32,6 +32,12 @@ describe('balances', () => {
     workDate,
   });
 
+  /** The member's balance in one committee, as the members endpoints report it. */
+  const committeePoints = (
+    member: { committees: Array<{ id: string; points: number }> },
+    committeeId: string,
+  ) => member.committees.find((committee) => committee.id === committeeId)?.points ?? 0;
+
   beforeAll(async () => {
     s = await buildScenario();
     [admin, officerA, leadA1] = await Promise.all([
@@ -121,6 +127,25 @@ describe('balances', () => {
           { id: s.committees.a1.id, points: 7 },
           { id: s.committees.a2.id, points: 50 },
         ]),
+      );
+    });
+
+    it('leaves cancelled transactions out of the total and of each committee', async () => {
+      const member = s.memberships.memberA1;
+      const before = await getMember(officerA, member);
+      const created = await createPointTransaction(officerA, member, s.committees.a1.id, entry(60));
+
+      const withIt = await getMember(officerA, member);
+      expect(withIt.points).toBe(before.points + 60);
+      expect(committeePoints(withIt, s.committees.a1.id)).toBe(
+        committeePoints(before, s.committees.a1.id) + 60,
+      );
+
+      await cancelPointTransaction(officerA, created.id, { reason: 'أُضيفت بالخطأ' });
+      const after = await getMember(officerA, member);
+      expect(after.points).toBe(before.points);
+      expect(committeePoints(after, s.committees.a1.id)).toBe(
+        committeePoints(before, s.committees.a1.id),
       );
     });
 

@@ -109,6 +109,19 @@ describe('adding points', () => {
       );
     });
 
+    it('is a 404 for a member of the club the actor cannot see, in a committee they can', async () => {
+      // "plain" is a member of club A with no committees. The lead can see committee A1 but not
+      // that member, so the member decides the answer: 404, not "they are not in the committee".
+      await expectNotFound(
+        createPointTransaction(leadA1, s.memberships.plain, s.committees.a1.id, entry()),
+      );
+      // The same request from an officer, who *can* see them, says what is actually wrong.
+      await expectConflict(
+        createPointTransaction(officerA, s.memberships.plain, s.committees.a1.id, entry()),
+        'not_in_committee',
+      );
+    });
+
     it('is a 404 when the committee is outside the actor’s scope', async () => {
       // leadA1 cannot even address A2's sibling in another club.
       await expectNotFound(
@@ -166,6 +179,18 @@ describe('adding points', () => {
         entry({ reason: '  تنظيم   فعالية\tالنادي  ' }),
       );
       expect(created.reason).toBe('تنظيم فعالية النادي');
+    });
+
+    it('tidies the reason again for a caller that skipped the contract', async () => {
+      // A script or the CSV import reaches the service directly, so it normalises too — and the
+      // not-blank CHECK constraint would refuse what the contract would have trimmed away.
+      const created = await createPointTransaction(
+        admin,
+        s.memberships.memberA1,
+        s.committees.a1.id,
+        { amount: 5, reason: '  سبب   بمسافات  زائدة ', workDate: today() },
+      );
+      expect(created.reason).toBe('سبب بمسافات زائدة');
     });
 
     it('refuses a work date in the future', async () => {
