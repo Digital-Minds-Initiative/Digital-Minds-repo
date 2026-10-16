@@ -25,6 +25,15 @@ enum CommitteeRole {
   LEAD
 }
 
+/// A role as role history records it. MEMBER is the absence of a role and is shared by both
+/// columns, so one table covers both kinds: a club change is MEMBER↔CLUB_OFFICER, a committee
+/// change MEMBER↔LEAD (a CHECK constraint keeps the pair and the target consistent).
+enum GrantableRole {
+  MEMBER
+  CLUB_OFFICER
+  LEAD
+}
+
 enum PointTransactionStatus {
   ACTIVE
   CANCELLED
@@ -59,6 +68,7 @@ model User {
   createdPointTransactions   PointTransaction[]         @relation("PointTransactionCreatedBy")
   cancelledPointTransactions PointTransaction[]         @relation("PointTransactionCancelledBy")
   pointRevisions             PointTransactionRevision[]
+  roleChangesMade            RoleChange[]
   sessions                   Session[]
 }
 
@@ -75,6 +85,7 @@ model Club {
   committees      Committee[]
   membershipTypes MembershipType[]
   memberships     Membership[]
+  roleChanges     RoleChange[]
 }
 
 model Committee {
@@ -91,6 +102,7 @@ model Committee {
 
   club                 Club                  @relation(fields: [clubId], references: [id], onDelete: Restrict)
   committeeMemberships CommitteeMembership[]
+  roleChanges          RoleChange[]
 
   @@unique([clubId, name])
   // Target of composite FKs that keep child rows inside the same club.
@@ -140,6 +152,7 @@ model Membership {
   membershipType       MembershipType        @relation(fields: [membershipTypeId, clubId], references: [id, clubId], onDelete: Restrict)
   removedBy            User?                 @relation("MembershipRemovedBy", fields: [removedById], references: [id], onDelete: Restrict)
   committeeMemberships CommitteeMembership[]
+  roleChanges          RoleChange[]
 
   @@unique([userId, clubId])
   @@unique([id, clubId])
@@ -219,6 +232,37 @@ model PointTransactionRevision {
   changedBy   User             @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@index([transactionId, createdAt])
+}
+
+/// Append-only record of every real grant and revoke of a club-officer or committee-lead role
+/// (docs/adr/0018-granting-roles.md). Never updated and never deleted, so — like
+/// PointTransactionRevision — it has createdAt and no updatedAt.
+///
+/// It records explicit role changes only. A role cleared because someone was removed from a
+/// committee or from the club writes no row here; that is visible through `removedAt` instead.
+model RoleChange {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  clubId       String        @db.Uuid
+  /// Null for a club-officer change; set for a committee-lead change.
+  committeeId  String?       @db.Uuid
+  /// Whose role changed. Memberships are never hard-deleted, so this always resolves.
+  membershipId String        @db.Uuid
+  /// Who made the change. A full admin need not be a member of the club.
+  changedById  String        @db.Uuid
+  previousRole GrantableRole
+  newRole      GrantableRole
+  createdAt    DateTime      @default(now())
+
+  club       Club       @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  /// Composite FKs, as everywhere below Club: both rows are in this club. `committeeId` is
+  /// nullable, and Postgres skips a composite foreign key whose columns are not all set, which
+  /// is exactly the club-level case.
+  membership Membership @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
+  committee  Committee? @relation(fields: [committeeId, clubId], references: [id, clubId], onDelete: Restrict)
+  changedBy  User       @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([clubId, createdAt])
+  @@index([membershipId, createdAt])
 }
 
 // ─── Sign-in (docs/adr/0014-email-otp-sign-in.md) ─────────────────────────────────────────────

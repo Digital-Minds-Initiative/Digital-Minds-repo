@@ -1,0 +1,19 @@
+import 'server-only';
+
+import type { RoleChange } from '@/shared/contracts/permissions';
+
+import type { RoleChangeRow } from './repository';
+
+/** Database row → API contract. Only fields listed in the contract leave the server. */
+export function toRoleChange(row: RoleChangeRow): RoleChange {
+  return {
+    id: row.id,
+    clubId: row.clubId,
+    committee: row.committee ? { id: row.committee.id, name: row.committee.name } : null,
+    member: { memberId: row.membership.id, fullName: row.membership.user.fullName },
+    changedBy: { userId: row.changedBy.id, fullName: row.changedBy.fullName },
+    previousRole: row.previousRole,
+    newRole: row.newRole,
+    createdAt: row.createdAt.toISOString(),
+  };
+}

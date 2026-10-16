@@ -22,6 +22,7 @@ export type MembershipTypeScope = Scope<Prisma.MembershipTypeWhereInput>;
 export type MemberScope = Scope<Prisma.MembershipWhereInput>;
 export type CommitteeMembershipScope = Scope<Prisma.CommitteeMembershipWhereInput>;
 export type PointTransactionScope = Scope<Prisma.PointTransactionWhereInput>;
+export type RoleChangeScope = Scope<Prisma.RoleChangeWhereInput>;
 
 function scope<TWhere>(where: TWhere): Scope<TWhere> {
   return where as Scope<TWhere>;
@@ -101,6 +102,18 @@ export function committeeMembershipsScope(actor: Actor): CommitteeMembershipScop
   const committeeIds = ledCommitteeIds(actor);
   if (committeeIds.length > 0) conditions.push({ committeeId: { in: committeeIds } });
   return scope(conditions.length > 0 ? { OR: conditions } : noRows());
+}
+
+/**
+ * Role history the actor may read: full admins everywhere, officers their own clubs. Deliberately
+ * narrower than `clubsScope`, which also contains the club of a committee a lead leads — a lead
+ * sees no role history at all, so their own club must not match here either
+ * (docs/adr/0018-granting-roles.md).
+ */
+export function roleChangesScope(actor: Actor): RoleChangeScope {
+  if (actor.isFullAdmin) return scope({});
+  const clubIds = officerClubIds(actor);
+  return scope(clubIds.length > 0 ? { clubId: { in: clubIds } } : noRows());
 }
 
 /** Point transactions the actor may read and manage (uses the denormalised club/committee ids). */
