@@ -159,13 +159,16 @@ describe('bulk points for one committee', () => {
       expect(() => body([])).toThrow();
     });
 
-    it(`refuses more than ${COMMITTEE_POINTS_BULK_MAX} members`, () => {
+    it('takes 500 members and refuses 501', () => {
+      // The numbers are written out rather than taken from the constant: a test that derives its
+      // threshold from the value it is checking moves with it and pins nothing.
+      expect(COMMITTEE_POINTS_BULK_MAX).toBe(500);
       const ids = Array.from(
-        { length: COMMITTEE_POINTS_BULK_MAX + 1 },
+        { length: 501 },
         (_, i) => `0199c0e5-1111-7000-8000-${String(i).padStart(12, '0')}`,
       );
       expect(() => body(ids)).toThrow();
-      expect(() => body(ids.slice(0, COMMITTEE_POINTS_BULK_MAX))).not.toThrow();
+      expect(() => body(ids.slice(0, 500))).not.toThrow();
     });
 
     it('refuses the same member id twice', () => {

@@ -4,7 +4,11 @@ import type { Actor } from '@/server/authz';
 import { db } from '@/server/db/client';
 import { ValidationError } from '@/server/errors';
 import { listMembers } from '@/server/modules/members';
-import { addClubPointsBatch, getMemberPoints } from '@/server/modules/points';
+import {
+  addClubPointsBatch,
+  addCommitteePointsBatch,
+  getMemberPoints,
+} from '@/server/modules/points';
 import {
   CLUB_POINTS_BULK_MAX,
   clubPointsBulkBodySchema,
@@ -303,6 +307,45 @@ describe('bulk points across a club', () => {
         { path: ['body', 'entries', 0, 'memberId'], code: 'not_found', message: 'not_found' },
       ]);
     });
+
+    it('refuses one for a full admin too, whose scope is every club', async () => {
+      // The officer above is refused by their scope alone, so this is the case that pins the
+      // club filter itself: a full admin can see club B's member, and the request's club is
+      // still the only one its entries may name.
+      const before = await countAll();
+      const error = await addClubPointsBatch(
+        admin,
+        s.clubA.id,
+        body([{ memberId: s.memberships.memberB1, committeeId: s.committees.a1.id }]),
+      ).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+      expect((error as ValidationError).issues).toEqual([
+        { path: ['body', 'entries', 0, 'memberId'], code: 'not_found', message: 'not_found' },
+      ]);
+      expect(await countAll()).toBe(before);
+    });
+
+    it('refuses a member of another club on the committee endpoint, for a full admin too', async () => {
+      // Same gap on the other endpoint: the committee comes from the URL, so club A's committee
+      // with club B's member must be not_found, not a pair that gets as far as the committee.
+      const before = await countAll();
+      const error = await addCommitteePointsBatch(admin, s.committees.a1.id, {
+        batchId: nextKey(),
+        memberIds: [s.memberships.memberB1],
+        amount: 10,
+        reason: 'حضور حفل الختام',
+        workDate: today(),
+      }).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+      expect((error as ValidationError).issues).toEqual([
+        { path: ['body', 'memberIds', 0], code: 'not_found', message: 'not_found' },
+      ]);
+      expect(await countAll()).toBe(before);
+    });
   });
 
   describe('the limits', () => {
@@ -320,13 +363,15 @@ describe('bulk points across a club', () => {
       expect(() => body([])).toThrow();
     });
 
-    it(`refuses more than ${CLUB_POINTS_BULK_MAX} pairs`, () => {
-      const pairs = Array.from({ length: CLUB_POINTS_BULK_MAX + 1 }, (_, i) => ({
+    it('takes 5000 pairs and refuses 5001', () => {
+      // Written out, not derived from the constant, so the number itself is pinned.
+      expect(CLUB_POINTS_BULK_MAX).toBe(5000);
+      const pairs = Array.from({ length: 5001 }, (_, i) => ({
         memberId: `0199c0e5-3333-7000-8000-${String(i).padStart(12, '0')}`,
         committeeId: s.committees.a1.id,
       }));
       expect(() => body(pairs)).toThrow();
-      expect(() => body(pairs.slice(0, CLUB_POINTS_BULK_MAX))).not.toThrow();
+      expect(() => body(pairs.slice(0, 5000))).not.toThrow();
     });
   });
 
