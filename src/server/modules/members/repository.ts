@@ -600,3 +600,307 @@ export async function setCommitteeRole(
   });
   return count === 1;
 }
+
+// ─── CSV import ──────────────────────────────────────────────
+
+/*
+ * The import's reads take a client so the confirm step can run them inside the transaction that
+ * writes (docs/adr/0021-csv-member-import.md): the plan is rebuilt there and compared with the
+ * checksum the officer confirmed, and the writes below are conditional on the state that plan
+ * assumed, so anything that changed in between rolls the whole import back.
+ */
+
+/**
+ * The handle the import's reads run on: the pool by default, or the transaction the confirm step
+ * is about to write in. Named here because only a repository may name the database client.
+ */
+export type ImportClient = TransactionClient;
+
+/**
+ * Who has an account, and which of them this club already knows — for every address in the file,
+ * in one query. Unscoped and ids only, exactly like `findAccountByUniEmail` and for the same
+ * reason: adding has to link to an existing account without revealing that it exists.
+ */
+export async function findAccountsByUniEmails(
+  uniEmails: readonly string[],
+  clubId: string,
+  client: TransactionClient = db,
+): Promise<Map<string, { userId: string; membership: { id: string; removed: boolean } | null }>> {
+  if (uniEmails.length === 0) return new Map();
+  const users = await client.user.findMany({
+    where: { uniEmail: { in: [...uniEmails] } },
+    select: {
+      id: true,
+      uniEmail: true,
+      memberships: { where: { clubId }, select: { id: true, removedAt: true } },
+    },
+  });
+  return new Map(
+    users.map((user) => {
+      const membership = user.memberships[0];
+      return [
+        user.uniEmail,
+        {
+          userId: user.id,
+          membership: membership
+            ? { id: membership.id, removed: membership.removedAt !== null }
+            : null,
+        },
+      ];
+    }),
+  );
+}
+
+/**
+ * The name this club has on record, per membership id. Scoped: a name is only ever shown for a
+ * member the actor can already see, which is what keeps an account outside the club invisible.
+ */
+export async function findMemberNames(
+  scope: MemberScope,
+  memberIds: readonly string[],
+  client: TransactionClient = db,
+): Promise<Map<string, string>> {
+  if (memberIds.length === 0) return new Map();
+  const rows = await client.membership.findMany({
+    where: { AND: [scope, { id: { in: [...memberIds] } }] },
+    select: { id: true, user: { select: { fullName: true } } },
+  });
+  return new Map(rows.map((row) => [row.id, row.user.fullName]));
+}
+
+/** The club's membership types, in their display order: the first one is the default. */
+export async function findMembershipTypesInClub(
+  scope: MembershipTypeScope,
+  clubId: string,
+  client: TransactionClient = db,
+): Promise<Array<{ id: string; name: string }>> {
+  return client.membershipType.findMany({
+    where: { AND: [scope, { clubId }] },
+    orderBy: { order: 'asc' },
+    select: { id: true, name: true },
+  });
+}
+
+/** The club's committees, archived ones included: a row naming one has to be told why. */
+export async function findCommitteesInClub(
+  scope: CommitteeScope,
+  clubId: string,
+  client: TransactionClient = db,
+): Promise<Array<{ id: string; name: string; archived: boolean }>> {
+  const rows = await client.committee.findMany({
+    where: { AND: [scope, { clubId }] },
+    select: { id: true, name: true, archivedAt: true },
+  });
+  return rows.map((row) => ({ id: row.id, name: row.name, archived: row.archivedAt !== null }));
+}
+
+/** What the import writes through: the club, its committees and the memberships it restores. */
+export interface ImportScopes {
+  club: ClubScope;
+  committees: CommitteeScope;
+  members: MemberScope;
+}
+
+/** One row's worth of work for the writer: a new membership, or a removed one coming back. */
+interface ImportWrite {
+  membershipTypeId: string;
+  profile: CreateMemberBody['profile'];
+  committeeIds: readonly string[];
+}
+
+export interface ImportAddWrite extends ImportWrite {
+  uniEmail: string;
+  fullName: string;
+  /** The account to link to, or null to create one. */
+  userId: string | null;
+}
+
+export interface ImportRestoreWrite extends ImportWrite {
+  membershipId: string;
+}
+
+/**
+ * The whole import, in one transaction: nothing is saved unless everything is.
+ *
+ * `plan` runs inside the transaction and must return true, which is how the confirm step proves
+ * it is about to write what the preview showed. After that every write is still conditional on
+ * the state that plan assumed — a membership that is no longer removed restores nothing, and the
+ * unique constraint on (userId, clubId) refuses a membership somebody created in between — and
+ * any of those rolls the whole import back.
+ */
+export async function saveImportedMembers(
+  scopes: ImportScopes,
+  input: {
+    clubId: string;
+    adds: readonly ImportAddWrite[];
+    restores: readonly ImportRestoreWrite[];
+  },
+  plan: (client: TransactionClient) => Promise<boolean>,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    // The club and the committees are checked through the actor's scopes here, inside the
+    // transaction, because the rows created below carry this club's id without a scope of their
+    // own (the same bargain as `saveNewMember`).
+    const club = await tx.club.count({
+      where: { AND: [scopes.club, { id: input.clubId, archivedAt: null }] },
+    });
+    if (club !== 1) throw new NotFoundError('Club');
+
+    const committeeIds = [
+      ...new Set([...input.adds, ...input.restores].flatMap((write) => [...write.committeeIds])),
+    ];
+    if (committeeIds.length > 0) {
+      const committees = await tx.committee.count({
+        where: {
+          AND: [
+            scopes.committees,
+            { clubId: input.clubId, id: { in: committeeIds }, archivedAt: null },
+          ],
+        },
+      });
+      if (committees !== committeeIds.length) throw new NotFoundError('Committee');
+    }
+
+    if (!(await plan(tx))) throw importChanged();
+
+    const userIdByEmail = await createAccounts(tx, input.adds);
+    const membershipIdByUser = await createMemberships(tx, input.clubId, input.adds, userIdByEmail);
+    const restored = await restoreMemberships(tx, scopes.members, input.restores);
+    if (restored !== input.restores.length) throw importChanged();
+
+    await joinCommittees(tx, input.clubId, [
+      ...input.adds.map((add) => ({
+        membershipId: membershipIdByUser.get(userIdOf(add, userIdByEmail)),
+        committeeIds: add.committeeIds,
+      })),
+      ...input.restores.map((restore) => ({
+        membershipId: restore.membershipId,
+        committeeIds: restore.committeeIds,
+      })),
+    ]);
+  });
+}
+
+/** 409 for an import whose rows no longer do what the preview said they would. */
+export function importChanged(): ConflictError {
+  return new ConflictError(
+    'The file no longer imports what the preview showed. Preview it again.',
+    'import_changed',
+  );
+}
+
+function userIdOf(add: ImportAddWrite, created: ReadonlyMap<string, string>): string {
+  const userId = add.userId ?? created.get(add.uniEmail);
+  if (!userId) throw new NotFoundError('Member');
+  return userId;
+}
+
+/** Accounts for the addresses nobody has yet, then their ids back by address. */
+async function createAccounts(
+  tx: TransactionClient,
+  adds: readonly ImportAddWrite[],
+): Promise<Map<string, string>> {
+  const fresh = adds.filter((add) => add.userId === null);
+  if (fresh.length === 0) return new Map();
+  await tx.user.createMany({
+    data: fresh.map((add) => ({
+      uniEmail: add.uniEmail,
+      fullName: add.fullName,
+      searchName: normalizeForSearch(add.fullName),
+    })),
+  });
+  const created = await tx.user.findMany({
+    where: { uniEmail: { in: fresh.map((add) => add.uniEmail) } },
+    select: { id: true, uniEmail: true },
+  });
+  return new Map(created.map((user) => [user.uniEmail, user.id]));
+}
+
+async function createMemberships(
+  tx: TransactionClient,
+  clubId: string,
+  adds: readonly ImportAddWrite[],
+  created: ReadonlyMap<string, string>,
+): Promise<Map<string, string>> {
+  if (adds.length === 0) return new Map();
+  const rows = adds.map((add) => ({
+    ...add.profile,
+    userId: userIdOf(add, created),
+    clubId,
+    membershipTypeId: add.membershipTypeId,
+  }));
+  await tx.membership.createMany({ data: rows });
+  const memberships = await tx.membership.findMany({
+    where: { clubId, userId: { in: rows.map((row) => row.userId) } },
+    select: { id: true, userId: true },
+  });
+  return new Map(memberships.map((membership) => [membership.userId, membership.id]));
+}
+
+/**
+ * Restored, not recreated: the membership keeps its id, so its committee memberships and their
+ * points come back with it, and its role is reset the way a single add resets it. The condition
+ * on `removedAt` is what refuses a membership somebody brought back since the preview.
+ */
+async function restoreMemberships(
+  tx: TransactionClient,
+  scope: MemberScope,
+  restores: readonly ImportRestoreWrite[],
+): Promise<number> {
+  let count = 0;
+  for (const restore of restores) {
+    const result = await tx.membership.updateMany({
+      where: { AND: [scope, { id: restore.membershipId, removedAt: { not: null } }] },
+      data: {
+        ...restore.profile,
+        removedAt: null,
+        removedById: null,
+        role: 'MEMBER',
+        membershipTypeId: restore.membershipTypeId,
+      },
+    });
+    count += result.count;
+  }
+  return count;
+}
+
+/** New committee memberships in one insert; removed ones come back with their points. */
+async function joinCommittees(
+  tx: TransactionClient,
+  clubId: string,
+  members: ReadonlyArray<{ membershipId: string | undefined; committeeIds: readonly string[] }>,
+): Promise<void> {
+  const wanted = members.flatMap(({ membershipId, committeeIds }) =>
+    membershipId === undefined
+      ? []
+      : committeeIds.map((committeeId) => ({ membershipId, committeeId })),
+  );
+  if (wanted.length === 0) return;
+
+  const key = (pair: { membershipId: string; committeeId: string }) =>
+    `${pair.membershipId}|${pair.committeeId}`;
+  const existing = await tx.committeeMembership.findMany({
+    where: { membershipId: { in: wanted.map((pair) => pair.membershipId) } },
+    select: { id: true, membershipId: true, committeeId: true, removedAt: true },
+  });
+  const byPair = new Map(existing.map((row) => [key(row), row]));
+
+  const fresh = wanted.filter((pair) => !byPair.has(key(pair)));
+  if (fresh.length > 0) {
+    await tx.committeeMembership.createMany({
+      data: fresh.map((pair) => ({ ...pair, clubId })),
+    });
+  }
+  // A removed committee membership comes back with its id, so its points count again; its role
+  // is reset for the same reason the club role is.
+  const restored = wanted.flatMap((pair) => {
+    const row = byPair.get(key(pair));
+    return row && row.removedAt !== null ? [row.id] : [];
+  });
+  if (restored.length > 0) {
+    await tx.committeeMembership.updateMany({
+      where: { id: { in: restored } },
+      data: { removedAt: null, role: 'MEMBER' },
+    });
+  }
+}

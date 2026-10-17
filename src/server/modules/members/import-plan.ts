@@ -24,7 +24,7 @@ import type { ParsedImportRow } from './import-csv';
  */
 
 /** This club's copy of the person's details, as a row provides it. */
-export type ImportProfile = ParsedImportRow['profile'];
+type ImportProfile = ParsedImportRow['profile'];
 
 /** What the club holds, read through the actor's scopes before the plan is built. */
 export interface ImportClubState {

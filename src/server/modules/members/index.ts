@@ -9,6 +9,11 @@ export {
   removeMemberFromCommittee,
   updateMember,
 } from './service';
+export {
+  confirmMemberImport,
+  getMemberImportTemplate,
+  previewMemberImport,
+} from './import-service';
 /*
  * This module owns the membership tables, so the role columns are written here — but a grant or a
  * revoke also writes the permissions module's history, and the two must commit together. The
