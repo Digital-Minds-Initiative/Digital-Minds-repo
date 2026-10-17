@@ -36,6 +36,7 @@ import {
   cancelTransactionWithRevision,
   findTransaction,
   insertTransaction,
+  savePointsBatch,
   updateTransactionWithRevision,
 } from '@/server/modules/points/repository';
 import { actorFor, buildScenario, today, type Scenario } from '@tests/factories/scenario';
@@ -324,6 +325,57 @@ describe('repository writes apply the scope themselves', () => {
         where: { transactionId: s.transactions.memberA1 },
       }),
     ).toBe(0);
+  });
+
+  it('savePointsBatch', async () => {
+    const transactions = await db.pointTransaction.count();
+    const batches = await db.pointBatch.count();
+    const scopes = {
+      members: membersScope(officerB),
+      committees: committeesScope(officerB),
+      committeeMemberships: committeeMembershipsScope(officerB),
+    };
+    const input = {
+      batch: {
+        id: '0199c0e5-6666-7000-8000-000000000001',
+        clubId: s.clubA.id,
+        committeeId: s.committees.a1.id,
+        requestHash: 'a'.repeat(64),
+        createdById: officerB.userId,
+      },
+      amount: 5,
+      reason: 'محاولة',
+      workDate: today(),
+      memberIds: [s.memberships.memberA1],
+      committeeIds: [s.committees.a1.id],
+    };
+
+    // The state read inside the transaction is empty for this scope, so a caller that refuses
+    // what it cannot see writes nothing — and the batch row it had already inserted is rolled
+    // back with it, leaving the key free.
+    await expect(
+      savePointsBatch(scopes, input, (state) => {
+        expect(state.members.size).toBe(0);
+        expect(state.committees.size).toBe(0);
+        expect(state.committeeMemberships.size).toBe(0);
+        throw new Error('nothing in this scope');
+      }),
+    ).rejects.toThrow('nothing in this scope');
+
+    // And a caller that ignores the state and names club A's committee membership anyway is
+    // still refused: the write only accepts ids the scoped read produced.
+    await expectNotFound(
+      savePointsBatch(scopes, input, () => [
+        {
+          committeeMembershipId: s.committeeMemberships.memberA1,
+          committeeId: s.committees.a1.id,
+        },
+      ]),
+    );
+
+    expect(await db.pointTransaction.count()).toBe(transactions);
+    expect(await db.pointBatch.count()).toBe(batches);
+    expect(await db.pointBatch.findUnique({ where: { id: input.batch.id } })).toBeNull();
   });
 
   describe('clubs, committees and membership types', () => {

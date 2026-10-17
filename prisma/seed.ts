@@ -16,7 +16,7 @@ import {
   type DemoClubKey,
 } from '../src/shared/demo/demo';
 import { demoId, demoPublicId } from '../src/shared/demo/ids';
-import { generateDemoTransactions } from '../src/shared/demo/points';
+import { demoPointBatches, generateDemoTransactions } from '../src/shared/demo/points';
 import { normalizeForSearch } from '../src/shared/lib/arabic';
 import { addDays, dateOnlyToDate, todayInAppTimeZone } from '../src/shared/lib/dates';
 import { isAllowedEmailDomain, parseEmailDomains } from '../src/shared/lib/email-domains';
@@ -212,12 +212,15 @@ async function main(): Promise<void> {
           });
         }
       }
+      // The batches first: the transactions reference them through a composite foreign key.
+      const batches = demoPointBatches(transactions);
+      await tx.pointBatch.createMany({ data: batches });
       await tx.pointTransaction.createMany({ data: transactions });
       await tx.pointTransactionRevision.createMany({ data: revisions });
 
       console.log(
         `Seeded ${demoClubs.length} clubs, ${demoPeople.length} people, ${memberships.length} memberships, ` +
-          `${transactions.length} point transactions (${revisions.length} revisions).`,
+          `${transactions.length} point transactions in ${batches.length} batches (${revisions.length} revisions).`,
       );
     });
   } finally {

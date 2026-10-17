@@ -1,7 +1,7 @@
 import { db } from '@/server/db/client';
 import { demoClubs, demoKeys, demoPeople, demoProfile, type DemoClubKey } from '@/shared/demo/demo';
 import { demoId, demoPublicId } from '@/shared/demo/ids';
-import { generateDemoTransactions } from '@/shared/demo/points';
+import { demoPointBatches, generateDemoTransactions } from '@/shared/demo/points';
 import { normalizeForSearch } from '@/shared/lib/arabic';
 import { addDays, dateOnlyToDate, todayInAppTimeZone } from '@/shared/lib/dates';
 
@@ -155,6 +155,8 @@ export async function buildDemoDataset(now: Date = new Date()) {
       cancelled: transaction.cancellation !== undefined,
     });
   }
+  // The batches first: the transactions reference them through a composite foreign key.
+  await db.pointBatch.createMany({ data: demoPointBatches(rows) });
   await db.pointTransaction.createMany({ data: rows });
 
   return {

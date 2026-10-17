@@ -169,3 +169,62 @@ export function generateDemoTransactions(today: string): DemoTransaction[] {
   }
   return transactions;
 }
+
+/**
+ * A transaction row as both the seed and the integration-test factory have already built it.
+ * Dates are `Date | string` because that is what Prisma's createMany input accepts, and the seed
+ * passes its rows straight through.
+ */
+interface BatchedRow {
+  batchId?: string | null;
+  clubId: string;
+  committeeId: string;
+  createdById: string;
+  createdAt?: Date | string;
+}
+
+/** One PointBatch per shared batch id, as the demo data needs them to exist. */
+export interface DemoPointBatch {
+  id: string;
+  clubId: string;
+  committeeId: string | null;
+  createdById: string;
+  createdAt?: Date | string;
+}
+
+/**
+ * The batches a set of transaction rows belongs to. `PointTransaction.batchId` is a composite
+ * foreign key onto `PointBatch` (docs/adr/0022-bulk-points.md), so these rows have to be inserted
+ * first — by the seed and by the integration-test factory alike, which is why the derivation
+ * lives here rather than in either of them.
+ *
+ * A batch takes the committee when every transaction in it shares one, and otherwise none; who
+ * recorded the earliest of them, and when. `requestHash` is left unset: a demo batch was never an
+ * API request, so none of them can be replayed.
+ */
+export function demoPointBatches(rows: readonly BatchedRow[]): DemoPointBatch[] {
+  const at = (value: Date | string) => new Date(value).getTime();
+  const batches = new Map<string, DemoPointBatch>();
+  for (const row of rows) {
+    if (!row.batchId) continue;
+    const existing = batches.get(row.batchId);
+    if (!existing) {
+      batches.set(row.batchId, {
+        id: row.batchId,
+        clubId: row.clubId,
+        committeeId: row.committeeId,
+        createdById: row.createdById,
+        ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+      });
+      continue;
+    }
+    // A batch that spans committees has no single committee to name.
+    if (existing.committeeId !== row.committeeId) existing.committeeId = null;
+    // The earliest row decides when the batch was recorded, and by whom.
+    if (row.createdAt && existing.createdAt && at(row.createdAt) < at(existing.createdAt)) {
+      existing.createdAt = row.createdAt;
+      existing.createdById = row.createdById;
+    }
+  }
+  return [...batches.values()];
+}

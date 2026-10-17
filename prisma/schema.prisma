@@ -67,6 +67,7 @@ model User {
   removedMemberships         Membership[]               @relation("MembershipRemovedBy")
   createdPointTransactions   PointTransaction[]         @relation("PointTransactionCreatedBy")
   cancelledPointTransactions PointTransaction[]         @relation("PointTransactionCancelledBy")
+  createdPointBatches        PointBatch[]
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
   sessions                   Session[]
@@ -85,6 +86,7 @@ model Club {
   committees      Committee[]
   membershipTypes MembershipType[]
   memberships     Membership[]
+  pointBatches    PointBatch[]
   roleChanges     RoleChange[]
 }
 
@@ -195,7 +197,7 @@ model PointTransaction {
   /// Date of the activity (Asia/Riyadh calendar). Period filters use this, never createdAt.
   workDate              DateTime               @db.Date
   status                PointTransactionStatus @default(ACTIVE)
-  /// Groups the rows written by one bulk-create request.
+  /// Groups the rows written by one bulk-create request; null for a single add.
   batchId               String?                @db.Uuid
   createdById           String                 @db.Uuid
   cancelledAt           DateTime?
@@ -205,6 +207,8 @@ model PointTransaction {
   updatedAt             DateTime               @updatedAt
 
   committeeMembership CommitteeMembership        @relation(fields: [committeeMembershipId, committeeId, clubId], references: [id, committeeId, clubId], onDelete: Restrict)
+  /// Composite FK: a batch can never span clubs. Not enforced while batchId is null (MATCH SIMPLE).
+  batch               PointBatch?                @relation(fields: [batchId, clubId], references: [id, clubId], onDelete: Restrict)
   createdBy           User                       @relation("PointTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   cancelledBy         User?                      @relation("PointTransactionCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
   revisions           PointTransactionRevision[]
@@ -213,6 +217,32 @@ model PointTransaction {
   @@index([committeeId, status, workDate])
   @@index([clubId, status, workDate])
   @@index([batchId])
+}
+
+/// One bulk-points request (docs/adr/0022-bulk-points.md). Its id is the key the client sends,
+/// so inserting it is what makes a resend a replay instead of a second set of transactions: the
+/// primary key is the uniqueness, and Postgres makes two simultaneous inserts of the same key
+/// wait for each other. Kept for good — the transactions point at it, and the UI shows it as
+/// "added together on …".
+model PointBatch {
+  /// The client-generated batchId. Not a server default: the client owns this value.
+  id          String   @id @db.Uuid
+  clubId      String   @db.Uuid
+  /// The committee every row is in, or null when the batch spans a club's committees.
+  committeeId String?  @db.Uuid
+  /// SHA-256 of the canonical request, so the same key with a different request is refused
+  /// instead of silently replayed. Null for batches not made through the API (the demo seed).
+  requestHash String?
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+
+  club         Club               @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  transactions PointTransaction[]
+
+  // Target of the composite FK from PointTransaction that keeps a batch inside one club.
+  @@unique([id, clubId])
+  @@index([clubId, createdAt])
 }
 
 /// Immutable audit row for every edit or cancel, holding the values *before* the change.
