@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AuthzError, type Actor } from '@/server/authz';
 
-import { assertCanWritePoints } from '../policies';
+import { assertCanWriteClubPoints, assertCanWritePoints } from '../policies';
 
 /*
  * Tested as a pure function, because no request can reach its refusal: to address a transaction
@@ -84,6 +84,33 @@ describe('writing points in a committee', () => {
     expect(reasonOf(() => assertCanWritePoints(officerA, inB))).toBe('points_management_required');
     expect(reasonOf(() => assertCanWritePoints(plainMember, inA1))).toBe(
       'points_management_required',
+    );
+  });
+});
+
+/*
+ * The club-wide bulk rule, which — unlike the one above — a request really can reach: clubsScope
+ * contains the club of a committee a lead leads, so a lead asking about their own club gets past
+ * the 404 and has to be refused here (docs/adr/0022-bulk-points.md).
+ */
+describe('writing points across a whole club', () => {
+  it('is open to a full admin anywhere, and to an officer in their own club', () => {
+    expect(reasonOf(() => assertCanWriteClubPoints(admin, CLUB_B))).toBeUndefined();
+    expect(reasonOf(() => assertCanWriteClubPoints(officerA, CLUB_A))).toBeUndefined();
+  });
+
+  it('is closed to a lead of one of its committees, with the club-level reason', () => {
+    expect(reasonOf(() => assertCanWriteClubPoints(leadA1, CLUB_A))).toBe(
+      'club_management_required',
+    );
+  });
+
+  it('is closed to an officer of another club and to a plain member', () => {
+    expect(reasonOf(() => assertCanWriteClubPoints(officerA, CLUB_B))).toBe(
+      'club_management_required',
+    );
+    expect(reasonOf(() => assertCanWriteClubPoints(plainMember, CLUB_A))).toBe(
+      'club_management_required',
     );
   });
 });

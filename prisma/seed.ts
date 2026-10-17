@@ -212,12 +212,41 @@ async function main(): Promise<void> {
           });
         }
       }
+      // One PointBatch per shared batchId: the transactions reference it through a composite
+      // foreign key, so it has to exist first. `requestHash` stays null — these batches were
+      // never an API request, so none of them can be replayed (ADR 0022).
+      const batches = new Map<string, Prisma.PointBatchCreateManyInput>();
+      for (const transaction of transactions) {
+        if (!transaction.batchId) continue;
+        const existing = batches.get(transaction.batchId);
+        if (!existing) {
+          batches.set(transaction.batchId, {
+            id: transaction.batchId,
+            clubId: transaction.clubId,
+            committeeId: transaction.committeeId,
+            createdById: transaction.createdById,
+            createdAt: transaction.createdAt,
+          });
+          continue;
+        }
+        // A batch spanning committees has no single committee to name.
+        if (existing.committeeId !== transaction.committeeId) existing.committeeId = null;
+        if (
+          transaction.createdAt instanceof Date &&
+          existing.createdAt instanceof Date &&
+          transaction.createdAt < existing.createdAt
+        ) {
+          existing.createdAt = transaction.createdAt;
+          existing.createdById = transaction.createdById;
+        }
+      }
+      await tx.pointBatch.createMany({ data: [...batches.values()] });
       await tx.pointTransaction.createMany({ data: transactions });
       await tx.pointTransactionRevision.createMany({ data: revisions });
 
       console.log(
         `Seeded ${demoClubs.length} clubs, ${demoPeople.length} people, ${memberships.length} memberships, ` +
-          `${transactions.length} point transactions (${revisions.length} revisions).`,
+          `${transactions.length} point transactions in ${batches.size} batches (${revisions.length} revisions).`,
       );
     });
   } finally {

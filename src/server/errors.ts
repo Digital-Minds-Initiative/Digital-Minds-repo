@@ -92,11 +92,17 @@ export class RateLimitedError extends AppError {
   }
 }
 
-/** Business-rule validation that a schema cannot express (e.g. a configured email domain). */
+/**
+ * Business-rule validation that a schema cannot express (e.g. a configured email domain).
+ *
+ * `reason` is for the rules that fail a whole request over a list of items — bulk points answers
+ * `entries_rejected` — so a client can tell "some of what you picked is unusable" from "your body
+ * does not match the contract" without reading the issue paths.
+ */
 export class ValidationError extends AppError {
   readonly code = 'VALIDATION_FAILED';
 
-  constructor(issues: ValidationIssue[], message = 'The request is invalid.') {
-    super(message, { issues });
+  constructor(issues: ValidationIssue[], message = 'The request is invalid.', reason?: string) {
+    super(message, { issues, reason });
   }
 }

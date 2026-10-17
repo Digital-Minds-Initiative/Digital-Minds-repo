@@ -1,16 +1,19 @@
 import 'server-only';
 
 import type {
+  ClubScope,
   CommitteeMembershipScope,
   CommitteeScope,
   MemberScope,
   PointTransactionScope,
 } from '@/server/authz';
-import { db } from '@/server/db/client';
+import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
 import type { PointStatusFilter, PointTransactionStatus } from '@/shared/contracts/points';
 import { dateOnlyToDate } from '@/shared/lib/dates';
+
+import { committeeMembershipKey, type BulkPointsState, type BulkPointsWrite } from './bulk-plan';
 
 /*
  * Prisma access for the points ledger. Every function that reads or writes scoped rows takes a
@@ -448,6 +451,234 @@ export async function cancelTransactionWithRevision(
       select: transactionSelect,
     });
     return { row, recorded: true };
+  });
+}
+
+// ─── Bulk entry ──────────────────────────────────────────────
+
+/*
+ * Bulk points (docs/adr/0022-bulk-points.md). The whole request is one transaction: the state is
+ * read through the actor's scopes *inside* it, the caller's pure plan decides from that state, and
+ * the rows go in with one `createManyAndReturn`. So validation and the write see the same snapshot
+ * — there is no window for a member to be removed between being approved and being written.
+ */
+
+/** The committee a committee-bulk request names, read through the actor's committee scope. */
+export async function findBulkCommitteeTarget(
+  scope: CommitteeScope,
+  committeeId: string,
+  client: TransactionClient = db,
+): Promise<{ id: string; clubId: string; archived: boolean; clubArchived: boolean } | null> {
+  const row = await client.committee.findFirst({
+    where: { AND: [scope, { id: committeeId }] },
+    select: { id: true, clubId: true, archivedAt: true, club: { select: { archivedAt: true } } },
+  });
+  return row
+    ? {
+        id: row.id,
+        clubId: row.clubId,
+        archived: row.archivedAt !== null,
+        clubArchived: row.club.archivedAt !== null,
+      }
+    : null;
+}
+
+/** The club a club-bulk request names, read through the actor's club scope. */
+export async function findBulkClubTarget(
+  scope: ClubScope,
+  clubId: string,
+  client: TransactionClient = db,
+): Promise<{ id: string; archived: boolean } | null> {
+  const row = await client.club.findFirst({
+    where: { AND: [scope, { id: clubId }] },
+    select: { id: true, archivedAt: true },
+  });
+  return row ? { id: row.id, archived: row.archivedAt !== null } : null;
+}
+
+/**
+ * Everything the plan needs about the entries, in three queries whatever the entry count — never
+ * one per member. Each goes through its own scope, so a row the actor cannot see is missing from
+ * the maps and the plan refuses it the same way it refuses one that does not exist.
+ *
+ * The committee memberships are read with `removedAt: null` on both levels, which is what makes
+ * "not in this committee" and "removed from the club" separable: the membership query reports the
+ * removal, this one reports the absence.
+ */
+export async function readBulkPointsState(
+  scopes: {
+    members: MemberScope;
+    committees: CommitteeScope;
+    committeeMemberships: CommitteeMembershipScope;
+  },
+  input: { clubId: string; memberIds: readonly string[]; committeeIds: readonly string[] },
+  client: TransactionClient = db,
+): Promise<BulkPointsState> {
+  const memberIds = [...new Set(input.memberIds)];
+  const committeeIds = [...new Set(input.committeeIds)];
+
+  // One query after another, never in parallel: inside a transaction these share one connection.
+  const memberRows = await client.membership.findMany({
+    where: { AND: [scopes.members, { id: { in: memberIds }, clubId: input.clubId }] },
+    select: { id: true, removedAt: true },
+  });
+  const committeeRows = await client.committee.findMany({
+    where: { AND: [scopes.committees, { id: { in: committeeIds } }] },
+    select: { id: true, name: true, clubId: true, archivedAt: true },
+  });
+  const links = await client.committeeMembership.findMany({
+    where: {
+      AND: [
+        scopes.committeeMemberships,
+        {
+          membershipId: { in: memberIds },
+          committeeId: { in: committeeIds },
+          removedAt: null,
+          membership: { removedAt: null },
+        },
+      ],
+    },
+    select: { id: true, membershipId: true, committeeId: true },
+  });
+
+  return {
+    clubId: input.clubId,
+    members: new Map(memberRows.map((row) => [row.id, { removed: row.removedAt !== null }])),
+    committees: new Map(
+      committeeRows.map((row) => [
+        row.id,
+        { id: row.id, name: row.name, clubId: row.clubId, archived: row.archivedAt !== null },
+      ]),
+    ),
+    committeeMemberships: new Map(
+      links.map((link) => [committeeMembershipKey(link.membershipId, link.committeeId), link.id]),
+    ),
+  };
+}
+
+/**
+ * Names for the committees a batch landed in, through the actor's scope and ordered by name —
+ * what `byCommittee` shows. A committee the actor can no longer see simply drops out, the same
+ * way nested data is scoped everywhere else.
+ */
+export async function findCommitteeRefs(
+  scope: CommitteeScope,
+  committeeIds: readonly string[],
+): Promise<Array<{ id: string; name: string }>> {
+  if (committeeIds.length === 0) return [];
+  return db.committee.findMany({
+    where: { AND: [scope, { id: { in: [...committeeIds] } }] },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+}
+
+/** A batch row as the idempotency check reads it. */
+export interface PointBatchRow {
+  id: string;
+  clubId: string;
+  requestHash: string | null;
+}
+
+/**
+ * The batch a key names, if it has been used. Looked up by id alone and matched on its hash by
+ * the service: who created it and what they asked for are both inside that hash, so a key
+ * belonging to somebody else's request can never replay as this one.
+ */
+export async function findPointBatch(
+  batchId: string,
+  client: TransactionClient = db,
+): Promise<PointBatchRow | null> {
+  return client.pointBatch.findUnique({
+    where: { id: batchId },
+    select: { id: true, clubId: true, requestHash: true },
+  });
+}
+
+/** The ids a batch wrote, ordered so a replay answers with exactly the first request's body. */
+export async function findBatchTransactions(
+  scope: PointTransactionScope,
+  batchId: string,
+  client: TransactionClient = db,
+): Promise<Array<{ id: string; committeeId: string }>> {
+  return client.pointTransaction.findMany({
+    where: { AND: [scope, { batchId }] },
+    select: { id: true, committeeId: true },
+    orderBy: { id: 'asc' },
+  });
+}
+
+export interface PointBatchWrite {
+  id: string;
+  clubId: string;
+  committeeId: string | null;
+  requestHash: string;
+  createdById: string;
+}
+
+export interface BulkPointsInput {
+  batch: PointBatchWrite;
+  amount: number;
+  reason: string;
+  workDate: string;
+  memberIds: readonly string[];
+  committeeIds: readonly string[];
+}
+
+/**
+ * Writes the whole batch, or nothing.
+ *
+ * `resolve` is the service's pure plan over the state read here; it throws when any entry is
+ * refused, which rolls the transaction back before a single row is written. `exists` tells the
+ * service that a key is confirmed taken, so it answers with the first request's result instead of
+ * writing a second set of transactions.
+ *
+ * The batch row goes in **first**, with `skipDuplicates`, and that is the whole double-submit
+ * guarantee: Postgres makes an `ON CONFLICT DO NOTHING` insert wait for a concurrent transaction
+ * holding the same key, so of two requests arriving together exactly one writes and the other
+ * sees `count: 0` once the first has committed. Catching the unique violation instead would not
+ * do — the db client maps it to a 409 before a repository could read it, and a request that rolls
+ * back has to leave its key free for the corrected retry.
+ */
+export async function savePointsBatch(
+  scopes: {
+    members: MemberScope;
+    committees: CommitteeScope;
+    committeeMemberships: CommitteeMembershipScope;
+  },
+  input: BulkPointsInput,
+  resolve: (state: BulkPointsState) => BulkPointsWrite[],
+): Promise<{ rows: Array<{ id: string; committeeId: string }>; exists: boolean }> {
+  return db.$transaction(async (tx) => {
+    const { count } = await tx.pointBatch.createMany({
+      data: [input.batch],
+      skipDuplicates: true,
+    });
+    if (count === 0) return { rows: [], exists: true };
+
+    const state = await readBulkPointsState(
+      scopes,
+      { clubId: input.batch.clubId, memberIds: input.memberIds, committeeIds: input.committeeIds },
+      tx,
+    );
+    const writes = resolve(state);
+
+    // Prisma's query compiler splits a createMany past ~32k bind values into several statements
+    // by itself; inside this transaction those chunks are still one atomic unit.
+    const rows = await tx.pointTransaction.createManyAndReturn({
+      data: writes.map((write) => ({
+        committeeMembershipId: write.committeeMembershipId,
+        committeeId: write.committeeId,
+        clubId: input.batch.clubId,
+        amount: input.amount,
+        reason: input.reason,
+        workDate: dateOnlyToDate(input.workDate),
+        batchId: input.batch.id,
+        createdById: input.batch.createdById,
+      })),
+      select: { id: true, committeeId: true },
+    });
+    return { rows: [...rows].sort((a, b) => (a.id < b.id ? -1 : 1)), exists: false };
   });
 }
 

@@ -98,6 +98,17 @@ export function withFile<T extends string>(
   return new HandlerResult(text, 200, [], file);
 }
 
+/**
+ * For a write that is safe to repeat: 201 when it created something, 200 when the request turned
+ * out to be a replay of one that already had. Bulk points answers this way, so a double tap in a
+ * hall is told plainly that nothing new happened (docs/adr/0022-bulk-points.md).
+ *
+ * `addCommitteePointsBatch(…).then(withCreatedOrReplayed)`
+ */
+export function withCreatedOrReplayed<T>(result: { data: T; replayed: boolean }): HandlerResult<T> {
+  return new HandlerResult(result.data, result.replayed ? 200 : 201);
+}
+
 /** A new session to store in the cookie. */
 export interface SessionGrant {
   token: string;
