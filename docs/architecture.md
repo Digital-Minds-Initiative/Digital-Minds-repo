@@ -125,7 +125,7 @@ export const listMembersEndpoint = defineEndpoint({
 ```
 
 - **Versioned REST** under `/api/v1`. Resources are plural nouns; a "member" is a membership (person × club) and its id is the membership id.
-- **Lists:** `?page=1&pageSize=20&sort=<field>&order=asc|desc&q=…&<filters>`; repeated keys for multi-value filters (`?committeeId=a&committeeId=b`). Responses: `{ items, page, pageSize, total, pageCount }`. Shared helpers in `src/shared/contracts/core`.
+- **Lists:** `?page=1&pageSize=20&sort=<field>&order=asc|desc&q=…&<filters>`; repeated keys for multi-value filters (`?membershipTypeId=a&membershipTypeId=b`). Responses: `{ items, page, pageSize, total, pageCount }`. Shared helpers in `src/shared/contracts/core`. A filter only ever narrows what the actor can see: one outside their scope is a 404, and one naming a different club than the rest of the request implies is a 422 ([ADR 0020](adr/0020-members-list-filtering.md)).
 - **Dates:** calendar dates as `YYYY-MM-DD` (Asia/Riyadh); instants as ISO 8601 UTC.
 - **Ids** are UUIDs and validated as such (malformed → 422, never a database error).
 - **Errors** always look like:
@@ -212,7 +212,9 @@ already active in the club is a 409 `already_in_club` carrying their `memberId`.
 
 **Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `membershipTypesScope`, `roleChangesScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
-**Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id).
+**Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id — refused with a 404 before the query runs, and the query applies the scope again anyway).
+
+**The members list** ([ADR 0020](adr/0020-members-list-filtering.md)) filters by club, one committee, membership types, a work-date period, search and status. The period decides which points count, never which members are listed, and `pointsBasis` on the response says which figure the column is showing. Names order on the Arabic-folded `User.searchName`, so أ/إ/آ and ة/ه variants of one name share a sort key; `sort=points` is ranked in JavaScript by `rankByPoints` over every matching member, because the figure is an aggregate three tables away and the `where` is a branded scope that must not be rewritten as SQL.
 
 **Policies** (`src/server/modules/*/policies.ts`) answer "may this actor do X to this already-visible target". They are built on the role predicates in `src/server/authz/roles.ts` (`canManageClub`, `canManageCommittee`, `isLeadOf`, `ledCommitteeIds`) and throw `AuthzError` with the module's own `reason` ([ADR 0011](adr/0011-modules-own-their-policies.md)). Write a policy together with the service that calls it.
 
