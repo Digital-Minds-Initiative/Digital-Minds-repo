@@ -34,6 +34,8 @@ import {
 import { demoId } from '@/shared/demo/ids';
 import { normalizeEntityName } from '@/shared/lib/names';
 
+import { viewLinkHandlers } from './view-link';
+
 /*
  * Mock clubs, committees and membership types. They follow the rules of the real module
  * (src/server/modules/clubs): who sees what, who may change what, and every refusal with the same
@@ -272,6 +274,8 @@ export const clubsHandlers = [
       name,
       description: body.description ?? null,
       archivedAt: null,
+      // A new committee has no view link until someone creates one (ADR 0023).
+      viewLink: null,
     };
     ctx.db.committees.push(committee);
     ctx.db.committeesById.set(committee.id, committee);
@@ -424,4 +428,7 @@ export const clubsHandlers = [
     });
     return { items: typesOf(ctx.db, club.id).map((type) => toMembershipType(ctx.db, type)) };
   }),
+
+  // The view link and the public page it opens (ADR 0023).
+  ...viewLinkHandlers,
 ];

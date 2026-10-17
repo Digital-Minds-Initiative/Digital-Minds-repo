@@ -40,6 +40,14 @@ export function demoPublicId(key: string): string {
   return `p${digits}`;
 }
 
+/**
+ * A view token shaped like the real one (32 URL-safe characters), derived from `key` so the
+ * demo link stays the same between reloads (docs/adr/0023-committee-view-link.md).
+ */
+export function demoViewToken(key: string): string {
+  return hex128(`view:${key}`);
+}
+
 /** Small deterministic PRNG (mulberry32) for generating demo point transactions. */
 export function createRandom(seed: number): () => number {
   let state = seed >>> 0;
