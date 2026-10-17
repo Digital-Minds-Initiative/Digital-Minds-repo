@@ -75,6 +75,60 @@ describe('GET /api/v1/members', () => {
     ]);
   });
 
+  it('answers 422 for a period that ends before it starts, located on the query', async () => {
+    const response = await listMembers(
+      request('/api/v1/members?from=2026-03-31&to=2026-01-01', s.users.officerA.uniEmail),
+      noParams,
+    );
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as ErrorEnvelope;
+    expect(body.error.issues?.[0]).toMatchObject({
+      path: ['query', 'to'],
+      code: 'period_end_before_start',
+    });
+  });
+
+  it('answers 404 for a filter the caller cannot see, and 422 for one from another club', async () => {
+    const outOfScope = await listMembers(
+      request(`/api/v1/members?clubId=${s.clubB.id}`, s.users.officerA.uniEmail),
+      noParams,
+    );
+    expect(outOfScope.status).toBe(404);
+
+    const otherClub = await listMembers(
+      request(
+        `/api/v1/members?clubId=${s.clubA.id}&membershipTypeId=${s.types.b}`,
+        s.users.admin.uniEmail,
+      ),
+      noParams,
+    );
+    expect(otherClub.status).toBe(422);
+    const body = (await otherClub.json()) as ErrorEnvelope;
+    expect(body.error.issues?.[0]).toMatchObject({
+      path: ['query', 'membershipTypeId'],
+      code: 'membership_type_not_in_club',
+    });
+  });
+
+  it('reports which points it is showing, so the column can be labelled', async () => {
+    const response = await listMembers(
+      request(
+        `/api/v1/members?committeeId=${s.committees.a1.id}&from=2026-01-01&to=2026-06-30`,
+        s.users.officerA.uniEmail,
+      ),
+      noParams,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      pointsBasis: { committee: { id: string; name: string } | null; from: string; to: string };
+    };
+    expect(body.pointsBasis).toEqual({
+      committee: { id: s.committees.a1.id, name: s.committees.a1.name },
+      from: '2026-01-01',
+      to: '2026-06-30',
+    });
+  });
+
   it('GET /api/v1/me describes the actor', async () => {
     const response = await getMe(request('/api/v1/me', s.users.leadA1.uniEmail), noParams);
     expect(response.status).toBe(200);
