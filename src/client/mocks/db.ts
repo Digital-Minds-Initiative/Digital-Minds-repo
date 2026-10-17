@@ -106,6 +106,13 @@ interface MockRoleChange {
   createdAt: string;
 }
 
+/** One submitted bulk-points batch, so a resend replays instead of writing everything again. */
+export interface MockPointBatch {
+  id: string;
+  requestHash: string;
+  transactionIds: string[];
+}
+
 export interface MockDb {
   users: MockUser[];
   clubs: MockClub[];
@@ -115,6 +122,8 @@ export interface MockDb {
   transactions: MockTransaction[];
   /** Grants and revokes of roles, oldest first. Starts empty, like a freshly seeded database. */
   roleChanges: MockRoleChange[];
+  /** Bulk-points batches a client has submitted, by the key it sent (docs/adr/0022-bulk-points.md). */
+  pointBatches: Map<string, MockPointBatch>;
   usersById: Map<string, MockUser>;
   clubsById: Map<string, MockClub>;
   committeesById: Map<string, MockCommittee>;
@@ -237,6 +246,7 @@ export function buildMockDb(today: string): MockDb {
     memberships,
     transactions,
     roleChanges: [],
+    pointBatches: new Map(),
     usersById: new Map(users.map((user) => [user.id, user])),
     clubsById: new Map(clubs.map((club) => [club.id, club])),
     committeesById: new Map(committees.map((committee) => [committee.id, committee])),

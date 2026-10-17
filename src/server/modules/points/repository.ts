@@ -662,6 +662,13 @@ export async function savePointsBatch(
       tx,
     );
     const writes = resolve(state);
+    // The scope is applied by reading the state above, so a write may only name a committee
+    // membership that reading it produced. Checked rather than trusted: `resolve` is a callback,
+    // and this is the line that would stop an invented id reaching the insert.
+    const allowed = new Set(state.committeeMemberships.values());
+    if (writes.some((write) => !allowed.has(write.committeeMembershipId))) {
+      throw new NotFoundError('Committee member');
+    }
 
     // Prisma's query compiler splits a createMany past ~32k bind values into several statements
     // by itself; inside this transaction those chunks are still one atomic unit.
