@@ -13,6 +13,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The end-to-end server (playwright.config.ts) builds into its own folder, so it can run beside
+  // a `pnpm dev` that is already open.
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
