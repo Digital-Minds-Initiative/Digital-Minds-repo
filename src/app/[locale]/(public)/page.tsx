@@ -6,7 +6,6 @@ import { FolderStack, type FolderItem } from '@/components/ui/folder-stack';
 import { Fragments, type FragmentPiece } from '@/components/ui/fragments';
 import { Hero } from '@/components/ui/hero';
 import { IdeaNote } from '@/components/ui/idea-note';
-import { Marquee } from '@/components/ui/marquee';
 import { MissionNote } from '@/components/ui/mission-note';
 import { MomentScrap } from '@/components/ui/moment-scrap';
 import { PaperCards, type PaperCardItem } from '@/components/ui/paper-cards';
@@ -14,19 +13,11 @@ import { PixelSticker } from '@/components/ui/pixel-sticker';
 import { type PointsLedgerRow } from '@/components/ui/points-ledger';
 import { PointsSystem } from '@/components/ui/points-system';
 import { ScrapLabel } from '@/components/ui/scrap-label';
+import { ScrapPaper, Tape } from '@/components/ui/scrapbook';
 import { SpecLabel } from '@/components/ui/spec-label';
 import { TicTacToeNote } from '@/components/ui/tic-tac-toe-note';
 import { resolveLocale } from '@/i18n/locale';
 import { Link } from '@/i18n/navigation';
-import { demoClubs } from '@/shared/demo/demo';
-
-/**
- * Clubs' own marks, exactly as supplied (public/clubs). A club without a file here shows its name
- * only; never draw a stand-in.
- */
-const CLUB_LOGOS: Record<string, { logoSrc: string; logoWidth: number; logoHeight: number }> = {
-  tuwaiq: { logoSrc: '/clubs/tuwaiq-club-logo.png', logoWidth: 420, logoHeight: 293 },
-};
 
 /** Lilac is the platform's primary action colour on the dark surfaces. */
 const PRIMARY_ACTION = 'border-tuwaiq-lilac bg-tuwaiq-lilac text-deep hover:bg-tuwaiq-lilac/85';
@@ -62,6 +53,9 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
         {spec}
       </span>
       <h4 className="m-0 font-serif text-xl font-semibold">{t(`features.${key}.title`)}</h4>
+      <p className="m-0 text-sm leading-6 font-medium text-on-paper-muted">
+        {t(`features.${key}.line`)}
+      </p>
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {(t.raw(`features.${key}.tags`) as string[]).map((tag) => (
           <li key={tag} className="flex items-start gap-2 text-sm leading-[22px]">
@@ -101,6 +95,23 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
       start: 20,
       desktopOnly: true,
       content: <ScrapLabel text={t('features.desk.labels.keep')} tint="lilac" torn tape="teal" />,
+    },
+    {
+      // The brand's motto, on a taped scrap that sits among the papers rather than above them.
+      key: 'scrap-motto',
+      kind: 'custom',
+      tiltDeg: -3,
+      top: 80,
+      start: 220,
+      className: 'lg:w-[190px]',
+      content: (
+        <ScrapPaper tint="cream" fold>
+          <Tape tone="teal" className="start-1/2 -top-2 h-4 w-14 -translate-x-1/2 rotate-3" />
+          <p className="m-0 px-4 pt-4 pb-3 text-center text-[15px] leading-7 font-bold text-tuwaiq-indigo">
+            {t('features.desk.motto')}
+          </p>
+        </ScrapPaper>
+      ),
     },
     {
       key: 'sticker-bulb',
@@ -150,7 +161,7 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
             },
             play: t('features.desk.game.play'),
             restart: t('features.desk.game.restart'),
-            cell: t('features.desk.game.cell'),
+            cell: t.raw('features.desk.game.cell') as string,
             empty: t('features.desk.game.empty'),
           }}
         />
@@ -183,7 +194,7 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
           title={t('features.desk.mission.title')}
           items={t.raw('features.desk.mission.items') as string[]}
           done={t('features.desk.mission.done')}
-          progress={t('features.desk.mission.progress')}
+          progress={t.raw('features.desk.mission.progress') as string}
           footnote={t('features.desk.mission.footnote')}
         />
       ),
@@ -282,11 +293,6 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
     linked?: boolean;
   }>;
 
-  const marqueeChips = demoClubs.flatMap((club) => [
-    { name: club.name, ...CLUB_LOGOS[club.slug] },
-    ...club.committees.map((c) => ({ name: c.name })),
-  ]);
-
   return (
     <>
       <section id="top" className="relative overflow-hidden bg-hero text-on-hero">
@@ -340,13 +346,6 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
               {t('folders.body2')}
             </p>
           </div>
-        </div>
-      </section>
-
-      <section className="px-4 py-8 sm:py-10">
-        <div className="mx-auto w-full max-w-6xl">
-          <SpecLabel className="mb-4 block">{t('marquee.sectionLabel')}</SpecLabel>
-          <Marquee chips={marqueeChips} />
         </div>
       </section>
 

@@ -37,7 +37,7 @@ export function MissionNote({
   return (
     <ScrapPaper tint="peach" className={cn('p-4 pb-3.5', className)}>
       <Tape tone="purple" className="start-9 -top-2.5 -rotate-3" />
-      <p className="m-0 font-(family-name:--font-hand) text-[26px] leading-none font-bold text-tuwaiq-indigo">
+      <p className="m-0 mt-2 font-(family-name:--font-hand) text-[26px] leading-none font-bold text-tuwaiq-indigo">
         {title}
       </p>
       <DoodleSquiggle className="mt-0.5 text-club-orange" />

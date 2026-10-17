@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, X } from 'lucide-react';
+import { RotateCcw, Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
@@ -14,9 +14,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Me } from '@/shared/contracts/auth';
-import { memberStatusSchema, type ListMembersQuery } from '@/shared/contracts/members';
+import {
+  clubRoleSchema,
+  memberStatusSchema,
+  type ListMembersQuery,
+} from '@/shared/contracts/members';
 
 import { CommitteeFilter } from './committee-filter';
+import { useClubTypes } from '../hooks/use-member-actions';
 
 const ALL = 'all';
 const SEARCH_DEBOUNCE_MS = 300;
@@ -41,16 +46,25 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
   }, [search, query.q, onChange]);
 
   const clubs = access?.clubs ?? [];
+  // Membership types belong to a club, so they are offered once the club is known: chosen, or the only one.
+  const typesClubId = query.clubId ?? (clubs.length === 1 ? clubs[0]?.id : undefined);
+  const types = useClubTypes(typesClubId);
   const committees = (access?.committees ?? []).filter(
     (committee) => !query.clubId || committee.clubId === query.clubId,
   );
   const hasFilters = Boolean(
-    query.q || query.clubId || query.committeeId || query.status !== 'active',
+    query.q ||
+    query.clubId ||
+    query.committeeId ||
+    query.status !== 'active' ||
+    query.membershipTypeId?.length ||
+    query.role ||
+    query.registered !== undefined,
   );
 
   return (
     <>
-      <div className="relative w-full sm:w-72">
+      <div className="relative min-w-64 flex-[2_1_20rem]">
         <Search
           className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
           aria-hidden
@@ -108,16 +122,77 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
         </SelectContent>
       </Select>
 
+      {(types.data?.items.length ?? 0) > 0 ? (
+        <Select
+          value={query.membershipTypeId?.[0] ?? ALL}
+          onValueChange={(value) =>
+            onChange({ membershipTypeId: value === ALL ? undefined : [value] })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-44" aria-label={t('membershipType')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t('allTypes')}</SelectItem>
+            {types.data?.items.map((type) => (
+              <SelectItem key={type.id} value={type.id}>
+                {type.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+
+      <Select
+        value={query.role ?? ALL}
+        onValueChange={(value) =>
+          onChange({ role: value === ALL ? undefined : clubRoleSchema.parse(value) })
+        }
+      >
+        <SelectTrigger className="w-full sm:w-44" aria-label={t('role')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>{t('allRoles')}</SelectItem>
+          <SelectItem value="CLUB_OFFICER">{t('roleOfficer')}</SelectItem>
+          <SelectItem value="MEMBER">{t('roleMember')}</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={query.registered === undefined ? ALL : query.registered ? 'yes' : 'no'}
+        onValueChange={(value) =>
+          onChange({ registered: value === ALL ? undefined : value === 'yes' })
+        }
+      >
+        <SelectTrigger className="w-full sm:w-44" aria-label={t('registered')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>{t('allRegistered')}</SelectItem>
+          <SelectItem value="yes">{t('registeredYes')}</SelectItem>
+          <SelectItem value="no">{t('registeredNo')}</SelectItem>
+        </SelectContent>
+      </Select>
+
       {hasFilters ? (
         <Button
           variant="ghost"
           size="sm"
           onClick={() => {
             setSearch('');
-            onChange({ q: undefined, clubId: undefined, committeeId: undefined, status: 'active' });
+            onChange({
+              q: undefined,
+              clubId: undefined,
+              committeeId: undefined,
+              membershipTypeId: undefined,
+              role: undefined,
+              registered: undefined,
+              status: 'active',
+            });
           }}
         >
-          <X aria-hidden />
+          <RotateCcw aria-hidden />
           {tCommon('clearFilters')}
         </Button>
       ) : null}

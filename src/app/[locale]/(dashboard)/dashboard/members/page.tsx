@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
-import { Suspense } from 'react';
 
-import { MembersTable } from '@/client/features/members';
-import { PageHeader } from '@/components/patterns/page-header';
+import { MembersPage as MembersScreen } from '@/client/features/members';
 import { resolveLocale } from '@/i18n/locale';
 
 export async function generateMetadata({
@@ -17,13 +15,5 @@ export async function generateMetadata({
 export default async function MembersPage({ params }: PageProps<'/[locale]/dashboard/members'>) {
   await resolveLocale(params);
   const t = await getTranslations('members.page');
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={t('title')} description={t('description')} />
-      {/* MembersTable reads the URL query (useSearchParams), which needs a Suspense boundary. */}
-      <Suspense>
-        <MembersTable />
-      </Suspense>
-    </div>
-  );
+  return <MembersScreen title={t('title')} description={t('description')} />;
 }

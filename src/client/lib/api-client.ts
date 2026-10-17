@@ -31,6 +31,8 @@ export class ApiError extends Error {
       issues?: ValidationIssue[];
       /** RATE_LIMITED: seconds until a retry can succeed. */
       retryAfterSeconds?: number;
+      /** CONFLICT: ids the caller can act on, such as the `memberId` of `already_in_club`. */
+      ids?: Record<string, string>;
     } = {},
   ) {
     super(message);
@@ -100,12 +102,14 @@ async function toApiError(response: Response): Promise<ApiError> {
   const json: unknown = await response.json().catch(() => null);
   const parsed = errorEnvelopeSchema.safeParse(json);
   if (parsed.success) {
-    const { code, message, requestId, reason, issues, retryAfterSeconds } = parsed.data.error;
+    const { code, message, requestId, reason, issues, retryAfterSeconds, details } =
+      parsed.data.error;
     return new ApiError(response.status, code, message, {
       requestId,
       reason,
       issues,
       retryAfterSeconds,
+      ids: details,
     });
   }
   return new ApiError(

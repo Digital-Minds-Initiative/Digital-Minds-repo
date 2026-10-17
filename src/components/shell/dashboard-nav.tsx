@@ -20,9 +20,9 @@ interface NavItem {
 const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', icon: 'grid', href: '/dashboard', exact: true },
   { key: 'members', icon: 'people', href: '/dashboard/members' },
-  { key: 'points', icon: 'trophy' },
-  { key: 'clubs', icon: 'building' },
-  { key: 'permissions', icon: 'shield' },
+  { key: 'points', icon: 'trophy', href: '/dashboard/points' },
+  { key: 'clubs', icon: 'building', href: '/dashboard/clubs' },
+  { key: 'permissions', icon: 'shield', href: '/dashboard/permissions' },
 ];
 
 interface DashboardNavProps {

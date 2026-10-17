@@ -3,4 +3,4 @@
 export { AccountOverview } from './components/account-overview';
 export { SignInFlow } from './components/sign-in-flow';
 export { UserMenu } from './components/user-menu';
-export { useMe } from './hooks/use-me';
+export { meQueryKey, useMe } from './hooks/use-me';

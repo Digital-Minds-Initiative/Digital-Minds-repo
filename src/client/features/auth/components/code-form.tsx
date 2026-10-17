@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import type { z } from 'zod';
 
@@ -40,6 +40,8 @@ export function CodeForm({
   const verify = useVerifyOtp();
   const request = useRequestOtp();
   const [formError, setFormError] = useState<string | null>(null);
+  // A double click sends two submits before the pending state re-renders the button.
+  const busyRef = useRef(false);
   const [resendAt, setResendAt] = useState(() => Date.now() + resendAfterSeconds * 1000);
   const [now, setNow] = useState(() => Date.now());
   const form = useForm<Input_, unknown, Output>({
@@ -85,8 +87,20 @@ export function CodeForm({
     }
   }
 
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    // Ignore a second submit while one is running: a double click arrives before the button re-renders as busy.
+    if (busyRef.current) {
+      event.preventDefault();
+      return;
+    }
+    busyRef.current = true;
+    void submit(event).finally(() => {
+      busyRef.current = false;
+    });
+  }
+
   return (
-    <form onSubmit={submit} noValidate className="grid gap-5">
+    <form onSubmit={onSubmit} noValidate className="grid gap-5">
       <p className="text-center text-sm leading-6 text-on-paper-muted">
         {t('sentTo')} <bdi dir="ltr">{email}</bdi>
       </p>

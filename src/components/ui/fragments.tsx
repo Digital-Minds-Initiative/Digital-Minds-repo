@@ -34,7 +34,7 @@ const KIND_CLASS: Record<FragmentPiece['kind'], string> = {
   chart: 'w-full lg:w-[290px] min-h-[150px] lg:min-h-[206px] bg-paper-peach p-3.5',
   photo: 'w-full lg:w-[300px] min-h-[170px] lg:min-h-[236px] bg-paper-cream p-3',
   note: 'w-full lg:w-[176px] min-h-[110px] lg:min-h-[128px] bg-paper-lilac p-3',
-  custom: '',
+  custom: 'lg:w-fit',
 };
 
 function Piece({ piece }: { piece: FragmentPiece }) {
@@ -49,6 +49,7 @@ function Piece({ piece }: { piece: FragmentPiece }) {
   return (
     <div
       ref={ref}
+      data-piece={piece.key}
       className={cn(
         'static mx-auto w-full max-w-md text-on-paper select-none sm:mx-0 sm:max-w-none',
         piece.kind !== 'custom' && 'rounded-cell border border-paper-rule',

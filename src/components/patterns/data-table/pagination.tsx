@@ -30,7 +30,9 @@ export function DataTablePagination<TData extends RowData>({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted">
-      <span aria-live="polite">{t('total', { total: table.getRowCount() })}</span>
+      <span aria-live="polite" className="font-medium text-fg">
+        {t('total', { total: table.getRowCount() })}
+      </span>
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <span aria-hidden>{t('rowsPerPage')}</span>

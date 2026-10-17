@@ -15,6 +15,7 @@ import {
 } from '@/shared/contracts/members';
 
 import { listMemberFixtures, toMemberFixture } from './fixtures';
+import { memberWriteHandlers } from './writes';
 
 /** The error the server would answer with for an unreachable or contradictory filter, or null. */
 function checkFilters(db: MockDb, actor: MockActor, query: ListMembersQuery): MockError | null {
@@ -73,7 +74,7 @@ function canSeeClub(db: MockDb, actor: MockActor, clubId: string): boolean {
   );
 }
 
-export { listMemberFixtures } from './fixtures';
+export { listMemberFixtures, toMemberFixture } from './fixtures';
 
 export const membersHandlers = [
   mockEndpoint(listMembersEndpoint, ({ cookies, query }) => {
@@ -96,4 +97,6 @@ export const membersHandlers = [
     if (!membership || !canSeeMembership(actor, membership)) return mockError('NOT_FOUND');
     return toMemberFixture(db, actor, membership);
   }),
+
+  ...memberWriteHandlers,
 ];

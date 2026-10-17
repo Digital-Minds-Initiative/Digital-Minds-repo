@@ -1,13 +1,6 @@
 import type { ClubRole, CommitteeRole, MemberProfile } from '@/shared/contracts/members';
 import type { PointTransactionStatus } from '@/shared/contracts/points';
-import {
-  demoClubs,
-  demoKeys,
-  demoPeople,
-  demoProfile,
-  type DemoClubKey,
-  type DemoPersona,
-} from '@/shared/demo/demo';
+import { demoClubs, demoKeys, demoPeople, demoProfile, type DemoPersona } from '@/shared/demo/demo';
 import { demoId, demoPublicId } from '@/shared/demo/ids';
 import { generateDemoTransactions } from '@/shared/demo/points';
 import { addDays, todayInAppTimeZone } from '@/shared/lib/dates';
@@ -32,20 +25,25 @@ interface MockUser {
   persona: DemoPersona;
 }
 
-interface MockClub {
+export interface MockClub {
   id: string;
-  key: DemoClubKey;
+  key: string;
   slug: string;
   name: string;
+  description: string | null;
+  /** ISO instant while the club is archived. */
+  archivedAt: string | null;
 }
 
-interface MockCommittee {
+export interface MockCommittee {
   id: string;
   clubId: string;
   name: string;
+  description: string | null;
+  archivedAt: string | null;
 }
 
-interface MockMembershipType {
+export interface MockMembershipType {
   id: string;
   clubId: string;
   name: string;
@@ -96,6 +94,18 @@ export interface MockTransaction {
   revisions: MockRevision[];
 }
 
+interface MockRoleChange {
+  id: string;
+  clubId: string;
+  /** Null for a club-officer change. */
+  committeeId: string | null;
+  membershipId: string;
+  changedById: string;
+  previousRole: 'MEMBER' | 'CLUB_OFFICER' | 'LEAD';
+  newRole: 'MEMBER' | 'CLUB_OFFICER' | 'LEAD';
+  createdAt: string;
+}
+
 export interface MockDb {
   users: MockUser[];
   clubs: MockClub[];
@@ -103,6 +113,8 @@ export interface MockDb {
   membershipTypes: MockMembershipType[];
   memberships: MockMembership[];
   transactions: MockTransaction[];
+  /** Grants and revokes of roles, oldest first. Starts empty, like a freshly seeded database. */
+  roleChanges: MockRoleChange[];
   usersById: Map<string, MockUser>;
   clubsById: Map<string, MockClub>;
   committeesById: Map<string, MockCommittee>;
@@ -115,12 +127,16 @@ export function buildMockDb(today: string): MockDb {
     key: club.key,
     slug: club.slug,
     name: club.name,
+    description: club.description,
+    archivedAt: null,
   }));
   const committees: MockCommittee[] = demoClubs.flatMap((club) =>
     club.committees.map((committee) => ({
       id: demoId(demoKeys.committee(club.key, committee.key)),
       clubId: demoId(demoKeys.club(club.key)),
       name: committee.name,
+      description: committee.description,
+      archivedAt: null,
     })),
   );
   const membershipTypes: MockMembershipType[] = demoClubs.flatMap((club) =>
@@ -169,7 +185,7 @@ export function buildMockDb(today: string): MockDb {
     const revisions: MockRevision[] = [];
     if (transaction.edit) {
       revisions.push({
-        id: `${transaction.id}-r1`,
+        id: demoId(`${transaction.id}:revision:1`),
         action: 'UPDATED',
         previousAmount: transaction.edit.previousAmount,
         previousReason: transaction.edit.previousReason,
@@ -181,7 +197,7 @@ export function buildMockDb(today: string): MockDb {
     }
     if (transaction.cancellation) {
       revisions.push({
-        id: `${transaction.id}-r2`,
+        id: demoId(`${transaction.id}:revision:2`),
         action: 'CANCELLED',
         previousAmount: transaction.amount,
         previousReason: transaction.reason,
@@ -220,6 +236,7 @@ export function buildMockDb(today: string): MockDb {
     membershipTypes,
     memberships,
     transactions,
+    roleChanges: [],
     usersById: new Map(users.map((user) => [user.id, user])),
     clubsById: new Map(clubs.map((club) => [club.id, club])),
     committeesById: new Map(committees.map((committee) => [committee.id, committee])),
@@ -234,6 +251,11 @@ export function getMockDb(): MockDb {
   const day = todayInAppTimeZone();
   if (!cache || cache.day !== day) cache = { day, db: buildMockDb(day) };
   return cache.db;
+}
+
+/** Forgets every change made through the mock handlers (tests start each case from the demo data). */
+export function resetMockDb(): void {
+  cache = null;
 }
 
 /** Looks up a value that must exist in the mock data. */
