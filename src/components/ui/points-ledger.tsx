@@ -131,7 +131,8 @@ export function PointsLedger({ rows, labels, state, className }: PointsLedgerPro
                   'transition-[background-color,border-color,opacity,transform] duration-(--duration-base) ease-out motion-reduce:transition-none',
                   'hover:-translate-y-px hover:border-primary hover:bg-surface-3 active:translate-y-0 motion-reduce:hover:translate-y-0',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
-                  isCancelled && 'border-dashed opacity-55',
+                  // Not faded: the strike-through, dashed edge and tag already say it, and the text must stay readable.
+                  isCancelled && 'border-dashed',
                 )}
               >
                 {/* A tick circle that shows the entry's state: ticked = counts, crossed = cancelled. */}

@@ -3,11 +3,13 @@
 import { useTranslations } from 'next-intl';
 import type { ReactElement } from 'react';
 
+import { useMe } from '@/client/features/auth';
 import { cn } from '@/client/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { PixelIcon, type PixelIconName } from '@/components/ui/pixel-icon';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Link, usePathname } from '@/i18n/navigation';
+import type { Me } from '@/shared/contracts/auth';
 
 interface NavItem {
   key: 'dashboard' | 'members' | 'points' | 'clubs' | 'permissions';
@@ -25,6 +27,19 @@ const NAV_ITEMS: readonly NavItem[] = [
   { key: 'permissions', icon: 'shield', href: '/dashboard/permissions' },
 ];
 
+/**
+ * The sections this person can use. A page they cannot use only says so, so it is not offered:
+ * the permissions page is for those who manage a club (officers, full admins), and someone with
+ * no dashboard access at all gets only the home page, which explains why. Until /me has loaded,
+ * every section is listed. The server refuses the rest regardless — this only spares a dead end.
+ */
+function visibleItems(access: Me['access'] | undefined): readonly NavItem[] {
+  if (!access) return NAV_ITEMS;
+  if (!access.canAccessDashboard) return NAV_ITEMS.filter((item) => item.key === 'dashboard');
+  const managesAClub = access.clubs.some((club) => club.canManage);
+  return NAV_ITEMS.filter((item) => item.key !== 'permissions' || managesAClub);
+}
+
 interface DashboardNavProps {
   onNavigate?: () => void;
   /** Icons only (the desktop rail): the names stay available to screen readers and as tooltips. */
@@ -35,6 +50,7 @@ export function DashboardNav({ onNavigate, collapsed = false }: DashboardNavProp
   const t = useTranslations('shell.nav');
   const tStates = useTranslations('common.states');
   const pathname = usePathname();
+  const me = useMe();
 
   /** In the rail each icon gets a tooltip with the page name, on the side facing the content. */
   const withTooltip = (label: string, element: ReactElement) =>
@@ -50,7 +66,7 @@ export function DashboardNav({ onNavigate, collapsed = false }: DashboardNavProp
   return (
     <nav aria-label={t('label')}>
       <ul className="grid gap-1">
-        {NAV_ITEMS.map((item) => {
+        {visibleItems(me.data?.access).map((item) => {
           const label = t(item.key);
           const className = cn(
             'flex h-10 items-center rounded-lg text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:outline-2 focus-visible:outline-ring',

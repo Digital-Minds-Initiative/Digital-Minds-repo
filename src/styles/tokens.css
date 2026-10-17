@@ -55,7 +55,7 @@
   --on-gold: #ffffff;
   --orange: #a04e14;
   --on-orange: #ffffff;
-  --success: #1b7a57;
+  --success: #18714f; /* 4.8:1 on --surface-sunken, the darkest light surface it sits on */
   --warning: #7a5200;
   --error: #b3392f;
   --info: #2b5f9e;
