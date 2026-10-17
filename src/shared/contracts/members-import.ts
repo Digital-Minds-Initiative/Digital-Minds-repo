@@ -72,12 +72,17 @@ export const confirmMemberImportBodySchema = memberImportBodySchema.extend({
 
 /**
  * `field` is a column (`uniEmail`, `phone`, `committees`…) or `row` for something about the whole
- * row. `code` is machine-readable and translated by the UI; `at` is the line a duplicate first
- * appeared on.
+ * row. `code` is machine-readable and translated by the UI.
+ *
+ * `value` is the cell text the code is about — the committee name that matched nothing, say — so
+ * the officer can see which of five committees in the cell is the problem. It is always something
+ * from their own file, never anything read from the database.
  */
 export const memberImportIssueSchema = z.object({
   field: z.string(),
   code: z.string(),
+  value: z.string().optional(),
+  /** `duplicate_in_file` only: the line this email was first used on. */
   at: z.number().int().optional(),
 });
 export type MemberImportIssue = z.infer<typeof memberImportIssueSchema>;
@@ -106,7 +111,12 @@ export const memberImportRowSchema = z.object({
   fullName: z.string().nullable(),
   /** Everything wrong with the row, not just the first thing. Any issue makes it `invalid`. */
   issues: z.array(memberImportIssueSchema),
-  /** Worth seeing, but the row still imports (`name_differs`, `already_member`). */
+  /**
+   * Worth seeing, but the row still imports. Today the only one is `name_differs`: this club has
+   * a different name on record and keeps it. It appears on `existing` and `restore` rows only —
+   * on an `add` row the stored name belongs to an account outside the club, which the officer may
+   * not see (docs/adr/0021-csv-member-import.md).
+   */
   warnings: z.array(memberImportIssueSchema),
 });
 export type MemberImportRow = z.infer<typeof memberImportRowSchema>;
