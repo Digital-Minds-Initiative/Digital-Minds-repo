@@ -198,6 +198,26 @@ describe('sorting the members list', () => {
       expect(new Set(paged).size).toBe(paged.length);
     });
 
+    it('ranks by the filtered committee’s points, not by the member’s total', async () => {
+      // leadA1 is in A1 and A2. A big amount in A2 makes their total the highest of anyone's,
+      // but filtered to A1 they still have only the 10 from above — so they must not lead it.
+      await createPointTransaction(officerA, s.memberships.leadA1, s.committees.a2.id, {
+        amount: 900,
+        reason: 'لجنة أخرى',
+        workDate: addDays(today(), -5),
+      });
+
+      const everywhere = await listMembers(officerA, membersQuery({ sort: 'points' }));
+      expect(everywhere.items[0]).toMatchObject({ id: s.memberships.leadA1, points: 910 });
+
+      const inA1 = await listMembers(
+        officerA,
+        membersQuery({ committeeId: s.committees.a1.id, sort: 'points' }),
+      );
+      expect(inA1.items[0]?.id).not.toBe(s.memberships.leadA1);
+      expect(inA1.items.find((item) => item.id === s.memberships.leadA1)?.points).toBe(10);
+    });
+
     it('sorts by the all-time total when no period is asked for', async () => {
       const page = await listMembers(
         officerA,

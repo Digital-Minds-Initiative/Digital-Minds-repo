@@ -35,6 +35,7 @@ import {
   assertCanRemoveFromClub,
   assertCanRemoveFromCommittee,
 } from './policies';
+import { rankByPoints } from './ranking';
 import {
   addToCommittee,
   alreadyInClub,
@@ -153,17 +154,15 @@ async function pageByPoints(
     period,
   );
 
-  const direction = page.order === 'desc' ? -1 : 1;
-  const ranked = candidates
-    .map((candidate) => ({ ...candidate, points: pointsOf(balances.get(candidate.id), pointsIn) }))
-    .sort(
-      (a, b) =>
-        direction * (a.points - b.points) ||
-        // Ties break by the folded name and then the id, so the order is total: no member can
-        // repeat or vanish between pages.
-        (a.searchName < b.searchName ? -1 : a.searchName > b.searchName ? 1 : 0) ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-    );
+  const ranked = rankByPoints(
+    candidates.map((candidate) => ({
+      ...candidate,
+      // The figure being ranked is the one the column shows: with a committee filter, that
+      // committee's share — not the member's total across every committee.
+      points: pointsOf(balances.get(candidate.id), pointsIn),
+    })),
+    page.order,
+  );
 
   const { skip, take } = pageOffset(page.page, page.pageSize);
   const pageIds = ranked.slice(skip, skip + take).map((candidate) => candidate.id);
