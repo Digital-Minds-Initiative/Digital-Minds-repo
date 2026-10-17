@@ -130,6 +130,31 @@ beforeAll(async () => {
     points: [{ amount: 60, workDate: WORK_DATES[0] }],
   });
 
+  // In both committees of the same club, earning in both: one membership row, so only the scope
+  // keeps the two pages apart.
+  const layan = await addMember('ليان الغامدي', s.committees.a1, {
+    points: [{ amount: 8, workDate: WORK_DATES[1], reason: 'تنسيق التسجيل' }],
+  });
+  const inA2 = await db.committeeMembership.create({
+    data: {
+      membershipId: layan.memberId,
+      committeeId: s.committees.a2.id,
+      clubId: s.clubA.id,
+    },
+    select: { id: true },
+  });
+  await db.pointTransaction.create({
+    data: {
+      committeeMembershipId: inA2.id,
+      committeeId: s.committees.a2.id,
+      clubId: s.clubA.id,
+      amount: 500,
+      reason: 'عمل في لجنة أخرى',
+      workDate: dateOnlyToDate(WORK_DATES[0]),
+      createdById: s.users.officerA.id,
+    },
+  });
+
   const admin = await actorFor(s.users.admin.id);
   token = String((await rotateCommitteeViewLink(admin, s.committees.a1.id)).token);
   otherToken = String((await rotateCommitteeViewLink(admin, s.committees.a2.id)).token);
@@ -285,6 +310,23 @@ describe('one member points', () => {
     // The same person, through their own committee token, is found.
     const result = await points(nawaf, 1, 20, otherToken);
     expect(result.balance).toBe(60);
+  });
+
+  it('shows nothing a member earned in another committee of the same club', async () => {
+    const layan = String(people['ليان الغامدي']?.publicId);
+
+    const here = await points(layan);
+    expect(here.balance).toBe(8);
+    expect(here.transactions.items).toEqual([
+      { amount: 8, reason: 'تنسيق التسجيل', workDate: WORK_DATES[1] },
+    ]);
+
+    // The same person on the other committee's page: its own 500, and not the 8 from this one.
+    const there = await points(layan, 1, 20, otherToken);
+    expect(there.balance).toBe(500);
+    expect(there.transactions.items).toEqual([
+      { amount: 500, reason: 'عمل في لجنة أخرى', workDate: WORK_DATES[0] },
+    ]);
   });
 
   it('counts only the points earned in this committee', async () => {
