@@ -221,10 +221,16 @@ describe('importing a members CSV', () => {
       const preview = await previewMemberImport(officerA, s.clubA.id, { file: other });
 
       const before = await world();
+      // A checksum that cannot match is refused outright: no transaction is opened for a request
+      // that is already known to be stale. The plan is checked again inside the transaction too,
+      // for the state that can change while it runs.
+      const transaction = vi.spyOn(db, '$transaction');
       await expectConflict(
         confirmMemberImport(officerA, s.clubA.id, { file, checksum: preview.checksum }),
         'import_changed',
       );
+      expect(transaction).not.toHaveBeenCalled();
+      transaction.mockRestore();
       expect(await world()).toEqual(before);
     });
 
