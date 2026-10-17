@@ -95,9 +95,14 @@ model Committee {
   clubId             String    @db.Uuid
   name               String
   description        String?
-  /// Capability token for the public view-only link. Null = link disabled; rotating replaces it.
-  viewToken          String?   @unique
-  viewTokenRotatedAt DateTime?
+  /// Lookup key for the public view link: HMAC-SHA256(AUTH_SECRET, "committee-view:" + token).
+  /// Null = no active link. A database leak alone gives out no working link: the token itself is
+  /// not derivable from this, and the copy below needs the same secret (ADR 0023).
+  viewTokenHash      String?   @unique
+  /// The token, AES-256-GCM (nonce ‖ tag ‖ ciphertext), so the link can be copied again later.
+  viewTokenCipher    Bytes?
+  /// When the current link was created — by the first creation or by the latest renewal.
+  viewTokenCreatedAt DateTime?
   archivedAt         DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
