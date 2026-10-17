@@ -1,0 +1,154 @@
+{
+  "sheet": {
+    "title": "نقاط {name}",
+    "description": "كل حركة نقاط للعضو، والرصيد مجموع الحركات غير الملغاة.",
+    "balance": "الرصيد",
+    "byCommittee": "الرصيد حسب اللجنة",
+    "noBalances": "لا توجد نقاط مسجلة بعد.",
+    "scopeNote": "تظهر هنا حركات لجانك التي تقودها فقط.",
+    "removedNotice": "العضو مُزال من النادي: سجله للقراءة، ولا تُضاف له نقاط جديدة.",
+    "history": "سجل الحركات",
+    "add": "إضافة أو خصم",
+    "filters": {
+      "committee": "اللجنة",
+      "allCommittees": "كل اللجان",
+      "showCancelled": "إظهار الملغاة"
+    },
+    "empty": {
+      "title": "لا توجد حركات",
+      "body": "ستظهر هنا كل إضافة أو خصم مع سببها وتاريخ العمل."
+    },
+    "loadFailed": "تعذّر تحميل سجل النقاط",
+    "retry": "إعادة المحاولة",
+    "pagination": {
+      "previous": "السابق",
+      "next": "التالي",
+      "page": "{page} من {pages}"
+    }
+  },
+  "transaction": {
+    "points": "{amount} نقطة",
+    "recorded": "سجّلها {name} · {date}",
+    "cancelledBadge": "ملغاة",
+    "cancelled": "ألغاها {name} · {date}",
+    "cancelReason": "سبب الإلغاء: {reason}",
+    "edited": "{count, plural, one {عُدّلت مرة واحدة} two {عُدّلت مرتين} few {عُدّلت # مرات} many {عُدّلت # مرة} other {عُدّلت # مرة}}",
+    "showHistory": "عرض التغييرات",
+    "hideHistory": "إخفاء التغييرات",
+    "actions": {
+      "edit": "تعديل",
+      "cancel": "إلغاء",
+      "editLabel": "تعديل حركة {reason}",
+      "cancelLabel": "إلغاء حركة {reason}"
+    },
+    "revisions": {
+      "title": "التغييرات على هذه الحركة",
+      "loading": "جارٍ تحميل التغييرات…",
+      "failed": "تعذّر تحميل التغييرات",
+      "UPDATED": "تعديل",
+      "CANCELLED": "إلغاء",
+      "before": "قبل التغيير: {amount} · {reason} · عمل بتاريخ {date}",
+      "by": "{name} · {date}"
+    }
+  },
+  "form": {
+    "addTitle": "إضافة أو خصم نقاط",
+    "addDescription": "حركة جديدة في سجل {name}. لا تُحذف الحركة لاحقاً؛ تُعدَّل أو تُلغى فقط.",
+    "editTitle": "تعديل حركة",
+    "editDescription": "يمكن تعديل العدد والسبب والتاريخ. العضو واللجنة ثابتان، فإن أخطأت فيهما ألغِ الحركة وأضف أخرى.",
+    "kind": "نوع الحركة",
+    "kinds": {
+      "add": "إضافة",
+      "deduct": "خصم"
+    },
+    "fields": {
+      "committee": "اللجنة",
+      "committeePlaceholder": "اختر اللجنة",
+      "amount": "عدد النقاط",
+      "amountHint": "رقم صحيح من 1 إلى 1000",
+      "reason": "السبب",
+      "reasonHint": "إجباري، مثل: حضور ورشة التصميم",
+      "workDate": "تاريخ العمل",
+      "workDateHint": "تاريخ الفعالية نفسها، وليس بعد اليوم"
+    },
+    "submitAdd": "تسجيل الحركة",
+    "submitEdit": "حفظ التعديل",
+    "cancel": "إلغاء",
+    "toasts": {
+      "added": "سُجلت الحركة",
+      "edited": "حُفظ التعديل",
+      "cancelled": "أُلغيت الحركة"
+    },
+    "noChanges": "لم يتغير شيء."
+  },
+  "cancelDialog": {
+    "title": "إلغاء هذه الحركة؟",
+    "body": "تبقى الحركة في السجل بحالة «ملغاة» ولا تُحسب في الرصيد. الإلغاء نهائي ولا يمكن التراجع عنه؛ لتصحيح خطأ أضف حركة جديدة.",
+    "reason": "سبب الإلغاء",
+    "reasonHint": "إجباري، يُحفظ مع اسمك ووقت الإلغاء",
+    "confirm": "إلغاء الحركة",
+    "keep": "إبقاء الحركة"
+  },
+  "page": {
+    "title": "النقاط",
+    "description": "أرصدة الأعضاء وسجل الحركات في اللجان ضمن نطاق صلاحياتك."
+  },
+  "screen": {
+    "committee": "اللجنة",
+    "committeeWithClub": "{club} · {committee}",
+    "noCommittees": {
+      "title": "لا توجد لجان ظاهرة لك",
+      "body": "تظهر هنا لجان ناديك إن كنت مدير شؤون، ولجانك إن كنت قائداً. تواصل مع مدير شؤون ناديك إن كان هذا خطأ."
+    },
+    "loadFailed": "تعذّر تحميل النقاط",
+    "retry": "إعادة المحاولة",
+    "leadNote": "ترى هنا لجانك التي تقودها فقط.",
+    "balances": {
+      "label": "أرصدة أعضاء {committee}",
+      "member": "العضو",
+      "balance": "الرصيد",
+      "actions": "إجراءات",
+      "open": "سجل {name}",
+      "add": "رصد نقاط لـ {name}",
+      "empty": {
+        "title": "لا يوجد أعضاء في هذه اللجنة",
+        "body": "أضف أعضاء إلى اللجنة من صفحة الأعضاء ليظهر رصيدهم هنا."
+      },
+      "roles": {
+        "LEAD": "قائد اللجنة",
+        "MEMBER": "عضو"
+      },
+      "points": "{points} نقطة",
+      "rankedBalance": "المركز {rank}، {points} نقطة",
+      "addShort": "رصد نقاط",
+      "detailsShort": "السجل",
+      "details": "عرض سجل {name}",
+      "noMatches": {
+        "title": "لا نتائج مطابقة",
+        "body": "لا يوجد عضو اسمه «{search}» في هذه اللجنة. جرّب اسماً آخر أو امسح البحث.",
+        "clear": "مسح البحث"
+      }
+    },
+    "pagination": {
+      "previous": "السابق",
+      "next": "التالي",
+      "page": "{page} من {pages}"
+    },
+    "kpi": {
+      "label": "ملخص اللجنة",
+      "total": "إجمالي النقاط",
+      "members": "أعضاء اللجنة",
+      "top": "أعلى رصيد"
+    },
+    "filters": {
+      "searchMember": "ابحث باسم العضو",
+      "committee": "اللجنة",
+      "sort": "الترتيب",
+      "sorts": {
+        "points": "الأعلى نقاطاً",
+        "lowest": "الأقل نقاطاً",
+        "name": "الأبجدي"
+      }
+    }
+  }
+}

@@ -1,5 +1,8 @@
 import authAr from '@/client/features/auth/messages/ar.json';
+import clubsAr from '@/client/features/clubs/messages/ar.json';
 import membersAr from '@/client/features/members/messages/ar.json';
+import permissionsAr from '@/client/features/permissions/messages/ar.json';
+import pointsAr from '@/client/features/points/messages/ar.json';
 
 import commonAr from './messages/ar/common.json';
 import dashboardAr from './messages/ar/dashboard.json';
@@ -21,5 +24,8 @@ export const messages = {
     dashboard: dashboardAr,
     auth: authAr,
     members: membersAr,
+    clubs: clubsAr,
+    points: pointsAr,
+    permissions: permissionsAr,
   },
 };

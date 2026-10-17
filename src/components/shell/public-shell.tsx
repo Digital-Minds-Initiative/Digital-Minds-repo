@@ -14,6 +14,12 @@ export function PublicShell({ children }: { children: ReactNode }) {
   const tCommon = useTranslations('common');
   return (
     <div className="flex min-h-dvh flex-col">
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-fg focus:not-sr-only focus:absolute focus:start-4 focus:top-4"
+      >
+        {t('skipToContent')}
+      </a>
       <header className="border-b border-border bg-surface-1">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4">
           <Link

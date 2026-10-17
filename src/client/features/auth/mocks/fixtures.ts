@@ -17,11 +17,20 @@ export function buildMeFixture(db: MockDb, actor: MockActor): Me {
       .filter((membership) => membership.committees.some((c) => c.role === 'LEAD' && !c.removed))
       .map((membership) => membership.clubId),
   );
+  // Like the server's `listAccessibleClubs`: archived clubs and committees are not offered.
   const clubs = db.clubs
-    .filter((club) => canManageClub(actor, club.id) || leadClubIds.has(club.id))
+    .filter(
+      (club) =>
+        club.archivedAt === null && (canManageClub(actor, club.id) || leadClubIds.has(club.id)),
+    )
     .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   const committees = db.committees
-    .filter((committee) => canSeeCommittee(actor, committee.clubId, committee.id))
+    .filter(
+      (committee) =>
+        committee.archivedAt === null &&
+        db.clubsById.get(committee.clubId)?.archivedAt === null &&
+        canSeeCommittee(actor, committee.clubId, committee.id),
+    )
     .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
   return {

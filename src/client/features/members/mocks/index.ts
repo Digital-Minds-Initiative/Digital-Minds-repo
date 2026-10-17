@@ -4,8 +4,9 @@ import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
 import { getMemberEndpoint, listMembersEndpoint } from '@/shared/contracts/members';
 
 import { listMemberFixtures, toMemberFixture } from './fixtures';
+import { memberWriteHandlers } from './writes';
 
-export { listMemberFixtures } from './fixtures';
+export { listMemberFixtures, toMemberFixture } from './fixtures';
 
 export const membersHandlers = [
   mockEndpoint(listMembersEndpoint, ({ cookies, query }) => {
@@ -24,4 +25,6 @@ export const membersHandlers = [
     if (!membership || !canSeeMembership(actor, membership)) return mockError('NOT_FOUND');
     return toMemberFixture(db, actor, membership);
   }),
+
+  ...memberWriteHandlers,
 ];
