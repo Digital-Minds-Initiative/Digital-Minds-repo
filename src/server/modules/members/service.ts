@@ -5,18 +5,20 @@ import {
   committeeMembershipsScope,
   committeesScope,
   membersScope,
+  membershipTypesScope,
   type Actor,
 } from '@/server/authz';
 import { assertUniversityEmail } from '@/server/email-policy';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
 import { endUserSessions } from '@/server/modules/auth';
-import { getActivePointsByMember } from '@/server/modules/points';
+import { getActivePointsByMember, type MemberBalances } from '@/server/modules/points';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import type {
   CreateMemberBody,
   ListMembersQuery,
   ListMembersResponse,
   Member,
+  MemberPointsBasis,
   UpdateMemberBody,
 } from '@/shared/contracts/members';
 import { normalizeEmail } from '@/shared/lib/email-domains';
@@ -33,16 +35,23 @@ import {
   assertCanRemoveFromClub,
   assertCanRemoveFromCommittee,
 } from './policies';
+import { rankByPoints } from './ranking';
 import {
   addToCommittee,
   alreadyInClub,
   findAccountByUniEmail,
   findClubForMembers,
   findCommitteeForMember,
+  findFilterClub,
+  findFilterCommittee,
+  findFilterMembershipTypes,
   findManageableCommittees,
   findMember,
+  findMemberSortKeys,
+  findMembersByIds,
   findMembersPage,
   membershipTypeBelongsToClub,
+  type MemberFilters,
   removeFromClub,
   removeFromCommittee,
   saveMemberChanges,
@@ -58,34 +67,159 @@ import {
  * The rules themselves are in policies.ts and docs/adr/0017-member-permissions.md.
  */
 
+/**
+ * The members list. Every filter is resolved through its own scope first, so a filter can only
+ * narrow what the actor already sees — and the answer says so: a club, committee or membership
+ * type they cannot see is a 404, and one belonging to a different club than the rest of the
+ * request implies is a 422 (docs/adr/0020-members-list-filtering.md).
+ *
+ * The points each row shows follow the filters: one committee's if one is filtered on, and only
+ * the work-date period's if a period is. `pointsBasis` tells the caller which, so a column can
+ * be labelled without guessing.
+ */
 export async function listMembers(
   actor: Actor,
   query: ListMembersQuery,
 ): Promise<ListMembersResponse> {
-  const { rows, total } = await findMembersPage(
-    membersScope(actor),
-    committeeMembershipsScope(actor),
-    {
-      search: query.q,
-      clubId: query.clubId,
-      committeeIds: query.committeeId,
-      membershipTypeIds: query.membershipTypeId,
-      role: query.role,
-      registered: query.registered,
-      status: query.status,
-    },
-    { sort: query.sort, order: query.order },
-    pageOffset(query.page, query.pageSize),
-  );
+  const basis = await resolveListFilters(actor, query);
+  const filters: MemberFilters = {
+    search: query.q,
+    clubId: query.clubId,
+    committeeId: query.committeeId,
+    membershipTypeIds: query.membershipTypeId,
+    role: query.role,
+    registered: query.registered,
+    status: query.status,
+  };
+  const period = { from: query.from, to: query.to };
+  const pointsIn = basis.committee?.id ?? null;
+
+  const { rows, total } =
+    query.sort === 'points'
+      ? await pageByPoints(actor, filters, period, pointsIn, query)
+      : await pageByColumn(actor, filters, { sort: query.sort, order: query.order }, query);
+
   // Two queries for the whole page, whatever its size (docs/adr/0019-points-rules.md).
   const balances = await getActivePointsByMember(
     actor,
     rows.map((row) => row.id),
+    period,
   );
   return {
-    items: rows.map((row) => toMember(row, balances.get(row.id))),
+    items: rows.map((row) => toMember(row, balances.get(row.id), pointsIn)),
     ...pageMeta(total, query.page, query.pageSize),
+    pointsBasis: basis,
   };
+}
+
+/** Sorting by something the database can order: it counts, sorts and pages in two queries. */
+async function pageByColumn(
+  actor: Actor,
+  filters: MemberFilters,
+  order: { sort: Exclude<ListMembersQuery['sort'], 'points'>; order: 'asc' | 'desc' },
+  page: { page: number; pageSize: number },
+): Promise<{ rows: MemberRow[]; total: number }> {
+  return findMembersPage(
+    membersScope(actor),
+    committeeMembershipsScope(actor),
+    filters,
+    order,
+    pageOffset(page.page, page.pageSize),
+  );
+}
+
+/**
+ * Sorting by points. The figure is an aggregate two relations away and the `where` is a branded
+ * scope, so the database cannot order by it without the authorization rules being rewritten as
+ * SQL by hand — which is exactly what the branded scopes exist to prevent. Instead: read the id
+ * and sort key of every match, sum their points, sort, and fetch the one page by id.
+ *
+ * Four queries whatever the page size, like the column path. It reads every matching member,
+ * which is fine into the low thousands per filtered list and is the number ADR 0020 names as the
+ * point to revisit it.
+ */
+async function pageByPoints(
+  actor: Actor,
+  filters: MemberFilters,
+  period: { from?: string; to?: string },
+  pointsIn: string | null,
+  page: { page: number; pageSize: number; order: 'asc' | 'desc' },
+): Promise<{ rows: MemberRow[]; total: number }> {
+  const scope = membersScope(actor);
+  const nested = committeeMembershipsScope(actor);
+  const candidates = await findMemberSortKeys(scope, nested, filters);
+  const balances = await getActivePointsByMember(
+    actor,
+    candidates.map((candidate) => candidate.id),
+    period,
+  );
+
+  const ranked = rankByPoints(
+    candidates.map((candidate) => ({
+      ...candidate,
+      // The figure being ranked is the one the column shows: with a committee filter, that
+      // committee's share — not the member's total across every committee.
+      points: pointsOf(balances.get(candidate.id), pointsIn),
+    })),
+    page.order,
+  );
+
+  const { skip, take } = pageOffset(page.page, page.pageSize);
+  const pageIds = ranked.slice(skip, skip + take).map((candidate) => candidate.id);
+  const rows = await findMembersByIds(scope, nested, pageIds);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return {
+    rows: pageIds.map((id) => byId.get(id)).filter((row): row is MemberRow => row !== undefined),
+    total: ranked.length,
+  };
+}
+
+/** The figure the list is showing: one committee's share, or every visible committee's total. */
+function pointsOf(balances: MemberBalances | undefined, committeeId: string | null): number {
+  if (!balances) return 0;
+  return committeeId === null ? balances.total : (balances.byCommittee.get(committeeId) ?? 0);
+}
+
+/**
+ * Checks each filter against its own scope and works out which club the request is about: the
+ * one asked for, else the committee's, else the membership types'. Everything else must agree
+ * with it.
+ */
+async function resolveListFilters(
+  actor: Actor,
+  query: ListMembersQuery,
+): Promise<MemberPointsBasis> {
+  const typeIds = query.membershipTypeId ?? [];
+  const [club, committee, types] = await Promise.all([
+    query.clubId === undefined ? null : findFilterClub(clubsScope(actor), query.clubId),
+    query.committeeId === undefined
+      ? null
+      : findFilterCommittee(committeesScope(actor), query.committeeId),
+    findFilterMembershipTypes(membershipTypesScope(actor), typeIds),
+  ]);
+  if (query.clubId !== undefined && !club) throw new NotFoundError('Club');
+  if (query.committeeId !== undefined && !committee) throw new NotFoundError('Committee');
+  if (types.length !== typeIds.length) throw new NotFoundError('Membership type');
+
+  const clubId = club?.id ?? committee?.clubId ?? types[0]?.clubId ?? null;
+  if (committee && committee.clubId !== clubId) {
+    throw filterNotInClub('committeeId', 'committee_not_in_club', 'The committee');
+  }
+  if (types.some((type) => type.clubId !== clubId)) {
+    throw filterNotInClub('membershipTypeId', 'membership_type_not_in_club', 'The membership type');
+  }
+
+  return {
+    committee: committee ? { id: committee.id, name: committee.name } : null,
+    from: query.from ?? null,
+    to: query.to ?? null,
+  };
+}
+
+function filterNotInClub(field: string, code: string, what: string): ValidationError {
+  return new ValidationError([
+    { path: ['query', field], code, message: `${what} belongs to another club.` },
+  ]);
 }
 
 export async function getMember(actor: Actor, memberId: string): Promise<Member> {

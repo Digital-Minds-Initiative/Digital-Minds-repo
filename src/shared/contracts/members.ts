@@ -5,18 +5,20 @@ import {
   academicLevelSchema,
   defineEndpoint,
   idSchema,
+  isoDateSchema,
   isoDateTimeSchema,
   paginated,
   paginationShape,
+  periodShape,
   personalEmailSchema,
   personNameSchema,
   phoneSchema,
   queryArray,
   queryBoolean,
   querySearch,
+  refinePeriod,
   requireAnyField,
   shortTextSchema,
-  sortShape,
   universityEmailSchema,
 } from '@/shared/contracts/core';
 
@@ -104,26 +106,64 @@ export const memberCommitteeParamsSchema = z.object({ memberId: idSchema, commit
 export const memberStatusSchema = z.enum(['active', 'removed', 'all']);
 export type MemberStatus = z.infer<typeof memberStatusSchema>;
 
-export const memberSortFields = ['fullName', 'joinedAt', 'membershipType'] as const;
+/**
+ * `fullName` sorts on the Arabic-folded `searchName`, so names that differ only in أ/إ/آ or
+ * ة/ه sit together (docs/adr/0020-members-list-filtering.md). `points` sorts by the figure the
+ * list is showing — with a period filter, that period's points.
+ */
+export const memberSortFields = ['fullName', 'joinedAt', 'membershipType', 'points'] as const;
 export type MemberSortField = (typeof memberSortFields)[number];
 
-export const listMembersQuerySchema = z.object({
-  ...paginationShape,
-  ...sortShape(memberSortFields, { sort: 'fullName', order: 'asc' }),
-  /** Name (Arabic-normalised), university email, or phone digits. */
-  q: querySearch(),
-  clubId: idSchema.optional(),
-  /** Members in any of these committees. */
-  committeeId: queryArray(idSchema).optional(),
-  membershipTypeId: queryArray(idSchema).optional(),
-  role: clubRoleSchema.optional(),
-  registered: queryBoolean().optional(),
-  status: memberStatusSchema.default('active'),
-});
+/**
+ * Every filter is ANDed and every one stays inside the actor's scope — a filter can only narrow
+ * what someone already sees. A club, committee or membership type the actor cannot see is a 404;
+ * one belonging to a different club than the rest of the request implies is a 422.
+ *
+ * `sort` and `order` are optional because their defaults depend on the rest of the query: with
+ * a work-date period the question being asked is "who earned the most", so the default becomes
+ * points descending instead of name ascending.
+ */
+export const listMembersQuerySchema = z
+  .object({
+    ...paginationShape,
+    sort: z.enum(memberSortFields).optional(),
+    order: z.enum(['asc', 'desc']).optional(),
+    /** Work-date period for the points shown; it never removes a member from the list. */
+    ...periodShape,
+    /** Name (Arabic-normalised), university email, or phone digits. */
+    q: querySearch(),
+    clubId: idSchema.optional(),
+    /** One committee: members currently in it, and its points in the column. */
+    committeeId: idSchema.optional(),
+    membershipTypeId: queryArray(idSchema).optional(),
+    role: clubRoleSchema.optional(),
+    registered: queryBoolean().optional(),
+    status: memberStatusSchema.default('active'),
+  })
+  .superRefine(refinePeriod)
+  .transform((query) => {
+    const hasPeriod = query.from !== undefined || query.to !== undefined;
+    const sort = query.sort ?? (hasPeriod ? 'points' : 'fullName');
+    return { ...query, sort, order: query.order ?? (sort === 'points' ? 'desc' : 'asc') };
+  });
 export type ListMembersQuery = z.output<typeof listMembersQuerySchema>;
 export type ListMembersQueryInput = z.input<typeof listMembersQuerySchema>;
 
-export const listMembersResponseSchema = paginated(memberSchema);
+/**
+ * Which points the list is showing, so the column can be labelled without guessing: a committee
+ * when one is filtered on, and the work-date bounds when a period is. All three null means every
+ * committee the caller can see, all time.
+ */
+export const memberPointsBasisSchema = z.object({
+  committee: committeeRefSchema.nullable(),
+  from: isoDateSchema.nullable(),
+  to: isoDateSchema.nullable(),
+});
+export type MemberPointsBasis = z.infer<typeof memberPointsBasisSchema>;
+
+export const listMembersResponseSchema = paginated(memberSchema).extend({
+  pointsBasis: memberPointsBasisSchema,
+});
 export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>;
 
 export const listMembersEndpoint = defineEndpoint({

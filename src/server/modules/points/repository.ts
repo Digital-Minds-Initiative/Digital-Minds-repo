@@ -194,12 +194,14 @@ export interface MemberBalances {
  * `removedAt` filter: a member keeps the points they earned in a committee they have since left,
  * so those still count towards the club total even though the committee is no longer in their
  * list (docs/adr/0017-member-permissions.md). The transactions are then summed per committee
- * membership in one `groupBy`, which the (committeeMembershipId, status, workDate) index serves.
+ * membership in one `groupBy`, which the (committeeMembershipId, status, workDate) index serves
+ * — work date included, so a period costs nothing extra.
  */
 export async function sumActiveByMember(
   scope: PointTransactionScope,
   committeeMembershipScope: CommitteeMembershipScope,
   memberIds: string[],
+  period: Pick<TransactionFilters, 'from' | 'to'> = {},
 ): Promise<Map<string, MemberBalances>> {
   const balances = new Map<string, MemberBalances>();
   if (memberIds.length === 0) return balances;
@@ -212,7 +214,22 @@ export async function sumActiveByMember(
   const groups = await db.pointTransaction.groupBy({
     by: ['committeeMembershipId'],
     where: {
-      AND: [scope, { status: 'ACTIVE', committeeMembershipId: { in: links.map((l) => l.id) } }],
+      AND: [
+        scope,
+        { status: 'ACTIVE', committeeMembershipId: { in: links.map((l) => l.id) } },
+        // The period narrows which transactions count, never which members are listed: a member
+        // with nothing in it still appears, with zero.
+        ...(period.from !== undefined || period.to !== undefined
+          ? [
+              {
+                workDate: {
+                  ...(period.from !== undefined ? { gte: dateOnlyToDate(period.from) } : {}),
+                  ...(period.to !== undefined ? { lte: dateOnlyToDate(period.to) } : {}),
+                },
+              },
+            ]
+          : []),
+      ],
     },
     _sum: { amount: true },
   });

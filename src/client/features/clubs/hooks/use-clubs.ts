@@ -220,7 +220,7 @@ export function useMemberTotal(filter: { clubId: string; committeeId?: string })
             sort: 'fullName',
             order: 'asc',
             clubId: filter.clubId,
-            ...(filter.committeeId ? { committeeId: [filter.committeeId] } : {}),
+            ...(filter.committeeId ? { committeeId: filter.committeeId } : {}),
             status: 'active',
           },
         },

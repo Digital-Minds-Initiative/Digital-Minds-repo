@@ -75,7 +75,7 @@ export function useCandidates(clubId: string, committeeId: string | undefined, q
         {
           query: {
             clubId,
-            ...(committeeId ? { committeeId: [committeeId] } : {}),
+            ...(committeeId ? { committeeId } : {}),
             ...(q ? { q } : {}),
             status: 'active',
             page: 1,

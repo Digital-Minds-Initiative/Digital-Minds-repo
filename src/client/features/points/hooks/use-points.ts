@@ -59,7 +59,7 @@ export function useCommitteeMembers(committeeId: string, clubId: string) {
               sort: 'fullName',
               order: 'asc',
               clubId,
-              committeeId: [committeeId],
+              committeeId,
               status: 'active',
             },
           },

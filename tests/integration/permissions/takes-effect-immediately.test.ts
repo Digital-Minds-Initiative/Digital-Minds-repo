@@ -52,11 +52,17 @@ describe('a role change', () => {
 
     await setMemberCommitteeRole(admin, s.memberships.leadA1, s.committees.a1.id, 'MEMBER');
 
-    // Same session, same cookie, next request: the committee is gone from their scope, so
-    // filtering on it finds nothing and the member themselves is a 404.
+    // Same session, same cookie, next request: the committee is gone from their scope, so even
+    // naming it in a filter is refused, and the member themselves is a 404.
     const after = await listMembersRoute(...callArgs(withSession(path, session)));
-    expect(after.status).toBe(200);
-    expect(((await after.json()) as ListMembersResponse).total).toBe(0);
+    expect(after.status).toBe(404);
+
+    // Without the filter they are simply left with nothing to see.
+    const unfiltered = await listMembersRoute(
+      ...callArgs(withSession('/api/v1/members?pageSize=100', session)),
+    );
+    expect(unfiltered.status).toBe(200);
+    expect(((await unfiltered.json()) as ListMembersResponse).total).toBe(0);
 
     const memberAfter = await getMemberRoute(
       ...callArgs(withSession(memberPath, session, { memberId: s.memberships.memberA1 })),
