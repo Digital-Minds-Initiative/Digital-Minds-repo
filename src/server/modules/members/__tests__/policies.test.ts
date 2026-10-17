@@ -9,6 +9,7 @@ import {
   assertCanEditClubFields,
   assertCanEditFullName,
   assertCanEditUniEmail,
+  assertCanImportMembers,
   assertCanRemoveFromClub,
   assertCanRemoveFromCommittee,
 } from '../policies';
@@ -56,6 +57,7 @@ const clubActions = {
   removeFromCommittee: (actor: Actor, clubId: string) =>
     assertCanRemoveFromCommittee(actor, clubId),
   removeFromClub: (actor: Actor, clubId: string) => assertCanRemoveFromClub(actor, clubId),
+  importMembers: (actor: Actor, clubId: string) => assertCanImportMembers(actor, clubId),
 };
 
 describe('club-level actions', () => {

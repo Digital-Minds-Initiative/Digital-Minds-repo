@@ -36,6 +36,15 @@ export function assertCanAddMember(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);
 }
 
+/**
+ * Importing a file of members: the same rule as adding them one at a time, and the same reason,
+ * so a file is never a way round it (docs/adr/0021-csv-member-import.md). The preview is checked
+ * too: it is nothing but the first half of the same action.
+ */
+export function assertCanImportMembers(actor: Actor, clubId: string): void {
+  assertClubManagement(actor, clubId);
+}
+
 /** This club's copy of the contact and study details: phone, personal email, college, major, level. */
 export function assertCanEditClubFields(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);

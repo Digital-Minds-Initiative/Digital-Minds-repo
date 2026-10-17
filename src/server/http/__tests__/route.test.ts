@@ -8,7 +8,7 @@ import { env } from '@/server/env';
 import { ConflictError, NotFoundError, RateLimitedError } from '@/server/errors';
 import { defineEndpoint, queryInt, type ErrorEnvelope } from '@/shared/contracts/core';
 
-import { defineRoute, withSession, withStatus, type ClientInfo } from '../route';
+import { defineRoute, withFile, withSession, withStatus, type ClientInfo } from '../route';
 
 vi.mock('@/server/actor', () => ({ resolveActor: vi.fn() }));
 vi.mock('@/server/logger', () => ({
@@ -280,5 +280,75 @@ describe('defineRoute', () => {
     );
     // The unit project trusts no IP header (CLIENT_IP_HEADER defaults to none).
     expect(seen).toEqual([{ sessionToken: token, ip: null }]);
+  });
+
+  describe('body size', () => {
+    const ok = async () => ({ id: '', name: '' });
+
+    it('refuses a body larger than the limit, before the handler sees it', async () => {
+      const handler = vi.fn(ok);
+      const big = JSON.stringify({ name: 'x'.repeat(2_000_001) });
+      const response = await call(defineRoute(itemEndpoint, handler), { body: big });
+      expect(response.status).toBe(400);
+      expect((await envelope(response)).reason).toBe('body_too_large');
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('refuses it on a declared content-length too, without reading the body', async () => {
+      const handler = vi.fn(ok);
+      const response = await call(defineRoute(itemEndpoint, handler), {
+        headers: { ...sameOrigin, 'content-length': '9000000' },
+      });
+      expect(response.status).toBe(400);
+      expect((await envelope(response)).reason).toBe('body_too_large');
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('still accepts a body the CSV import could really send', async () => {
+      // 1 MB of CSV is about 1.33 MB of base64 — comfortably inside the limit.
+      const response = await call(defineRoute(itemEndpoint, ok), {
+        body: JSON.stringify({ name: 'a'.repeat(1_400_000) }),
+      });
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('withFile', () => {
+    const fileEndpoint = defineEndpoint({
+      method: 'GET',
+      path: '/api/v1/items/:id/file',
+      access: 'actor',
+      params: z.object({ id: z.uuid() }),
+      response: z.string(),
+    });
+
+    const callFile = (handler: ReturnType<typeof defineRoute>) =>
+      handler(new NextRequest(`http://localhost/api/v1/items/${ID}/file`), {
+        params: Promise.resolve({ id: ID }),
+      });
+
+    it('sends the text as a download instead of JSON', async () => {
+      const response = await callFile(
+        defineRoute(fileEndpoint, async () =>
+          withFile('a,b\r\n', { contentType: 'text/csv; charset=utf-8', filename: 'rows.csv' }),
+        ),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+      expect(response.headers.get('content-disposition')).toBe('attachment; filename="rows.csv"');
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.text()).toBe('a,b\r\n');
+    });
+
+    it('still validates the text against the contract', async () => {
+      const response = await callFile(
+        defineRoute(fileEndpoint, async () =>
+          // @ts-expect-error -- the contract says the response is text; a server bug is a 500.
+          withFile(42, { contentType: 'text/csv', filename: 'rows.csv' }),
+        ),
+      );
+      expect(response.status).toBe(500);
+      expect((await envelope(response)).code).toBe('INTERNAL');
+    });
   });
 });

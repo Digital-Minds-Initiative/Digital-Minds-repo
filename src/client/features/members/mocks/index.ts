@@ -15,6 +15,7 @@ import {
 } from '@/shared/contracts/members';
 
 import { listMemberFixtures, toMemberFixture } from './fixtures';
+import { memberImportHandlers } from './import';
 import { memberWriteHandlers } from './writes';
 
 /** The error the server would answer with for an unreachable or contradictory filter, or null. */
@@ -99,4 +100,5 @@ export const membersHandlers = [
   }),
 
   ...memberWriteHandlers,
+  ...memberImportHandlers,
 ];

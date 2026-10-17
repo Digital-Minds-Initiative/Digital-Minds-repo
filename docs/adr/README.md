@@ -24,6 +24,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0018](0018-granting-roles.md)                    | Full admins appoint officers, officers appoint leads; every grant is recorded  | Accepted                        |
 | [0019](0019-points-rules.md)                      | What the points endpoints accept, refuse and record                            | Accepted (amends 0004)          |
 | [0020](0020-members-list-filtering.md)            | Arabic names order on the folded copy; points ranked in two phases, not in SQL | Accepted                        |
+| [0021](0021-csv-member-import.md)                 | Import members from a CSV behind a preview the import must match               | Accepted                        |
 
 ## Writing a new ADR
 

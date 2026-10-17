@@ -37,7 +37,7 @@ import {
  *   change membership type .......... officer · lead (members of their committees)
  *   add to / remove from committee .. officer
  *   remove from the club ............ officer
- *   CSV import ...................... officer
+ *   CSV import ...................... officer   (its own contract: members-import.ts)
  */
 
 // ─── Roles ───────────────────────────────────────────────────
@@ -303,79 +303,4 @@ export const removeMemberFromCommitteeEndpoint = defineEndpoint({
   access: 'actor',
   params: memberCommitteeParamsSchema,
   response: null,
-});
-
-// ─── CSV import (stateless two-step) ─────────────────────────
-// 1. preview: parse + validate + classify every row, return a checksum of the planned changes.
-// 2. confirm: send the same input and checksum; the server re-runs the preview and applies it
-//    atomically only if the checksum still matches (409 `import_changed` otherwise).
-
-/** Accepted header names per field (English key or Arabic label). */
-export const memberImportColumns = {
-  fullName: ['fullName', 'الاسم الكامل', 'الاسم'],
-  uniEmail: ['uniEmail', 'البريد الجامعي'],
-  personalEmail: ['personalEmail', 'البريد الشخصي'],
-  phone: ['phone', 'رقم الجوال', 'الجوال'],
-  college: ['college', 'الكلية'],
-  major: ['major', 'التخصص'],
-  level: ['level', 'المستوى'],
-  membershipType: ['membershipType', 'نوع العضوية'],
-} as const;
-
-export const MEMBER_IMPORT_MAX_BYTES = 1_000_000;
-export const MEMBER_IMPORT_MAX_ROWS = 2_000;
-
-export const memberImportBodySchema = z.object({
-  clubId: idSchema,
-  /** UTF-8 CSV text (BOM allowed). First row is the header. */
-  csv: z.string().min(1).max(MEMBER_IMPORT_MAX_BYTES),
-  /** Used for rows without a membership type. Defaults to the club's first type. */
-  defaultMembershipTypeId: idSchema.optional(),
-  /** Committees every imported person is added to. */
-  committeeIds: z.array(idSchema).max(20).default([]),
-});
-
-/**
- * `add` covers both a new email and an account that already exists in another club, so the
- * preview never reveals which emails have accounts. `reactivate` and `existing` describe this
- * club's own members, which the importing officer can see anyway.
- */
-export const memberImportRowSchema = z.object({
-  /** Line in the file (the header is line 1). */
-  line: z.number().int().min(2),
-  status: z.enum(['add', 'reactivate', 'existing', 'invalid']),
-  uniEmail: z.string().nullable(),
-  fullName: z.string().nullable(),
-  issues: z.array(z.object({ field: z.string(), code: z.string() })),
-});
-
-export const memberImportSummarySchema = z.object({
-  total: z.number().int(),
-  add: z.number().int(),
-  reactivate: z.number().int(),
-  existing: z.number().int(),
-  invalid: z.number().int(),
-});
-
-export const previewMemberImportEndpoint = defineEndpoint({
-  method: 'POST',
-  path: '/api/v1/members/import/preview',
-  access: 'actor',
-  body: memberImportBodySchema,
-  response: z.object({
-    /** SHA-256 of the planned changes; send it back to confirm. */
-    checksum: z.string().length(64),
-    summary: memberImportSummarySchema,
-    rows: z.array(memberImportRowSchema),
-  }),
-});
-
-/** Invalid rows are skipped; everything else is applied in one transaction. */
-export const confirmMemberImportEndpoint = defineEndpoint({
-  method: 'POST',
-  path: '/api/v1/members/import/confirm',
-  access: 'actor',
-  body: memberImportBodySchema.extend({ checksum: z.string().length(64) }),
-  response: z.object({ summary: memberImportSummarySchema }),
-  successStatus: 201,
 });

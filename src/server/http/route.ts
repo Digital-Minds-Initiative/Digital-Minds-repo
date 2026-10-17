@@ -25,7 +25,13 @@ import {
 } from '@/shared/contracts/core';
 
 import { assertJsonContentType, assertSameOrigin, clientIp } from './request-guards';
-import { emptyResponse, errorResponse, jsonResponse, ResponseContractError } from './responses';
+import {
+  emptyResponse,
+  errorResponse,
+  fileResponse,
+  jsonResponse,
+  ResponseContractError,
+} from './responses';
 
 /**
  * The one way to write a route handler. It:
@@ -58,18 +64,38 @@ interface HandlerContext<E extends EndpointDefinition> {
   requestId: string;
 }
 
-/** A handler result with HTTP details: a status override and/or cookies to set. */
+/**
+ * The largest body any endpoint accepts. The biggest one is the CSV import, whose 1 MB file is
+ * about 1.3 MB base64-encoded; everything else is a small JSON object. Without this, one request
+ * could make the server buffer a body of any size at all.
+ */
+const MAX_REQUEST_BYTES = 2_000_000;
+
+/** A handler result with HTTP details: a status override, cookies to set, or a file to download. */
 class HandlerResult<T> {
   constructor(
     readonly data: T,
     readonly status?: number,
     readonly cookies: readonly string[] = [],
+    readonly file?: { contentType: string; filename: string },
   ) {}
 }
 
 /** Return `withStatus(503, data)` from a handler to override the endpoint's success status. */
 export function withStatus<T>(status: number, data: T): HandlerResult<T> {
   return new HandlerResult(data, status);
+}
+
+/**
+ * Sends the handler's text as a file to download instead of as JSON. The endpoint's response
+ * schema is that text (`z.string()`), so the contract still describes what comes back —
+ * `withFile(buildTemplate(), { contentType: 'text/csv; charset=utf-8', filename: '…csv' })`.
+ */
+export function withFile<T extends string>(
+  text: T,
+  file: { contentType: string; filename: string },
+): HandlerResult<T> {
+  return new HandlerResult(text, 200, [], file);
 }
 
 /** A new session to store in the cookie. */
@@ -182,13 +208,25 @@ function parseInput(
 }
 
 async function readJsonBody(request: NextRequest): Promise<unknown> {
+  // `content-length` lets an oversized body be refused before it is read; a chunked body has no
+  // length to check, so the text is measured as well.
+  const declared = Number(request.headers.get('content-length') ?? '0');
+  if (declared > MAX_REQUEST_BYTES) throw bodyTooLarge();
   const text = await request.text();
+  if (Buffer.byteLength(text, 'utf8') > MAX_REQUEST_BYTES) throw bodyTooLarge();
   if (text.trim() === '') return undefined;
   try {
     return JSON.parse(text) as unknown;
   } catch {
     throw new BadRequestError('The request body is not valid JSON.');
   }
+}
+
+function bodyTooLarge(): BadRequestError {
+  return new BadRequestError(
+    `The request body is larger than ${String(MAX_REQUEST_BYTES)} bytes.`,
+    { reason: 'body_too_large' },
+  );
 }
 
 function successResponse(
@@ -205,7 +243,14 @@ function successResponse(
   } else {
     const parsed = endpoint.response.safeParse(wrapped.data);
     if (!parsed.success) throw new ResponseContractError(parsed.error);
-    response = jsonResponse(parsed.data, status, requestId);
+    if (wrapped.file) {
+      if (typeof parsed.data !== 'string') {
+        throw new Error('withFile needs an endpoint whose response is the file’s text.');
+      }
+      response = fileResponse(parsed.data, wrapped.file, requestId);
+    } else {
+      response = jsonResponse(parsed.data, status, requestId);
+    }
   }
   for (const cookie of wrapped.cookies) response.headers.append('set-cookie', cookie);
   return response;
