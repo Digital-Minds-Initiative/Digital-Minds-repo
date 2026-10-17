@@ -107,7 +107,7 @@ interface MockRoleChange {
 }
 
 /** One submitted bulk-points batch, so a resend replays instead of writing everything again. */
-export interface MockPointBatch {
+interface MockPointBatch {
   id: string;
   requestHash: string;
   transactionIds: string[];

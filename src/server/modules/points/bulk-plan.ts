@@ -18,7 +18,7 @@ export type BulkPointsTarget =
   { kind: 'committee'; committeeId: string } | { kind: 'club'; clubId: string };
 
 /** One member's active membership in one committee, and the committee's own state. */
-export interface BulkPointsCommittee {
+interface BulkPointsCommittee {
   id: string;
   name: string;
   clubId: string;

@@ -505,7 +505,7 @@ export async function findBulkClubTarget(
  * "not in this committee" and "removed from the club" separable: the membership query reports the
  * removal, this one reports the absence.
  */
-export async function readBulkPointsState(
+async function readBulkPointsState(
   scopes: {
     members: MemberScope;
     committees: CommitteeScope;
@@ -608,7 +608,7 @@ export async function findBatchTransactions(
   });
 }
 
-export interface PointBatchWrite {
+interface PointBatchWrite {
   id: string;
   clubId: string;
   committeeId: string | null;
