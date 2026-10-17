@@ -9,10 +9,7 @@ import {
   longTextSchema,
   paginated,
   paginationShape,
-  periodShape,
-  querySearch,
   queryBoolean,
-  refinePeriod,
   requireAnyField,
 } from '@/shared/contracts/core';
 
@@ -24,8 +21,9 @@ import {
  *   create / rename / archive / restore a committee .... full admin
  *   membership types of a club ......................... club officer of that club, full admin
  *   read clubs, committees and membership types ........ anyone, limited to their own scope
- *   rotate / disable a view link ....................... club officer of that club, full admin
- *   read a committee's view link ....................... also that committee's lead (to share it)
+ *   create / renew / turn off a view link .............. that committee's lead, its club's
+ *                                                        officers, full admins
+ *   read a committee's view link ....................... the same three (to copy and share it)
  *
  * Clubs and committees are never deleted — members and points history depend on them. They are
  * archived instead: hidden from lists by default, closed to new members, committee memberships
@@ -329,18 +327,32 @@ export const reorderMembershipTypesEndpoint = defineEndpoint({
 });
 
 // ─── Committee view-only link ────────────────────────────────
-// Draft for task 10 (the committee view link and its token). No routes yet.
+// Every committee can have one view-only link, which anyone may open without signing in
+// (docs/adr/0023-committee-view-link.md). The link is created, renewed and turned off by the
+// committee's lead, the club's officers and full admins; everyone else gets a 404.
 
-/** 32 URL-safe characters (192 random bits). */
+/** 32 URL-safe characters (192 random bits), from a cryptographically secure source. */
 export const viewTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{32}$/);
 
+/** Where the public page lives, under APP_ORIGIN: `https://…/v/<token>`. */
+export const VIEW_LINK_PATH = '/v';
+
 export const committeeViewLinkSchema = z.object({
-  /** Null when the link is disabled. The public page lives at /v/<token>. */
+  /**
+   * The whole link, built by the server from APP_ORIGIN so no client has to assemble it.
+   * Null (with the other two) when the committee has no active link.
+   */
+  url: z.url().nullable(),
   token: viewTokenSchema.nullable(),
-  rotatedAt: isoDateTimeSchema.nullable(),
+  /** When this link was created — by the first creation or by the latest renewal. */
+  createdAt: isoDateTimeSchema.nullable(),
 });
 export type CommitteeViewLink = z.infer<typeof committeeViewLinkSchema>;
 
+/**
+ * The committee's current link, or all-null when it has none. Readable by the committee's lead
+ * too, so they can share it; an archived club or committee is still readable (ADR 0015).
+ */
 export const getCommitteeViewLinkEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/committees/:committeeId/view-link',
@@ -349,15 +361,22 @@ export const getCommitteeViewLinkEndpoint = defineEndpoint({
   response: committeeViewLinkSchema,
 });
 
-/** Creates the link, or replaces it so the old link stops working immediately. */
-export const rotateCommitteeViewLinkEndpoint = defineEndpoint({
+/**
+ * Creates the link, or replaces it with a new one in a single step — the old link stops working
+ * immediately. 409 `club_archived` / `committee_archived`.
+ */
+export const createCommitteeViewLinkEndpoint = defineEndpoint({
   method: 'POST',
-  path: '/api/v1/committees/:committeeId/view-link/rotate',
+  path: '/api/v1/committees/:committeeId/view-link',
   access: 'actor',
   params: committeeParamsSchema,
   response: committeeViewLinkSchema,
 });
 
+/**
+ * Turns the link off. Idempotent: a committee without one answers 204 as well. The committee can
+ * be given a new link afterwards. 409 `club_archived` / `committee_archived`.
+ */
 export const disableCommitteeViewLinkEndpoint = defineEndpoint({
   method: 'DELETE',
   path: '/api/v1/committees/:committeeId/view-link',
@@ -367,15 +386,26 @@ export const disableCommitteeViewLinkEndpoint = defineEndpoint({
 });
 
 // ─── Public committee view (no login) ────────────────────────
-// Draft for task 10. Members search their own name and read their points history.
-// NEVER add contact data (phone, emails) or internal user ids to these schemas: responses are
-// parsed through them, so anything not listed here is stripped before it leaves the server.
+// Members of the committee open the link, search for their own name and read the points they
+// earned in that committee. The token is the only thing that grants this, so it stands in for the
+// Actor: there is no session, no cookie and no scope built from a user.
+//
+// The response schemas below are a WHITELIST: every response is parsed through them before it is
+// sent, so a field that is not listed here cannot leave the server even if a mapper produces it.
+// NEVER add contact data (phone, university or personal email), study details, membership types,
+// other committees, other clubs, who recorded a transaction, cancelled transactions, revisions,
+// or any id that an authenticated endpoint accepts. `src/shared/contracts/__tests__/clubs.test.ts`
+// fails if these shapes grow.
 
-/** User.publicId (cuid2). */
+/** `User.publicId` (cuid2): random, exposed on purpose, and accepted by no other endpoint. */
 export const publicIdSchema = z.string().regex(/^[a-z0-9]{20,40}$/);
 
 const publicViewParamsSchema = z.object({ token: viewTokenSchema });
 
+/**
+ * The names shown at the top of the public page. An invalid, renewed, turned-off or archived
+ * token answers the same 404 as any other, so nobody can tell the cases apart.
+ */
 export const publicCommitteeViewEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/public/committee-views/:token',
@@ -383,38 +413,55 @@ export const publicCommitteeViewEndpoint = defineEndpoint({
   params: publicViewParamsSchema,
   response: z.object({
     committee: z.object({ name: z.string() }),
-    club: z.object({ name: z.string(), slug: z.string() }),
+    club: z.object({ name: z.string() }),
   }),
 });
 
-/** Name search only (never email or phone), at least 2 characters, at most 20 results. */
+/** At least two characters, so the search cannot be used to list the whole committee. */
+export const PUBLIC_MEMBER_SEARCH_MIN = 2;
+
+/** At most this many matches, for the same reason. There is no pagination and no total. */
+export const PUBLIC_MEMBER_SEARCH_LIMIT = 20;
+
+/**
+ * Members of this committee whose name matches `q`, folded the same way as the members list
+ * (أ/إ/آ, ة/ه, ى/ي, diacritics, repeated spaces). Removed members never appear.
+ */
 export const searchPublicCommitteeMembersEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/public/committee-views/:token/members',
   access: 'public',
   params: publicViewParamsSchema,
-  query: z.object({ q: z.string().trim().min(2).max(60) }),
+  query: z.object({ q: z.string().trim().min(PUBLIC_MEMBER_SEARCH_MIN).max(60) }),
   response: z.object({
     items: z
       .array(
-        z.object({ publicId: publicIdSchema, fullName: z.string(), balance: z.number().int() }),
+        z.object({
+          publicId: publicIdSchema,
+          fullName: z.string(),
+          /** Sum of this member's ACTIVE transactions in this committee only. */
+          balance: z.number().int(),
+        }),
       )
-      .max(20),
+      .max(PUBLIC_MEMBER_SEARCH_LIMIT),
   }),
 });
 
-/** Active transactions only; cancelled ones are not shown publicly. */
+/**
+ * One member's points in this committee: their balance and their history, newest work date
+ * first. Active transactions only — a cancelled one is not shown publicly at all. A member who
+ * was removed from the committee or the club is a 404, even by their exact `publicId`.
+ */
 export const publicMemberPointsEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/public/committee-views/:token/members/:publicId/points',
   access: 'public',
   params: publicViewParamsSchema.extend({ publicId: publicIdSchema }),
-  query: z
-    .object({ ...paginationShape, ...periodShape, q: querySearch() })
-    .superRefine(refinePeriod),
+  query: z.object(paginationShape),
   response: z.object({
     member: z.object({ publicId: publicIdSchema, fullName: z.string() }),
-    totals: z.object({ balance: z.number().int(), period: z.number().int() }),
+    /** Sum of the member's ACTIVE transactions in this committee only. */
+    balance: z.number().int(),
     transactions: paginated(
       z.object({ amount: z.number().int(), reason: z.string(), workDate: isoDateSchema }),
     ),
