@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createMemberBodySchema, listMembersQuerySchema, updateMemberBodySchema } from '../members';
 
 const ID = '0192d000-0000-7000-8000-000000000001';
+const OTHER_ID = '0192d000-0000-7000-8000-000000000002';
 
 describe('listMembersQuerySchema', () => {
   it('applies the standard defaults', () => {
@@ -22,13 +23,61 @@ describe('listMembersQuerySchema', () => {
       registered: 'false',
       q: '  سارة ',
     });
-    expect(parsed).toMatchObject({ page: 2, committeeId: [ID], registered: false, q: 'سارة' });
+    expect(parsed).toMatchObject({ page: 2, committeeId: ID, registered: false, q: 'سارة' });
+  });
+
+  it('takes one committee and one or more membership types', () => {
+    expect(listMembersQuerySchema.safeParse({ committeeId: [ID, OTHER_ID] }).success).toBe(false);
+    expect(
+      listMembersQuerySchema.parse({ membershipTypeId: [ID, OTHER_ID] }).membershipTypeId,
+    ).toEqual([ID, OTHER_ID]);
+    expect(listMembersQuerySchema.parse({ membershipTypeId: ID }).membershipTypeId).toEqual([ID]);
+  });
+
+  describe('the default sort', () => {
+    it('is name ascending without a period', () => {
+      expect(listMembersQuerySchema.parse({})).toMatchObject({ sort: 'fullName', order: 'asc' });
+    });
+
+    it('becomes points descending as soon as a period is asked for', () => {
+      // "Who earned the most between these dates" is the question a period is asking.
+      expect(listMembersQuerySchema.parse({ from: '2026-01-01' })).toMatchObject({
+        sort: 'points',
+        order: 'desc',
+      });
+      expect(listMembersQuerySchema.parse({ to: '2026-03-31' })).toMatchObject({
+        sort: 'points',
+        order: 'desc',
+      });
+    });
+
+    it('never overrides a sort or an order that was asked for', () => {
+      expect(listMembersQuerySchema.parse({ from: '2026-01-01', sort: 'fullName' })).toMatchObject({
+        sort: 'fullName',
+        order: 'asc',
+      });
+      expect(listMembersQuerySchema.parse({ from: '2026-01-01', order: 'asc' })).toMatchObject({
+        sort: 'points',
+        order: 'asc',
+      });
+      expect(listMembersQuerySchema.parse({ sort: 'points' })).toMatchObject({
+        sort: 'points',
+        order: 'desc',
+      });
+    });
+  });
+
+  it('rejects a period that ends before it starts', () => {
+    const result = listMembersQuerySchema.safeParse({ from: '2026-03-31', to: '2026-01-01' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('period_end_before_start');
   });
 
   it('rejects unknown sort fields, oversized pages and malformed ids', () => {
     expect(listMembersQuerySchema.safeParse({ sort: 'phone' }).success).toBe(false);
     expect(listMembersQuerySchema.safeParse({ pageSize: '500' }).success).toBe(false);
     expect(listMembersQuerySchema.safeParse({ clubId: '1 OR 1=1' }).success).toBe(false);
+    expect(listMembersQuerySchema.safeParse({ from: '2026-02-30' }).success).toBe(false);
   });
 });
 

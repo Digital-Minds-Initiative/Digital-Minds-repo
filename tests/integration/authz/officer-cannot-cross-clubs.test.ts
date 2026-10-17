@@ -44,9 +44,12 @@ describe('club officer scope', () => {
     expect(page.items.map((member) => member.id)).not.toContain(s.memberships.memberB1);
   });
 
-  it('gets nothing when filtering by another club', async () => {
-    const page = await listMembers(officerA, membersQuery({ clubId: s.clubB.id }));
-    expect(page.total).toBe(0);
+  it('is refused when filtering by another club', async () => {
+    await expectNotFound(listMembers(officerA, membersQuery({ clubId: s.clubB.id })));
+    // Their own club is of course accepted.
+    await expect(
+      listMembers(officerA, membersQuery({ clubId: s.clubA.id })),
+    ).resolves.toMatchObject({ pointsBasis: { committee: null, from: null, to: null } });
   });
 
   it('cannot read another club’s member by id', async () => {

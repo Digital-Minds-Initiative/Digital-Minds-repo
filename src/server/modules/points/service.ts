@@ -50,15 +50,20 @@ import {
  * and records no revision, and cancelling an already cancelled transaction is a 200 no-op.
  */
 
-/** Active balances for a page of members, limited to what the actor can see. */
+/**
+ * Active balances for a set of members, limited to what the actor can see. An optional work-date
+ * period narrows which transactions count — never which members the caller asked about.
+ */
 export async function getActivePointsByMember(
   actor: Actor,
   memberIds: string[],
+  period: { from?: string; to?: string } = {},
 ): Promise<Map<string, MemberBalances>> {
   return sumActiveByMember(
     pointTransactionsScope(actor),
     committeeMembershipsScope(actor),
     memberIds,
+    period,
   );
 }
 

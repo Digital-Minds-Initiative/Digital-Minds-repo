@@ -5,6 +5,7 @@ import type {
   CommitteeMembershipScope,
   CommitteeScope,
   MemberScope,
+  MembershipTypeScope,
 } from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
@@ -57,7 +58,9 @@ export type MemberRow = Prisma.MembershipGetPayload<{ select: ReturnType<typeof 
 export interface MemberFilters {
   search?: string;
   clubId?: string;
-  committeeIds?: string[];
+  /** Members currently in this one committee. The work-date period is not in here: it decides
+   * which transactions count, not which members are listed. */
+  committeeId?: string;
   membershipTypeIds?: string[];
   role?: ClubRole;
   registered?: boolean;
@@ -74,12 +77,13 @@ function memberWhere(
   if (filters.status === 'active') conditions.push({ removedAt: null });
   if (filters.status === 'removed') conditions.push({ removedAt: { not: null } });
   if (filters.clubId) conditions.push({ clubId: filters.clubId });
-  if (filters.committeeIds?.length) {
-    // Filter only through committees the actor can see; otherwise a lead could learn who else
-    // belongs to another committee by filtering on its id.
+  if (filters.committeeId) {
+    // Through the nested scope as well: a lead must not be able to learn who else belongs to a
+    // committee by filtering on its id. Active memberships only — someone removed from the
+    // committee drops out of its list (ADR 0017).
     conditions.push({
       committeeMemberships: {
-        some: { AND: [nested, { committeeId: { in: filters.committeeIds }, removedAt: null }] },
+        some: { AND: [nested, { committeeId: filters.committeeId, removedAt: null }] },
       },
     });
   }
@@ -102,17 +106,25 @@ function memberWhere(
   return { AND: conditions };
 }
 
+/**
+ * Names are ordered by `User.searchName`, the Arabic-folded copy, so أ/إ/آ and ة/ه variants of
+ * one name sort together instead of landing pages apart — which neither the database's en_US
+ * collation nor the ICU Arabic ones manage (docs/adr/0020-members-list-filtering.md). Every
+ * order ends with the id, so a member can never repeat or vanish between pages.
+ *
+ * `points` is not here: it is not a column, so it is sorted in the service.
+ */
 function memberOrderBy(
-  sort: MemberSortField,
+  sort: Exclude<MemberSortField, 'points'>,
   order: 'asc' | 'desc',
 ): Prisma.MembershipOrderByWithRelationInput[] {
   switch (sort) {
     case 'fullName':
-      return [{ user: { fullName: order } }, { id: 'asc' }];
+      return [{ user: { searchName: order } }, { id: 'asc' }];
     case 'joinedAt':
       return [{ createdAt: order }, { id: 'asc' }];
     case 'membershipType':
-      return [{ membershipType: { order } }, { user: { fullName: 'asc' } }, { id: 'asc' }];
+      return [{ membershipType: { order } }, { user: { searchName: 'asc' } }, { id: 'asc' }];
   }
 }
 
@@ -120,7 +132,7 @@ export async function findMembersPage(
   scope: MemberScope,
   nested: CommitteeMembershipScope,
   filters: MemberFilters,
-  order: { sort: MemberSortField; order: 'asc' | 'desc' },
+  order: { sort: Exclude<MemberSortField, 'points'>; order: 'asc' | 'desc' },
   page: { skip: number; take: number },
 ): Promise<{ rows: MemberRow[]; total: number }> {
   const where = memberWhere(scope, nested, filters);
@@ -136,6 +148,71 @@ export async function findMembersPage(
     }),
   ]);
   return { rows, total };
+}
+
+/**
+ * Every member matching the filters, as id plus sort key — for sorting by points, which the
+ * database cannot order because the figure is an aggregate two relations away and the `where`
+ * is a branded scope object that must not be rewritten as SQL by hand
+ * (docs/adr/0020-members-list-filtering.md). The caller sums their points, sorts, and asks for
+ * one page by id. It reads every match, which is why the ADR names the size to revisit it at.
+ */
+export async function findMemberSortKeys(
+  scope: MemberScope,
+  nested: CommitteeMembershipScope,
+  filters: MemberFilters,
+): Promise<Array<{ id: string; searchName: string }>> {
+  const rows = await db.membership.findMany({
+    where: memberWhere(scope, nested, filters),
+    select: { id: true, user: { select: { searchName: true } } },
+  });
+  return rows.map((row) => ({ id: row.id, searchName: row.user.searchName }));
+}
+
+/** The page's rows once the service has decided which ids are on it, in no particular order. */
+export async function findMembersByIds(
+  scope: MemberScope,
+  nested: CommitteeMembershipScope,
+  memberIds: string[],
+): Promise<MemberRow[]> {
+  if (memberIds.length === 0) return [];
+  return db.membership.findMany({
+    where: { AND: [scope, { id: { in: memberIds } }] },
+    select: memberSelect(nested),
+  });
+}
+
+// ─── Filter lookups ─────────────────────────────────────────
+// A filter may only narrow what the actor already sees, so each one is resolved through its own
+// scope first: invisible is a 404, and a different club than the rest of the request implies is
+// a 422. Archived committees are deliberately still selectable, so their history stays readable.
+
+export async function findFilterClub(
+  scope: ClubScope,
+  clubId: string,
+): Promise<{ id: string } | null> {
+  return db.club.findFirst({ where: { AND: [scope, { id: clubId }] }, select: { id: true } });
+}
+
+export async function findFilterCommittee(
+  scope: CommitteeScope,
+  committeeId: string,
+): Promise<{ id: string; clubId: string; name: string } | null> {
+  return db.committee.findFirst({
+    where: { AND: [scope, { id: committeeId }] },
+    select: { id: true, clubId: true, name: true },
+  });
+}
+
+export async function findFilterMembershipTypes(
+  scope: MembershipTypeScope,
+  membershipTypeIds: string[],
+): Promise<Array<{ id: string; clubId: string }>> {
+  if (membershipTypeIds.length === 0) return [];
+  return db.membershipType.findMany({
+    where: { AND: [scope, { id: { in: membershipTypeIds } }] },
+    select: { id: true, clubId: true },
+  });
 }
 
 export async function findMember(

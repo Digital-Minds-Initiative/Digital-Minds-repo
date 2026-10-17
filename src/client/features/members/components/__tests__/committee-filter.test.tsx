@@ -25,14 +25,14 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
 });
 
-function Harness({ onValue }: { onValue: (value: string[] | undefined) => void }) {
-  const [selected, setSelected] = useState<string[]>([]);
+function Harness({ onValue }: { onValue: (value: string | undefined) => void }) {
+  const [selected, setSelected] = useState<string | undefined>(undefined);
   return (
     <CommitteeFilter
       committees={committees}
       selected={selected}
       onChange={(next) => {
-        setSelected(next ?? []);
+        setSelected(next);
         onValue(next);
       }}
     />
@@ -40,7 +40,7 @@ function Harness({ onValue }: { onValue: (value: string[] | undefined) => void }
 }
 
 async function openMenu() {
-  let latest: string[] | undefined;
+  let latest: string | undefined;
   const user = userEvent.setup();
   renderWithProviders(<Harness onValue={(value) => (latest = value)} />);
   await user.click(screen.getByLabelText('اللجنة'));
@@ -48,39 +48,39 @@ async function openMenu() {
 }
 
 describe('CommitteeFilter', () => {
-  it('shows "all committees" until something is ticked', async () => {
+  it('shows "all committees" until one is picked', async () => {
     await openMenu();
     expect(screen.getByLabelText('اللجنة').textContent).toContain('كل اللجان');
-    expect(screen.getAllByRole('menuitemcheckbox')).toHaveLength(3);
-  });
-
-  it('lets several committees be ticked at once and keeps the menu open', async () => {
-    const { user, value } = await openMenu();
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'لجنة الإعلام' }));
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'لجنة التصميم' }));
-    expect(value()).toEqual(['a', 'c']);
-    expect(screen.getByRole('menu')).toBeTruthy();
+    // One radio per committee, plus "all committees".
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(4);
     expect(
-      screen.getByRole('menuitemcheckbox', { name: 'لجنة الإعلام' }).getAttribute('aria-checked'),
+      screen.getByRole('menuitemradio', { name: 'كل اللجان' }).getAttribute('aria-checked'),
     ).toBe('true');
-    expect(
-      screen.getByRole('menuitemcheckbox', { name: 'لجنة البرمجة' }).getAttribute('aria-checked'),
-    ).toBe('false');
-    expect(screen.getByLabelText('اللجنة').textContent).toContain('لجنتان');
   });
 
-  it('shows the name when one committee is ticked, and unticking the last clears the filter', async () => {
+  it('picks one committee and shows its name', async () => {
     const { user, value } = await openMenu();
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'لجنة البرمجة' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'لجنة البرمجة' }));
+    expect(value()).toBe('b');
     expect(screen.getByLabelText('اللجنة').textContent).toContain('لجنة البرمجة');
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'لجنة البرمجة' }));
-    expect(value()).toBeUndefined();
   });
 
-  it('clears every choice with "all committees"', async () => {
+  it('replaces the choice rather than adding to it', async () => {
     const { user, value } = await openMenu();
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'لجنة الإعلام' }));
-    await user.click(screen.getByRole('menuitem', { name: 'كل اللجان' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'لجنة الإعلام' }));
+    expect(value()).toBe('a');
+    await user.click(screen.getByLabelText('اللجنة'));
+    await user.click(screen.getByRole('menuitemradio', { name: 'لجنة التصميم' }));
+    expect(value()).toBe('c');
+    expect(screen.getByLabelText('اللجنة').textContent).toContain('لجنة التصميم');
+  });
+
+  it('clears the choice with "all committees"', async () => {
+    const { user, value } = await openMenu();
+    await user.click(screen.getByRole('menuitemradio', { name: 'لجنة الإعلام' }));
+    await user.click(screen.getByLabelText('اللجنة'));
+    await user.click(screen.getByRole('menuitemradio', { name: 'كل اللجان' }));
     expect(value()).toBeUndefined();
+    expect(screen.getByLabelText('اللجنة').textContent).toContain('كل اللجان');
   });
 });

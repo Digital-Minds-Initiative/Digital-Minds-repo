@@ -60,8 +60,10 @@ describe('committee lead scope', () => {
   });
 
   it('cannot learn who is in another committee through filters', async () => {
-    const page = await listMembers(leadA1, membersQuery({ committeeId: s.committees.a2.id }));
-    expect(page.total).toBe(0);
+    // The committee is outside their scope, so the filter itself is refused — it does not come
+    // back as an empty page that might mean "nobody is in it"
+    // (docs/adr/0020-members-list-filtering.md).
+    await expectNotFound(listMembers(leadA1, membersQuery({ committeeId: s.committees.a2.id })));
   });
 
   it('cannot read or modify another committee’s members', async () => {

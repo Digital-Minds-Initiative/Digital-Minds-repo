@@ -44,9 +44,8 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
   const committees = (access?.committees ?? []).filter(
     (committee) => !query.clubId || committee.clubId === query.clubId,
   );
-  const selectedCommittees = query.committeeId ?? [];
   const hasFilters = Boolean(
-    query.q || query.clubId || selectedCommittees.length > 0 || query.status !== 'active',
+    query.q || query.clubId || query.committeeId || query.status !== 'active',
   );
 
   return (
@@ -90,7 +89,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
       {committees.length > 0 ? (
         <CommitteeFilter
           committees={committees}
-          selected={selectedCommittees}
+          selected={query.committeeId}
           onChange={(committeeId) => onChange({ committeeId })}
         />
       ) : null}
