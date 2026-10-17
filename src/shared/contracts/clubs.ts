@@ -365,7 +365,7 @@ export const getCommitteeViewLinkEndpoint = defineEndpoint({
  * Creates the link, or replaces it with a new one in a single step — the old link stops working
  * immediately. 409 `club_archived` / `committee_archived`.
  */
-export const createCommitteeViewLinkEndpoint = defineEndpoint({
+export const rotateCommitteeViewLinkEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/committees/:committeeId/view-link',
   access: 'actor',
@@ -406,15 +406,18 @@ const publicViewParamsSchema = z.object({ token: viewTokenSchema });
  * The names shown at the top of the public page. An invalid, renewed, turned-off or archived
  * token answers the same 404 as any other, so nobody can tell the cases apart.
  */
+export const publicCommitteeViewSchema = z.object({
+  committee: z.object({ name: z.string() }),
+  club: z.object({ name: z.string() }),
+});
+export type PublicCommitteeView = z.infer<typeof publicCommitteeViewSchema>;
+
 export const publicCommitteeViewEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/public/committee-views/:token',
   access: 'public',
   params: publicViewParamsSchema,
-  response: z.object({
-    committee: z.object({ name: z.string() }),
-    club: z.object({ name: z.string() }),
-  }),
+  response: publicCommitteeViewSchema,
 });
 
 /** At least two characters, so the search cannot be used to list the whole committee. */
@@ -427,24 +430,32 @@ export const PUBLIC_MEMBER_SEARCH_LIMIT = 20;
  * Members of this committee whose name matches `q`, folded the same way as the members list
  * (أ/إ/آ, ة/ه, ى/ي, diacritics, repeated spaces). Removed members never appear.
  */
+export const publicMemberSearchQuerySchema = z.object({
+  q: z.string().trim().min(PUBLIC_MEMBER_SEARCH_MIN).max(60),
+});
+export type PublicMemberSearchQuery = z.output<typeof publicMemberSearchQuerySchema>;
+
+export const publicMemberSearchResultSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        publicId: publicIdSchema,
+        fullName: z.string(),
+        /** Sum of this member's ACTIVE transactions in this committee only. */
+        balance: z.number().int(),
+      }),
+    )
+    .max(PUBLIC_MEMBER_SEARCH_LIMIT),
+});
+export type PublicMemberSearchResult = z.infer<typeof publicMemberSearchResultSchema>;
+
 export const searchPublicCommitteeMembersEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/public/committee-views/:token/members',
   access: 'public',
   params: publicViewParamsSchema,
-  query: z.object({ q: z.string().trim().min(PUBLIC_MEMBER_SEARCH_MIN).max(60) }),
-  response: z.object({
-    items: z
-      .array(
-        z.object({
-          publicId: publicIdSchema,
-          fullName: z.string(),
-          /** Sum of this member's ACTIVE transactions in this committee only. */
-          balance: z.number().int(),
-        }),
-      )
-      .max(PUBLIC_MEMBER_SEARCH_LIMIT),
-  }),
+  query: publicMemberSearchQuerySchema,
+  response: publicMemberSearchResultSchema,
 });
 
 /**
@@ -452,18 +463,24 @@ export const searchPublicCommitteeMembersEndpoint = defineEndpoint({
  * first. Active transactions only — a cancelled one is not shown publicly at all. A member who
  * was removed from the committee or the club is a 404, even by their exact `publicId`.
  */
+export const publicMemberPointsQuerySchema = z.object(paginationShape);
+export type PublicMemberPointsQuery = z.output<typeof publicMemberPointsQuerySchema>;
+
+export const publicMemberPointsSchema = z.object({
+  member: z.object({ publicId: publicIdSchema, fullName: z.string() }),
+  /** Sum of the member's ACTIVE transactions in this committee only. */
+  balance: z.number().int(),
+  transactions: paginated(
+    z.object({ amount: z.number().int(), reason: z.string(), workDate: isoDateSchema }),
+  ),
+});
+export type PublicMemberPoints = z.infer<typeof publicMemberPointsSchema>;
+
 export const publicMemberPointsEndpoint = defineEndpoint({
   method: 'GET',
   path: '/api/v1/public/committee-views/:token/members/:publicId/points',
   access: 'public',
   params: publicViewParamsSchema.extend({ publicId: publicIdSchema }),
-  query: z.object(paginationShape),
-  response: z.object({
-    member: z.object({ publicId: publicIdSchema, fullName: z.string() }),
-    /** Sum of the member's ACTIVE transactions in this committee only. */
-    balance: z.number().int(),
-    transactions: paginated(
-      z.object({ amount: z.number().int(), reason: z.string(), workDate: isoDateSchema }),
-    ),
-  }),
+  query: publicMemberPointsQuerySchema,
+  response: publicMemberPointsSchema,
 });

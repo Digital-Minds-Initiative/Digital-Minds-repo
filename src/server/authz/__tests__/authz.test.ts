@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  committeeViewMembersScope,
+  committeeViewPointsScope,
   canManageClub,
   canManageCommittee,
   clubsScope,
@@ -159,5 +161,26 @@ describe('role hierarchy', () => {
     expect(hasDashboardAccess(leadA1)).toBe(true);
     expect(hasDashboardAccess(plainMember)).toBe(false);
     expect(hasDashboardAccess(nobody)).toBe(false);
+  });
+});
+
+/*
+ * The public committee view has no Actor: the view token is the permission, and the scopes built
+ * from it name one committee (docs/adr/0023-committee-view-link.md).
+ */
+describe('scopes granted by a view token', () => {
+  it('reach only active members of that one committee', () => {
+    expect(committeeViewMembersScope(A1)).toEqual({
+      removedAt: null,
+      committeeMemberships: { some: { committeeId: A1, removedAt: null } },
+    });
+  });
+
+  it('reach only the active transactions of that one committee', () => {
+    expect(committeeViewPointsScope(A1)).toEqual({ committeeId: A1, status: 'ACTIVE' });
+  });
+
+  it('name the committee they were given, and no other', () => {
+    expect(committeeViewPointsScope(A2)).not.toEqual(committeeViewPointsScope(A1));
   });
 });
