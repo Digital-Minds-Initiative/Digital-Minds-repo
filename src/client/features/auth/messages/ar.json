@@ -37,7 +37,11 @@
     "nothing": "لا شيء",
     "fullAdmin": "مسؤول عام على جميع الأندية",
     "noRoles": "لا توجد أدوار إدارية",
-    "membersLink": "عرض الأعضاء"
+    "membersLink": "عرض الأعضاء",
+    "sections": "أقسام لوحة التحكم",
+    "pointsLink": "النقاط",
+    "clubsLink": "الأندية واللجان",
+    "permissionsLink": "الصلاحيات"
   },
   "login": {
     "title": "أهلاً فيك",

@@ -142,7 +142,7 @@ export function TicTacToeNote({
       <DoodleStar className="absolute end-3 top-3 size-5 rotate-12 text-club-orange" />
       <DoodleCross className="absolute start-3 bottom-3 size-4 -rotate-6 text-tuwaiq-indigo/70" />
 
-      <p className="m-0 -rotate-2 text-center font-(family-name:--font-hand) text-[28px] leading-none font-bold text-tuwaiq-indigo">
+      <p className="m-0 mt-2.5 -rotate-2 text-center font-(family-name:--font-hand) text-[28px] leading-none font-bold text-tuwaiq-indigo">
         {heading}
       </p>
 

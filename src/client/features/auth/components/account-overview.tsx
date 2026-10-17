@@ -37,6 +37,16 @@ export function AccountOverview() {
       .map((committee) => ({ committee, club: membership.club })),
   );
 
+  // Every section the person can open from here; permissions only for those who manage a club.
+  const sections = [
+    { href: '/dashboard/members', icon: 'people', label: 'membersLink' },
+    { href: '/dashboard/points', icon: 'trophy', label: 'pointsLink' },
+    { href: '/dashboard/clubs', icon: 'building', label: 'clubsLink' },
+    ...(me.access.clubs.some((club) => club.canManage)
+      ? ([{ href: '/dashboard/permissions', icon: 'shield', label: 'permissionsLink' }] as const)
+      : []),
+  ] as const;
+
   return (
     <div className="grid gap-4 md:grid-cols-3">
       <Card>
@@ -109,13 +119,17 @@ export function AccountOverview() {
             )}
           </div>
           {me.access.canAccessDashboard ? (
-            <Button asChild variant="outline" size="sm" className="justify-self-start">
-              <Link href="/dashboard/members">
-                <PixelIcon name="people" className="size-4" />
-                {t('membersLink')}
-                <DirectionalIcon icon={ArrowRight} />
-              </Link>
-            </Button>
+            <nav aria-label={t('sections')} className="flex flex-wrap gap-2">
+              {sections.map((section) => (
+                <Button key={section.href} asChild variant="outline" size="sm">
+                  <Link href={section.href}>
+                    <PixelIcon name={section.icon} className="size-4" />
+                    {t(section.label)}
+                    <DirectionalIcon icon={ArrowRight} />
+                  </Link>
+                </Button>
+              ))}
+            </nav>
           ) : null}
         </CardContent>
       </Card>

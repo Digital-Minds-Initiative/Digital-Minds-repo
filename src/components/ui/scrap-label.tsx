@@ -20,7 +20,7 @@ export interface ScrapLabelProps {
   className?: string;
 }
 
-/** A small scrap of paper with a mono label: `IDEA #024`, `DRAFT 01`, `KEEP THIS`. */
+/** A small scrap of paper with a mono label: `IDEA #024`, `DRAFT 01`, or Arabic such as `مسودة تستاهل`. */
 export function ScrapLabel({
   text,
   tint = 'cream',
@@ -35,7 +35,11 @@ export function ScrapLabel({
       {tape ? <Tape tone={tape} className="start-3 -top-2 h-4 w-12 -rotate-6" /> : null}
       <span
         className={cn(
-          'flex items-center gap-1.5 px-3 py-2 font-mono text-[12px] font-medium tracking-[0.1em] uppercase [direction:ltr]',
+          'flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium',
+          // Latin labels are spaced mono caps; Arabic joins its letters, so it gets neither.
+          /[\u0600-\u06FF]/.test(text)
+            ? 'text-[13px]'
+            : 'font-mono tracking-[0.1em] uppercase [direction:ltr]',
           torn && 'pe-5',
         )}
       >

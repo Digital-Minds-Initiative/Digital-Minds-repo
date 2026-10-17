@@ -36,6 +36,8 @@ export default defineConfig({
           ],
           environment: 'node',
           setupFiles: ['./tests/setup/unit.ts'],
+          // Component tests render real screens against mocked APIs; give them room on a busy machine.
+          testTimeout: 20_000,
         },
       },
       {

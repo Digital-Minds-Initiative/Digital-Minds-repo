@@ -163,8 +163,8 @@ export function DataTable<TData extends RowData>({
   return (
     <div className="flex flex-col gap-3">
       {toolbar || onColumnVisibilityChange ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-1 flex-wrap items-center gap-2">{toolbar}</div>
+        <div className="flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-1 p-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{toolbar}</div>
           {onColumnVisibilityChange ? <ColumnVisibilityMenu table={table} /> : null}
         </div>
       ) : null}
