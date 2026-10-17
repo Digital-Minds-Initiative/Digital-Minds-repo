@@ -159,7 +159,9 @@ describe('ClubsScreen — changes', { timeout: 20_000 }, () => {
       await screen.findByRole('button', { name: /نادي الحاسبات/ }, { timeout: 5000 }),
     );
     expect(await screen.findByText(/هذا النادي مؤرشف/, undefined, { timeout: 5000 })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'إضافة لجنة' }).hasAttribute('disabled')).toBe(true);
+    expect(
+      (await screen.findByRole('button', { name: 'إضافة لجنة' })).hasAttribute('disabled'),
+    ).toBe(true);
   });
 
   it('adds a membership type at the end, then deletes an unused one', async () => {
@@ -211,11 +213,16 @@ describe('ClubsScreen — the richer club view', { timeout: 30_000 }, () => {
   it('shows three numbers in the club card that agree with the tabs', async () => {
     await renderScreen(OFFICER);
     await screen.findByRole('heading', { name: 'نادي الحاسبات' });
-    await waitFor(() => expect(screen.getByTestId('club-stat-committees').textContent).toBe('4'), {
-      timeout: 8000,
-    });
-    expect(screen.getByTestId('club-stat-types').textContent).toBe('5');
-    expect(Number(screen.getByTestId('club-stat-members').textContent)).toBeGreaterThan(0);
+    // The three numbers come from three independent queries, so they do not land together:
+    // waiting for one of them says nothing about the other two.
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('club-stat-committees').textContent).toBe('4');
+        expect(screen.getByTestId('club-stat-types').textContent).toBe('5');
+        expect(Number(screen.getByTestId('club-stat-members').textContent)).toBeGreaterThan(0);
+      },
+      { timeout: 8000 },
+    );
     // The club's code and the person's role sit in the card as badges.
     expect(screen.getByText('computing').tagName).toBe('CODE');
     expect(screen.getByText('مدير شؤون النادي')).toBeTruthy();
