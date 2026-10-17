@@ -2,7 +2,7 @@
 
 import { Copy, Crown, MoreVertical, ShieldCheck } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { cn } from '@/client/lib/utils';
 import {
@@ -20,7 +20,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/components/ui/toaster';
 import type { Me } from '@/shared/contracts/auth';
-import type { Member } from '@/shared/contracts/members';
+import { type MemberPointsBasis, type Member } from '@/shared/contracts/members';
+import { dateOnlyToDate } from '@/shared/lib/dates';
 
 import { memberAccess } from '../lib/access';
 
@@ -62,6 +63,8 @@ export interface MemberColumnActions {
   typeCounts: ReadonlyMap<string, number>;
   /** The highest points on the page, which gets the emphasis. */
   topPoints: number;
+  /** Which points the list shows (a committee, a work-date period), from the list response. */
+  pointsBasis: MemberPointsBasis | undefined;
 }
 
 export function useMemberColumns({
@@ -71,11 +74,21 @@ export function useMemberColumns({
   onRemove,
   typeCounts,
   topPoints,
+  pointsBasis,
 }: MemberColumnActions): Array<DataTableColumn<Member>> {
   const t = useTranslations('members');
   const tRoles = useTranslations('common.roles');
   const format = useFormatter();
   const tRow = useTranslations('members.rowActions');
+  const periodLabel = useCallback(
+    (from: string | null, to: string | null) => {
+      const date = (value: string) => format.dateTime(dateOnlyToDate(value), 'dateShort');
+      if (from && to) return t('period.between', { from: date(from), to: date(to) });
+      if (from) return t('period.since', { from: date(from) });
+      return to ? t('period.until', { to: date(to) }) : '';
+    },
+    [t, format],
+  );
 
   return useMemo(
     () => [
@@ -175,7 +188,21 @@ export function useMemberColumns({
           ),
       }),
       column.accessor('points', {
-        header: t('columns.points'),
+        header: () => (
+          <span className="grid gap-0.5 text-start">
+            <span>
+              {pointsBasis?.committee
+                ? t('columns.pointsIn', { committee: pointsBasis.committee.name })
+                : t('columns.points')}
+            </span>
+            {pointsBasis?.from || pointsBasis?.to ? (
+              <span className="text-[11px] font-normal text-fg-subtle">
+                {periodLabel(pointsBasis.from, pointsBasis.to)}
+              </span>
+            ) : null}
+          </span>
+        ),
+        enableSorting: true,
         meta: { label: t('columns.points') },
         cell: ({ getValue }) => {
           const points = getValue();
@@ -287,6 +314,19 @@ export function useMemberColumns({
         },
       }),
     ],
-    [t, tRoles, tRow, format, me, onOpen, onEdit, onRemove, typeCounts, topPoints],
+    [
+      t,
+      tRoles,
+      tRow,
+      format,
+      me,
+      onOpen,
+      onEdit,
+      onRemove,
+      typeCounts,
+      topPoints,
+      pointsBasis,
+      periodLabel,
+    ],
   );
 }
