@@ -20,9 +20,12 @@ import type { DataTableFeatures } from './features';
 export function DataTablePagination<TData extends RowData>({
   table,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
+  isLoading = false,
 }: {
   table: ReactTable<DataTableFeatures, TData>;
   pageSizeOptions?: readonly number[] | undefined;
+  /** The first page is still loading: there is no total yet, so none is announced. */
+  isLoading?: boolean;
 }) {
   const t = useTranslations('ui.dataTable');
   const { pageIndex, pageSize } = table.state.pagination;
@@ -31,7 +34,8 @@ export function DataTablePagination<TData extends RowData>({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted">
       <span aria-live="polite" className="font-medium text-fg">
-        {t('total', { total: table.getRowCount() })}
+        {/* Not "no results" while the first page is still on its way. */}
+        {isLoading ? null : t('total', { total: table.getRowCount() })}
       </span>
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">

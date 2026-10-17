@@ -26,7 +26,8 @@ vi.mock('@/client/lib/api-client', async (importOriginal) => {
   };
 });
 // The table keeps its state in the URL; here the URL never changes.
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+const url = vi.hoisted(() => ({ search: '' }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(url.search) }));
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
   usePathname: () => '/dashboard/members',
@@ -59,8 +60,9 @@ beforeEach(() => resetMockDb());
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-async function renderTable(email: string) {
+async function renderTable(email: string, search = '') {
   actor.email = email;
+  url.search = search;
   const user = userEvent.setup();
   renderWithProviders(<MembersPage title="الأعضاء" description="وصف" />);
   await screen.findByRole('button', { name: `فتح ملف ${MEMBER_NAME}` }, { timeout: 8000 });
@@ -307,5 +309,24 @@ describe('members page — numbers and table', { timeout: 30_000 }, () => {
     const user = await renderTable(OFFICER);
     await user.click(screen.getByRole('button', { name: `نسخ بريد ${MEMBER_NAME}` }));
     expect(await navigator.clipboard.readText()).toBe('s445004389@st.uqu.edu.sa');
+  });
+});
+
+describe('members page — period and points order', { timeout: 30_000 }, () => {
+  it('labels the points column with the committee and the period, ranked highest first', async () => {
+    const committee = getMockDb().committees.find((c) => c.name === 'لجنة البرمجة');
+    if (!committee) throw new Error('committee missing');
+    await renderTable(OFFICER, `committeeId=${committee.id}&from=2026-01-01&to=2026-06-30`);
+    const header = await screen.findByRole('columnheader', { name: /نقاط لجنة البرمجة/ });
+    expect(within(header).getByText(/2026/)).toBeTruthy();
+    expect(header.getAttribute('aria-sort')).toBe('descending');
+    const points = screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) =>
+        Number(within(row).getAllByRole('cell').at(-4)?.textContent?.replace(/\D/g, '')),
+      );
+    expect(points.length).toBeGreaterThan(1);
+    expect([...points].sort((a, b) => b - a)).toEqual(points);
   });
 });

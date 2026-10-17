@@ -15,6 +15,7 @@ pnpm lint                   # ESLint incl. architecture boundaries (slow-ish: ty
 pnpm knip                   # unused files, exports, dependencies (CI runs it; config: knip.jsonc)
 pnpm test                   # unit tests (no DB)
 pnpm test:integration       # needs Docker DB; uses digital_minds_test (auto-created, wiped)
+pnpm test:e2e               # Playwright, real app on :3100 + digital_minds_e2e_test (reseeded); PLAYWRIGHT_CHANNEL=msedge to use Edge
 pnpm build                  # production build
 pnpm storybook              # :6006
 pnpm db:migrate --name x    # after editing prisma/schema.prisma

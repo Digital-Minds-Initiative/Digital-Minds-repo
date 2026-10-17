@@ -33,7 +33,7 @@ import { MembersToolbar } from './members-toolbar';
 import { RemoveMemberDialog } from './remove-member-dialog';
 import { useTypeCounts } from '../hooks/use-member-stats';
 import { useMembers } from '../hooks/use-members';
-import { useMembersQueryState } from '../hooks/use-members-query-state';
+import { impliedOrder, useMembersQueryState } from '../hooks/use-members-query-state';
 import { memberAccess } from '../lib/access';
 
 const DEFAULT_COLUMN_VISIBILITY: ColumnVisibilityState = {
@@ -60,7 +60,7 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
   const t = useTranslations('members');
   const tErrors = useTranslations('common.errors');
   const tActions = useTranslations('common.actions');
-  const { query, setQuery, defaults } = useMembersQueryState();
+  const { query, setQuery } = useMembersQueryState();
   const members = useMembers(query);
   const { data: me } = useMe();
   const [ownOpenId, setOwnOpenId] = useState<string | null>(null);
@@ -78,6 +78,7 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
     onRemove: setRemoving,
     typeCounts,
     topPoints: Math.max(0, ...(members.data?.items ?? []).map((member) => member.points)),
+    pointsBasis: members.data?.pointsBasis,
   });
 
   const [columnVisibility, setColumnVisibility] = useState(DEFAULT_COLUMN_VISIBILITY);
@@ -104,7 +105,7 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
     setQuery(
       next && isSortField(next.id)
         ? { sort: next.id, order: next.desc ? 'desc' : 'asc' }
-        : { sort: defaults.sort, order: defaults.order },
+        : impliedOrder(query),
     );
   };
 

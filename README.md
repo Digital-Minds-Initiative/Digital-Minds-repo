@@ -224,6 +224,7 @@ Restart `pnpm dev` after changing it. Pick an account from **«حساب التج
 | `pnpm typecheck`        | Generates Next.js route types, then runs the TypeScript compiler.                                   |
 | `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                 |
 | `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).      |
+| `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded). |
 | `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                            |
 | `pnpm db:deploy`        | Applies pending migrations without creating new ones (CI, production).                              |
 | `pnpm db:seed`          | Replaces all data in your local database with the demo data.                                        |

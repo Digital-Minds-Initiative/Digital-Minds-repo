@@ -19,11 +19,22 @@ import {
   memberStatusSchema,
   type ListMembersQuery,
 } from '@/shared/contracts/members';
+import { todayInAppTimeZone } from '@/shared/lib/dates';
 
 import { CommitteeFilter } from './committee-filter';
 import { useClubTypes } from '../hooks/use-member-actions';
 
 const ALL = 'all';
+
+/**
+ * A typed date the API will accept, or nothing: an empty or half-typed field, a day outside
+ * [min, max], clears that end of the period rather than sending a request the server refuses.
+ */
+function validDate(value: string, min: string | undefined, max: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  if ((min && value < min) || value > max) return undefined;
+  return value;
+}
 const SEARCH_DEBOUNCE_MS = 300;
 
 interface MembersToolbarProps {
@@ -59,8 +70,11 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
     query.status !== 'active' ||
     query.membershipTypeId?.length ||
     query.role ||
-    query.registered !== undefined,
+    query.registered !== undefined ||
+    query.from ||
+    query.to,
   );
+  const today = todayInAppTimeZone();
 
   return (
     <>
@@ -175,6 +189,35 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
         </SelectContent>
       </Select>
 
+      <fieldset className="m-0 flex flex-wrap items-center gap-2 border-0 p-0">
+        <legend className="sr-only">{t('period')}</legend>
+        <Input
+          type="date"
+          value={query.from ?? ''}
+          // No later than today (work dates never are) or than the end already chosen.
+          max={query.to ?? today}
+          onChange={(event) =>
+            onChange({ from: validDate(event.target.value, undefined, query.to ?? today) })
+          }
+          aria-label={t('periodFrom')}
+          title={t('periodFrom')}
+          className="w-full sm:w-40"
+        />
+        <span className="text-sm text-fg-subtle" aria-hidden>
+          –
+        </span>
+        <Input
+          type="date"
+          value={query.to ?? ''}
+          min={query.from}
+          max={today}
+          onChange={(event) => onChange({ to: validDate(event.target.value, query.from, today) })}
+          aria-label={t('periodTo')}
+          title={t('periodTo')}
+          className="w-full sm:w-40"
+        />
+      </fieldset>
+
       {hasFilters ? (
         <Button
           variant="ghost"
@@ -189,6 +232,8 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
               role: undefined,
               registered: undefined,
               status: 'active',
+              from: undefined,
+              to: undefined,
             });
           }}
         >

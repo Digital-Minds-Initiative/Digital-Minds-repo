@@ -18,7 +18,8 @@
     "major": "التخصص",
     "level": "المستوى",
     "status": "الحالة",
-    "joinedAt": "تاريخ الانضمام"
+    "joinedAt": "تاريخ الانضمام",
+    "pointsIn": "نقاط {committee}"
   },
   "filters": {
     "search": "ابحث بالاسم أو البريد أو الجوال",
@@ -41,7 +42,10 @@
     "registered": "التسجيل",
     "allRegistered": "الكل",
     "registeredYes": "مسجّلون",
-    "registeredNo": "لم يسجّلوا بعد"
+    "registeredNo": "لم يسجّلوا بعد",
+    "period": "فترة تاريخ العمل",
+    "periodFrom": "من تاريخ",
+    "periodTo": "إلى تاريخ"
   },
   "status": {
     "registered": "مسجّل",
@@ -185,5 +189,10 @@
       "major": "التخصص",
       "level": "المستوى"
     }
+  },
+  "period": {
+    "between": "{from} – {to}",
+    "since": "منذ {from}",
+    "until": "حتى {to}"
   }
 }

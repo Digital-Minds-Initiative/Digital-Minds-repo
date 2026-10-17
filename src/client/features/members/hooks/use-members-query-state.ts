@@ -32,6 +32,13 @@ export function useMembersQueryState() {
         ...patch,
         ...('page' in patch ? {} : { page: 1 }),
       };
+      // Changing the period resets the order to the one that period implies (points, highest
+      // first, when there is one) unless the same change picks an order itself.
+      if (('from' in patch || 'to' in patch) && !('sort' in patch)) {
+        const implied = impliedOrder(next);
+        next.sort = implied.sort;
+        next.order = implied.order;
+      }
       const params: Record<string, string | string[]> = {};
       for (const [key, value] of toSearchParams(withoutDefaults(next))) {
         const existing = params[key];
@@ -45,10 +52,20 @@ export function useMembersQueryState() {
   return { query, setQuery, defaults: DEFAULTS };
 }
 
+/** The order the API falls back to for this query: points descending with a period, else name. */
+export function impliedOrder(
+  query: Pick<ListMembersQuery, 'from' | 'to'>,
+): Pick<ListMembersQuery, 'sort' | 'order'> {
+  const { sort, order } = listMembersQuerySchema.parse({ from: query.from, to: query.to });
+  return { sort, order };
+}
+
+/** Leaves out every value the API would fill in by itself, so the URL stays short. */
 function withoutDefaults(query: ListMembersQuery): Partial<ListMembersQuery> {
+  const fallbacks: ListMembersQuery = { ...DEFAULTS, ...impliedOrder(query) };
   return Object.fromEntries(
     Object.entries(query).filter(([key, value]) => {
-      const fallback = DEFAULTS[key as keyof ListMembersQuery];
+      const fallback = fallbacks[key as keyof ListMembersQuery];
       return value !== undefined && JSON.stringify(value) !== JSON.stringify(fallback);
     }),
   );

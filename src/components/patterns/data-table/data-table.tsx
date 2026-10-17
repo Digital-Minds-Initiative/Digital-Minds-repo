@@ -273,7 +273,7 @@ export function DataTable<TData extends RowData>({
         </Table>
       </div>
 
-      <DataTablePagination table={table} pageSizeOptions={pageSizeOptions} />
+      <DataTablePagination table={table} pageSizeOptions={pageSizeOptions} isLoading={isLoading} />
     </div>
   );
 }
