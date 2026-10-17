@@ -135,10 +135,14 @@ async function planFor(
   rows: Parameters<typeof buildImportPlan>[0],
   client?: ImportClient,
 ): Promise<ImportPlan> {
-  const [membershipTypes, committees] = await Promise.all([
-    findMembershipTypesInClub(membershipTypesScope(actor), clubId, client),
-    findCommitteesInClub(committeesScope(actor), clubId, client),
-  ]);
+  // One query after another, never in parallel: inside the transaction these share a single
+  // connection, and pg does not allow two queries on it at once.
+  const membershipTypes = await findMembershipTypesInClub(
+    membershipTypesScope(actor),
+    clubId,
+    client,
+  );
+  const committees = await findCommitteesInClub(committeesScope(actor), clubId, client);
   const defaultMembershipType = membershipTypes[0];
   if (!defaultMembershipType) {
     throw new ConflictError(

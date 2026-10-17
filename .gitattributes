@@ -5,3 +5,7 @@
 *.jpg binary
 *.ico binary
 *.woff2 binary
+
+# The CSV import fixtures are bytes on purpose: their encoding, BOM and CRLF are the thing under
+# test, so git must not normalise them.
+tests/fixtures/members-import/*.csv -text

@@ -29,6 +29,7 @@ import {
   removeFromClub,
   removeFromCommittee,
   saveMemberChanges,
+  saveImportedMembers,
   saveNewMember,
 } from '@/server/modules/members/repository';
 import {
@@ -201,6 +202,83 @@ describe('repository writes apply the scope themselves', () => {
     expect(await db.user.count()).toBe(users);
     expect(await db.membership.count()).toBe(memberships);
     expect(await committeeRows(s.memberships.memberA2)).toEqual(beforeA2);
+  });
+
+  it('saveImportedMembers checks the club, the committees and the memberships it restores', async () => {
+    const officerBScopes = {
+      club: clubsScope(officerB),
+      committees: committeesScope(officerB),
+      members: membersScope(officerB),
+    };
+    const lead = await leadScopes();
+    const users = await db.user.count();
+    const memberships = await db.membership.count();
+    const removed = await db.membership.findUniqueOrThrow({
+      where: { id: s.memberships.removedOfficer },
+    });
+    const add = {
+      uniEmail: 's900000421@st.uqu.edu.sa',
+      fullName: 'شخص مستورد',
+      userId: null,
+      membershipTypeId: s.types.a,
+      profile: {},
+      committeeIds: [],
+    };
+    const restore = {
+      membershipId: s.memberships.removedOfficer,
+      membershipTypeId: s.types.a,
+      profile: { phone: '+966500001111' },
+      committeeIds: [],
+    };
+    const always = () => Promise.resolve(true);
+
+    // Club A, asked for with club B's scopes.
+    await expectNotFound(
+      saveImportedMembers(
+        officerBScopes,
+        { clubId: s.clubA.id, adds: [add], restores: [] },
+        always,
+      ),
+    );
+    // The lead's own club, but a committee they do not lead.
+    await expectNotFound(
+      saveImportedMembers(
+        lead,
+        {
+          clubId: s.clubA.id,
+          adds: [{ ...add, committeeIds: [s.committees.a2.id] }],
+          restores: [],
+        },
+        always,
+      ),
+    );
+    // Restoring is a write, so it goes through the members scope: the lead cannot see a member
+    // who is in none of their committees, so there is nothing for them to bring back.
+    await expectConflict(
+      saveImportedMembers(lead, { clubId: s.clubA.id, adds: [], restores: [restore] }, always),
+      'import_changed',
+    );
+    expect(
+      await db.membership.findUniqueOrThrow({ where: { id: s.memberships.removedOfficer } }),
+    ).toEqual(removed);
+
+    // And a plan that no longer matches writes nothing either, scope or no scope.
+    const officerA = await actorFor(s.users.officerA.id);
+    await expectConflict(
+      saveImportedMembers(
+        {
+          club: clubsScope(officerA),
+          committees: committeesScope(officerA),
+          members: membersScope(officerA),
+        },
+        { clubId: s.clubA.id, adds: [add], restores: [] },
+        () => Promise.resolve(false),
+      ),
+      'import_changed',
+    );
+
+    expect(await db.user.count()).toBe(users);
+    expect(await db.membership.count()).toBe(memberships);
   });
 
   it('insertTransaction', async () => {
