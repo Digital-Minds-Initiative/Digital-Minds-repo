@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Suspense, useState } from 'react';
 
@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/patterns/page-header';
 import { Button } from '@/components/ui/button';
 
 import { AddMemberDialog } from './add-member-dialog';
+import { ImportMembersDialog } from './import-members-dialog';
 import { MembersTable } from './members-table';
 import { clubsToAddTo } from '../lib/access';
 
@@ -26,6 +27,7 @@ export function MembersPage({ title, description }: MembersPageProps) {
   const t = useTranslations('members.toolbar');
   const me = useMe();
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const addableClubs = me.data ? clubsToAddTo(me.data) : [];
 
@@ -36,10 +38,16 @@ export function MembersPage({ title, description }: MembersPageProps) {
         description={description}
         actions={
           addableClubs.length > 0 ? (
-            <Button onClick={() => setAdding(true)}>
-              <Plus aria-hidden />
-              {t('addMember')}
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setImporting(true)}>
+                <Upload aria-hidden />
+                {t('importMembers')}
+              </Button>
+              <Button onClick={() => setAdding(true)}>
+                <Plus aria-hidden />
+                {t('addMember')}
+              </Button>
+            </>
           ) : undefined
         }
       />
@@ -47,6 +55,7 @@ export function MembersPage({ title, description }: MembersPageProps) {
       <Suspense>
         <MembersTable openId={openId} onOpenIdChange={setOpenId} />
       </Suspense>
+      <ImportMembersDialog open={importing} onOpenChange={setImporting} clubs={addableClubs} />
       <AddMemberDialog
         open={adding}
         onOpenChange={setAdding}

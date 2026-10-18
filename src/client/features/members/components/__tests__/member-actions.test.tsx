@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,6 +89,14 @@ describe('member actions — who is offered what', { timeout: 30_000 }, () => {
   it('does not offer the add button to a committee lead', async () => {
     await renderTable(LEAD);
     expect(screen.queryByRole('button', { name: 'إضافة عضو' })).toBeNull();
+  });
+
+  it('offers the CSV import to officers, and not to a committee lead', async () => {
+    await renderTable(OFFICER);
+    expect(screen.getByRole('button', { name: 'استيراد من ملف' })).toBeTruthy();
+    cleanup();
+    await renderTable(LEAD);
+    expect(screen.queryByRole('button', { name: 'استيراد من ملف' })).toBeNull();
   });
 
   it('shows an officer edit and remove on a member, and a lead only edit (the type)', async () => {
