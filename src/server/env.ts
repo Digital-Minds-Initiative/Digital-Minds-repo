@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomBytes } from 'node:crypto';
+
 import { z } from 'zod';
 
 import { parseEmailDomains } from '@/shared/lib/email-domains';
@@ -22,10 +24,20 @@ const optionalString = z
   .transform((value) => value || undefined);
 
 /**
- * Used for AUTH_SECRET outside a production server, so `pnpm dev` and the tests run without
- * setup. A production server refuses to start without its own secret.
+ * Used for AUTH_SECRET in development and in tests, so `pnpm dev` and the suite run without
+ * setup. It is a fixed value on purpose: a restart of `pnpm dev` keeps pending sign-in codes and
+ * committee view links working.
+ *
+ * It is never used when NODE_ENV is production. A production *server* refuses to start without a
+ * secret of its own; a production *build* has none to validate against, and gets a random value
+ * for the few seconds it runs, so nothing can ever be signed with a secret that is in this
+ * repository under NODE_ENV=production (docs/reviews/2026-10-backend-review.md).
  */
 const DEVELOPMENT_AUTH_SECRET = 'development-only-auth-secret-never-use-in-production';
+
+function fallbackSecret(nodeEnv: 'development' | 'test' | 'production'): string {
+  return nodeEnv === 'production' ? randomBytes(32).toString('base64') : DEVELOPMENT_AUTH_SECRET;
+}
 
 /** `phase` is NEXT_PHASE: `next build` sets it, a running server does not. */
 const envSchema = (phase: string | undefined) =>
@@ -46,6 +58,15 @@ const envSchema = (phase: string | undefined) =>
       ),
       /** Keys the HMACs of sign-in codes and rate-limit keys. */
       AUTH_SECRET: optionalString.pipe(
+        z.string().min(32, 'must be at least 32 characters').optional(),
+      ),
+      /**
+       * Keys the HMAC a committee view link is looked up by, and the key its stored copy is
+       * encrypted with (docs/adr/0023-committee-view-link.md). It defaults to AUTH_SECRET, so
+       * nothing has to be set to run the app — but giving it its own value means rotating the
+       * sign-in secret does not invalidate every committee's link, and the other way round.
+       */
+      VIEW_LINK_SECRET: optionalString.pipe(
         z.string().min(32, 'must be at least 32 characters').optional(),
       ),
       /**
@@ -124,7 +145,8 @@ const envSchema = (phase: string | undefined) =>
     .transform((env) => ({
       ...env,
       APP_ORIGIN: env.APP_ORIGIN ?? 'http://localhost:3000',
-      AUTH_SECRET: env.AUTH_SECRET ?? DEVELOPMENT_AUTH_SECRET,
+      AUTH_SECRET: env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
+      VIEW_LINK_SECRET: env.VIEW_LINK_SECRET ?? env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
       CLIENT_IP_HEADER:
         env.CLIENT_IP_HEADER === undefined || env.CLIENT_IP_HEADER === 'none'
           ? null

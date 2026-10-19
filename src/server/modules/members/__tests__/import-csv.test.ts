@@ -203,6 +203,19 @@ describe('parseImportFile', () => {
     expect(parse(rows(1000).replace(/\n/g, '\n\n')).rows).toHaveLength(1000);
   });
 
+  /*
+   * A megabyte of two-character rows is a quarter of a million records, and the parser is
+   * synchronous — so a file that long is refused by its line count before any of them is built
+   * (docs/reviews/2026-10-backend-review.md).
+   */
+  it('refuses an absurdly long file without parsing it', () => {
+    const file = `الاسم الكامل,البريد الجامعي\n${'a,b\n'.repeat(250_000)}`;
+
+    const started = performance.now();
+    expect(issueOf(() => parse(file))).toMatchObject({ code: 'too_many_rows' });
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
   it('collects every problem in a row, not just the first', () => {
     const file = parse([HEADER, ',s441000001@gmail.com,0abc,كلية,99,عضو,لجنة'].join('\n'));
     expect(codes(file.rows[0])).toEqual([

@@ -85,8 +85,10 @@ export async function requestOtp(
 ): Promise<{ expiresInSeconds: number; resendAfterSeconds: number }> {
   const now = new Date();
   assertUniversityEmail(body.email, ['body', 'email']);
-  await deleteExpiredAuthRows(now);
+  // The limit first: the sweep below is three deletes, and a request that is over its limit must
+  // not be able to spend them (docs/reviews/2026-10-backend-review.md).
   await consumeLimit('requestPerIp', client.ip, now);
+  await deleteExpiredAuthRows(now);
 
   const key = emailKey(body.email);
   const resendAllowedFrom = new Date(now.getTime() - OTP_RESEND_COOLDOWN_SECONDS * 1000);

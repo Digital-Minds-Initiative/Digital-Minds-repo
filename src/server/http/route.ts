@@ -238,18 +238,47 @@ function parseInput(
 }
 
 async function readJsonBody(request: NextRequest): Promise<unknown> {
-  // `content-length` lets an oversized body be refused before it is read; a chunked body has no
-  // length to check, so the text is measured as well.
-  const declared = Number(request.headers.get('content-length') ?? '0');
-  if (declared > MAX_REQUEST_BYTES) throw bodyTooLarge();
-  const text = await request.text();
-  if (Buffer.byteLength(text, 'utf8') > MAX_REQUEST_BYTES) throw bodyTooLarge();
+  const text = await readBodyText(request);
   if (text.trim() === '') return undefined;
   try {
     return JSON.parse(text) as unknown;
   } catch {
     throw new BadRequestError('The request body is not valid JSON.');
   }
+}
+
+/**
+ * The body as text, refused as soon as it passes the cap rather than once it has all arrived.
+ *
+ * `content-length` is checked first, because a client that declares an oversized body can be
+ * turned away without reading a byte. It cannot be trusted on its own, though: a chunked request
+ * sends no length at all, and a lying one is just as cheap to send — so the stream is measured as
+ * it is read and dropped the moment it goes over. Reading it to the end first (`request.text()`)
+ * would let one request buffer a body of any size, which is the whole thing the cap exists to
+ * stop.
+ */
+async function readBodyText(request: NextRequest): Promise<string> {
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) throw bodyTooLarge();
+
+  const stream = request.body;
+  if (!stream) return '';
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_REQUEST_BYTES) throw bodyTooLarge();
+      chunks.push(value);
+    }
+  } finally {
+    // Tells the client we are done with the body; a request we refused is not read any further.
+    await reader.cancel().catch(() => undefined);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function bodyTooLarge(): BadRequestError {

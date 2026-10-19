@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { db } from '@/server/db/client';
 import { clearSentEmails } from '@/server/email/dev';
 import { auth, codeRejection, emailsTo, errorOf, lastCodeFor } from '@tests/utils/auth';
 
@@ -76,6 +77,41 @@ describe('requesting codes', () => {
     expect((await auth.request(newEmail(), { ip: newIp() })).status).toBe(200);
     advance(10 * MINUTE);
     expect((await auth.request(newEmail(), { ip })).status).toBe(200);
+  }, 120_000);
+
+  /*
+   * Every code request sweeps the expired codes, sessions and counters. That is three deletes, so
+   * a request that is over its limit must not get to spend them
+   * (docs/reviews/2026-10-backend-review.md).
+   */
+  it('does no cleanup for a request it refuses', async () => {
+    const ip = newIp();
+    const expired = await db.session.create({
+      data: {
+        tokenHash: `expired-${String(Date.now())}`,
+        email: newEmail(),
+        expiresAt: new Date(Date.now() - MINUTE),
+      },
+      select: { id: true },
+    });
+
+    for (let i = 0; i < 300; i += 1) {
+      const response = await auth.request(newEmail(), { ip });
+      if (response.status !== 200) throw new Error(`request ${i + 1} answered ${response.status}`);
+    }
+    // The 300 requests that were allowed did sweep it.
+    expect(await db.session.findUnique({ where: { id: expired.id } })).toBeNull();
+
+    const stale = await db.session.create({
+      data: {
+        tokenHash: `expired-again-${String(Date.now())}`,
+        email: newEmail(),
+        expiresAt: new Date(Date.now() - MINUTE),
+      },
+      select: { id: true },
+    });
+    expect((await auth.request(newEmail(), { ip })).status).toBe(429);
+    expect(await db.session.findUnique({ where: { id: stale.id } })).not.toBeNull();
   }, 120_000);
 });
 

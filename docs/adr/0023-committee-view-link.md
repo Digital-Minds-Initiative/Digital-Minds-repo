@@ -2,6 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-17
+- Amended 2026-10-19: the secret is `VIEW_LINK_SECRET`, which defaults to `AUTH_SECRET` (see
+  [Consequences](#consequences))
 - Builds on: [ADR 0002](0002-authorization-model.md) (scopes), [ADR 0014](0014-email-otp-sign-in.md) (the Postgres limiter), [ADR 0015](0015-archive-instead-of-delete.md) (archived means closed)
 
 ## Context
@@ -80,15 +82,15 @@ relation to the committee id or to anything else guessable.
 
 Three columns on `Committee`, all three set or all three null (a CHECK constraint):
 
-| Column               | Holds                                                                    |
-| -------------------- | ------------------------------------------------------------------------ |
-| `viewTokenHash`      | `HMAC-SHA256(AUTH_SECRET, "committee-view:" + token)`, unique            |
-| `viewTokenCipher`    | the token under AES-256-GCM, key `HKDF(AUTH_SECRET)`, AAD = committee id |
-| `viewTokenCreatedAt` | when this link was created, by creation or renewal                       |
+| Column               | Holds                                                                         |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `viewTokenHash`      | `HMAC-SHA256(VIEW_LINK_SECRET, "committee-view:" + token)`, unique            |
+| `viewTokenCipher`    | the token under AES-256-GCM, key `HKDF(VIEW_LINK_SECRET)`, AAD = committee id |
+| `viewTokenCreatedAt` | when this link was created, by creation or renewal                            |
 
 A request is looked up by the HMAC. A dump of the database therefore hands out no working links:
 HMAC-SHA256 over 192 random bits cannot be inverted, and the encrypted copy has no key in the
-database — both keys come from `AUTH_SECRET`, which lives in the environment. The encrypted copy
+database — both keys come from `VIEW_LINK_SECRET`, which lives in the environment. The encrypted copy
 is what makes "copy it again later" possible at all; it is bound to the committee id as additional
 data, so a row copied onto another committee does not decrypt.
 
@@ -194,9 +196,13 @@ sweep hands the rate-limit module its transaction the way any cross-module write
 
 ## Consequences
 
-- **Rotating `AUTH_SECRET` invalidates every view link**, as it already invalidates pending
-  sign-in codes ([ADR 0014](0014-email-otp-sign-in.md)). Both the lookup key and the encrypted
-  copy are derived from it. A link whose copy cannot be decrypted is reported as _no link_, so an
+- **Rotating the view-link secret invalidates every view link.** Both the lookup key and the
+  encrypted copy are derived from `VIEW_LINK_SECRET`, which defaults to `AUTH_SECRET` so a
+  deployment that sets only that one still works. That default was the whole story until the
+  October review pointed out the coupling it created — rotating the sign-in secret for a sign-in
+  reason would have killed every committee's link as a side effect — so the links have their own
+  variable now and the two can be rotated apart
+  ([the review](../reviews/2026-10-backend-review.md), Q1). A link whose copy cannot be decrypted is reported as _no link_, so an
   officer is never shown a token that does not work — they create a new one. Sessions still
   survive a rotation; view links do not.
 - **A leaked link is a leaked member list, until someone renews it.** That is the trade we are

@@ -208,6 +208,7 @@ export function parseImportFile(
   text: string,
   options: { allowedDomains: readonly string[] },
 ): ParsedImportFile {
+  assertNotTooManyLines(text);
   const delimiter = sniffDelimiter(text);
   let records: CsvRecord[];
   try {
@@ -255,6 +256,34 @@ export function parseImportFile(
       }),
     ),
   };
+}
+
+/**
+ * How many lines a file may hold before it is refused unread. Deliberately far above the row
+ * limit: a row can span several lines when a cell is quoted, and a spreadsheet leaves blank lines
+ * behind, so this must never refuse a file a person actually filled in.
+ */
+const MAX_LINES = MEMBER_IMPORT_MAX_ROWS * 10;
+
+/**
+ * `csv-parse` is synchronous, so a 1 MB file of two-character rows — a quarter of a million of
+ * them — blocks the event loop for about a quarter of a second before the row limit below can
+ * refuse it. Counting the lines first costs a single pass and turns that into a refusal nobody
+ * waits for. A file this long is either far over the row limit or almost all blank lines; either
+ * way it is not the sheet the officer meant to send, and `too_many_rows` is what they need to
+ * read (docs/reviews/2026-10-backend-review.md).
+ */
+function assertNotTooManyLines(text: string): void {
+  let lines = 1;
+  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', index + 1)) {
+    lines += 1;
+    if (lines > MAX_LINES) {
+      throw fileError(
+        'too_many_rows',
+        `The file has more than ${String(MEMBER_IMPORT_MAX_ROWS)} rows.`,
+      );
+    }
+  }
 }
 
 interface RowContext {

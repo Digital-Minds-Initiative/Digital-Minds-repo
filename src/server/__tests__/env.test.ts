@@ -126,4 +126,58 @@ describe('auth and email settings', () => {
       /EMAIL_FROM is required when RESEND_API_KEY is set/,
     );
   });
+  /*
+   * The development secret is a fixed string in this repository, so nothing may ever sign with it
+   * under NODE_ENV=production — not even during a build, which needs no real secret
+   * (docs/reviews/2026-10-backend-review.md).
+   */
+  describe('secrets', () => {
+    const DEVELOPMENT_SECRET = 'development-only-auth-secret-never-use-in-production';
+
+    it('uses the fixed development secret in development and in tests', () => {
+      for (const NODE_ENV of ['development', 'test']) {
+        expect(parseServerEnv({ ...valid, NODE_ENV })).toMatchObject({
+          AUTH_SECRET: DEVELOPMENT_SECRET,
+        });
+      }
+    });
+
+    it('never uses it under NODE_ENV=production', () => {
+      // A running production server is refused outright.
+      expect(() => parseServerEnv({ ...valid, NODE_ENV: 'production' })).toThrow(
+        /AUTH_SECRET is required in production/,
+      );
+      // A build has nothing to validate against, and gets a value nobody else knows.
+      const build = parseServerEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        NEXT_PHASE: 'phase-production-build',
+      });
+      expect(build.AUTH_SECRET).not.toBe(DEVELOPMENT_SECRET);
+      expect(build.AUTH_SECRET.length).toBeGreaterThanOrEqual(32);
+    });
+
+    it('refuses the development secret on a production server', () => {
+      expect(() => parseServerEnv({ ...production, AUTH_SECRET: DEVELOPMENT_SECRET })).toThrow(
+        /AUTH_SECRET must be your own secret in production/,
+      );
+    });
+
+    it('gives the view links AUTH_SECRET until they are given their own', () => {
+      expect(parseServerEnv(production)).toMatchObject({
+        AUTH_SECRET: 'a'.repeat(32),
+        VIEW_LINK_SECRET: 'a'.repeat(32),
+      });
+      expect(parseServerEnv({ ...production, VIEW_LINK_SECRET: 'b'.repeat(40) })).toMatchObject({
+        AUTH_SECRET: 'a'.repeat(32),
+        VIEW_LINK_SECRET: 'b'.repeat(40),
+      });
+    });
+
+    it('holds VIEW_LINK_SECRET to the same length as AUTH_SECRET', () => {
+      expect(() => parseServerEnv({ ...production, VIEW_LINK_SECRET: 'short' })).toThrow(
+        /VIEW_LINK_SECRET must be at least 32 characters/,
+      );
+    });
+  });
 });

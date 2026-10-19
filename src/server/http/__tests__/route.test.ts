@@ -304,6 +304,41 @@ describe('defineRoute', () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
+    // A chunked request sends no content-length at all, so the only thing that can stop it is
+    // measuring the stream while it is read. Reading it to the end first would let one request
+    // buffer a body of any size (docs/reviews/2026-10-backend-review.md).
+    it('refuses a streamed body with no content-length, without buffering all of it', async () => {
+      const handler = vi.fn(ok);
+      const megabyte = new Uint8Array(1_000_000).fill(0x61);
+      let sent = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          sent += megabyte.byteLength;
+          // Far more than the cap: the chunks after the refusal must never be asked for.
+          if (sent > 50_000_000) controller.close();
+          else controller.enqueue(megabyte);
+        },
+      });
+      const request = new NextRequest('http://localhost/api/v1/items/' + ID, {
+        method: 'POST',
+        headers: sameOrigin,
+        body,
+        // Required when the body is a stream.
+        duplex: 'half',
+      });
+
+      const response = await defineRoute(itemEndpoint, handler)(request, {
+        params: Promise.resolve({ id: ID }),
+      });
+
+      expect(response.status).toBe(400);
+      expect((await envelope(response)).reason).toBe('body_too_large');
+      expect(handler).not.toHaveBeenCalled();
+      // A few megabytes, not the fifty the client offered: the reader stops pulling once the cap
+      // is passed (the stream reads a chunk or two ahead, which is why this is not exactly 2 MB).
+      expect(sent).toBeLessThanOrEqual(5_000_000);
+    });
+
     it('still accepts a body the CSV import could really send', async () => {
       // 1 MB of CSV is about 1.33 MB of base64 — comfortably inside the limit.
       const response = await call(defineRoute(itemEndpoint, ok), {
