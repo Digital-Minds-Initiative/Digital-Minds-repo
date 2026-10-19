@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/server/db/client';
 import { RateLimitedError } from '@/server/errors';
@@ -21,10 +21,22 @@ const PER_TOKEN_HOUR = 1200;
 let s: Scenario;
 let token: string;
 
+const HOUR = 60 * 60 * 1000;
+
 beforeAll(async () => {
+  // The limits are fixed windows, so the clock is pinned to one: a loop of sixty requests must
+  // not be able to straddle two minutes, which starts the count again and lets the sixty-first
+  // through. That flaked once on CI before this was here.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Math.ceil(Date.now() / HOUR) * HOUR);
+
   s = await buildScenario();
   const admin = await actorFor(s.users.admin.id);
   token = String((await rotateCommitteeViewLink(admin, s.committees.a1.id)).token);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 /** How many counters exist, to show which surfaces are counted apart. */
