@@ -11,7 +11,7 @@ import { VIEW_LINK_PATH, type CommitteeViewLink } from '@/shared/contracts/clubs
  *
  * It is a capability: whoever holds it reads that committee's names and points, so it is treated
  * like a password that has to stay readable. Two derived values are stored, both useless without
- * AUTH_SECRET, which lives in the environment and not in the database:
+ * VIEW_LINK_SECRET, which lives in the environment and not in the database:
  *
  *   viewTokenHash   HMAC-SHA256 of the token — what a request is looked up by. The HMAC is also
  *                   what keeps the lookup from leaking how close a guess was: the value compared
@@ -20,7 +20,9 @@ import { VIEW_LINK_PATH, type CommitteeViewLink } from '@/shared/contracts/clubs
  *                   The committee's id is the additional data, so a row copied onto another
  *                   committee does not decrypt.
  *
- * Rotating AUTH_SECRET therefore invalidates every view link; officers renew them.
+ * Rotating VIEW_LINK_SECRET therefore invalidates every view link; officers renew them. It
+ * defaults to AUTH_SECRET, so a deployment that sets only that one still works — and can later
+ * give the links their own secret without touching anything else.
  */
 
 /** 24 bytes = 192 bits, base64url: the 32 characters `viewTokenSchema` describes. */
@@ -36,11 +38,11 @@ export function generateViewToken(): string {
 
 /** The lookup key for a token. The same token always gives the same key. */
 export function viewTokenHash(token: string): string {
-  return createHmac('sha256', env.AUTH_SECRET).update(`committee-view:${token}`).digest('hex');
+  return createHmac('sha256', env.VIEW_LINK_SECRET).update(`committee-view:${token}`).digest('hex');
 }
 
 function encryptionKey(): Buffer {
-  return Buffer.from(hkdfSync('sha256', env.AUTH_SECRET, '', KEY_INFO, 32));
+  return Buffer.from(hkdfSync('sha256', env.VIEW_LINK_SECRET, '', KEY_INFO, 32));
 }
 
 /** `nonce ‖ tag ‖ ciphertext`, bound to the committee it belongs to. */
@@ -55,7 +57,7 @@ export function encryptViewToken(token: string, committeeId: string): Uint8Array
 }
 
 /**
- * The token back, or null when the stored bytes cannot be read: a different AUTH_SECRET, another
+ * The token back, or null when the stored bytes cannot be read: a different VIEW_LINK_SECRET, another
  * committee's row, or a damaged value. A null means the officer is told there is no link to copy
  * and can create a new one — never a 500.
  */
