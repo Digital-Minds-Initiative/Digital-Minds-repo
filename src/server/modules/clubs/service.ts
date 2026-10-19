@@ -7,7 +7,13 @@ import {
   membershipTypesScope,
   type Actor,
 } from '@/server/authz';
-import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
+import {
+  clubArchived,
+  ConflictError,
+  membershipTypeNotInClub,
+  NotFoundError,
+  ValidationError,
+} from '@/server/errors';
 import {
   DEFAULT_MEMBERSHIP_TYPE_NAME,
   type Club,
@@ -282,13 +288,7 @@ export async function deleteMembershipType(
     // Only types of the same club count — a type from another club is not a valid target, and a
     // type the actor cannot see must look the same as one that does not exist.
     if (!types.some((candidate) => candidate.id === moveMembersTo)) {
-      throw new ValidationError([
-        {
-          path: ['query', 'moveMembersTo'],
-          code: 'membership_type_not_in_club',
-          message: 'The membership type belongs to another club.',
-        },
-      ]);
+      throw membershipTypeNotInClub(['query', 'moveMembersTo']);
     }
   }
 
@@ -371,7 +371,7 @@ async function withUsage(rows: MembershipTypeRow[]): Promise<MembershipType[]> {
 
 /** An archived club accepts nothing new (ADR 0015). */
 function assertClubNotArchived(club: { archivedAt: Date | null }): void {
-  if (club.archivedAt) throw new ConflictError('The club is archived.', 'club_archived');
+  if (club.archivedAt) throw clubArchived();
 }
 
 function nameTaken(resource: 'committee' | 'membership type'): ConflictError {

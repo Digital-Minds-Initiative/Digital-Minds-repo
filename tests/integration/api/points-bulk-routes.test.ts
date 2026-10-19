@@ -1,23 +1,18 @@
-import { NextRequest } from 'next/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { POST as clubBulkRoute } from '@/app/api/v1/clubs/[clubId]/points/bulk/route';
 import { POST as committeeBulkRoute } from '@/app/api/v1/committees/[committeeId]/points/bulk/route';
 import { db } from '@/server/db/client';
-import type { defineRoute } from '@/server/http';
-import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
 import type { ErrorEnvelope } from '@/shared/contracts/core';
 import { pointsBulkResultSchema } from '@/shared/contracts/points';
 import { actorFor, buildScenario, today, type Scenario } from '@tests/factories/scenario';
+import { callRoute, type Route } from '@tests/utils/route';
 
 /*
  * The two bulk endpoints through the real route handlers: the statuses (201 for a batch written
  * now, 200 for a replay), the 422 envelope the UI unticks rows from, and the guards every
  * non-GET route gets from defineRoute.
  */
-
-const APP_ORIGIN = 'http://localhost';
-type Route = ReturnType<typeof defineRoute>;
 
 let keys = 0;
 function nextKey(): string {
@@ -28,23 +23,14 @@ function nextKey(): string {
 describe('the bulk-points endpoints', () => {
   let s: Scenario;
 
+  /** The shared helper (`@tests/utils/route`); both endpoints here are POSTs. */
   function call(
     route: Route,
     path: string,
     params: Record<string, string>,
     options: { actor?: string; body?: unknown; headers?: Record<string, string> },
   ): Promise<Response> {
-    const request = new NextRequest(`${APP_ORIGIN}${path}`, {
-      method: 'POST',
-      headers: {
-        origin: APP_ORIGIN,
-        ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(options.actor ? { [DEV_ACTOR_HEADER]: options.actor } : {}),
-        ...options.headers,
-      },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-    return route(request, { params: Promise.resolve(params) });
+    return callRoute(route, { method: 'POST', path, params, ...options });
   }
 
   const committeeCall = (options: {

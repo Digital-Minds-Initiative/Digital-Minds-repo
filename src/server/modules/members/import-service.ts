@@ -8,7 +8,7 @@ import {
   type Actor,
 } from '@/server/authz';
 import { env } from '@/server/env';
-import { ConflictError, NotFoundError } from '@/server/errors';
+import { clubArchived, clubHasNoMembershipTypes, NotFoundError } from '@/server/errors';
 import type {
   MemberImportResult,
   PreviewMemberImportResponse,
@@ -53,7 +53,7 @@ async function loadClub(actor: Actor, clubId: string): Promise<{ id: string }> {
   const club = await findClubForMembers(clubsScope(actor), clubId);
   if (!club) throw new NotFoundError('Club');
   assertCanImportMembers(actor, club.id);
-  if (club.archived) throw new ConflictError('The club is archived.', 'club_archived');
+  if (club.archived) throw clubArchived();
   return { id: club.id };
 }
 
@@ -144,12 +144,7 @@ async function planFor(
   );
   const committees = await findCommitteesInClub(committeesScope(actor), clubId, client);
   const defaultMembershipType = membershipTypes[0];
-  if (!defaultMembershipType) {
-    throw new ConflictError(
-      'The club has no membership types yet.',
-      'club_has_no_membership_types',
-    );
-  }
+  if (!defaultMembershipType) throw clubHasNoMembershipTypes();
 
   const uniEmails = [...new Set(rows.flatMap((row) => (row.uniEmail ? [row.uniEmail] : [])))];
   const accounts = await findAccountsByUniEmails(uniEmails, clubId, client);

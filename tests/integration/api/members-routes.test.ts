@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { POST as createMemberRoute } from '@/app/api/v1/clubs/[clubId]/members/route';
@@ -11,12 +10,11 @@ import {
   GET as getMemberRoute,
   PATCH as updateMemberRoute,
 } from '@/app/api/v1/members/[memberId]/route';
+import { GET as listMembersRoute } from '@/app/api/v1/members/route';
 import { db } from '@/server/db/client';
-import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
-import type { ErrorEnvelope } from '@/shared/contracts/core';
 import { memberSchema, type Member } from '@/shared/contracts/members';
 import { buildScenario, type Scenario } from '@tests/factories/scenario';
-import { APP_ORIGIN } from '@tests/utils/auth';
+import { callRoute as call, errorOf } from '@tests/utils/route';
 
 /**
  * The member endpoints through the real route handlers: the contract parses the request (so a
@@ -33,35 +31,6 @@ describe('the member endpoints', () => {
       fullName: '  لمى   السالم ',
     };
   };
-
-  type Params = Record<string, string>;
-
-  const call = (
-    route: (request: NextRequest, context: { params: Promise<Params> }) => Promise<Response>,
-    options: {
-      method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-      path: string;
-      params: Params;
-      actor?: string;
-      body?: unknown;
-      origin?: string | null;
-      contentType?: string | null;
-    },
-  ) => {
-    const { method = 'GET', body, origin = APP_ORIGIN, contentType = 'application/json' } = options;
-    const headers: Record<string, string> = {};
-    if (options.actor) headers[DEV_ACTOR_HEADER] = options.actor;
-    if (method !== 'GET' && origin) headers.origin = origin;
-    if (body !== undefined && contentType) headers['content-type'] = contentType;
-    const request = new NextRequest(`${APP_ORIGIN}${options.path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return route(request, { params: Promise.resolve(options.params) });
-  };
-
-  const errorOf = async (response: Response) => ((await response.json()) as ErrorEnvelope).error;
 
   beforeAll(async () => {
     s = await buildScenario();
@@ -261,5 +230,92 @@ describe('the member endpoints', () => {
     expect(
       await db.membership.findUniqueOrThrow({ where: { id: s.memberships.memberA1 } }),
     ).toMatchObject({ removedAt: null, phone: s.users.memberA1.phone });
+  });
+
+  /*
+   * The list endpoint. These cases lived in members-route.test.ts — one character from this
+   * file's name — until the October review's cleanup moved them here.
+   */
+  describe('GET /api/v1/members', () => {
+    const list = (query: string, actor?: string) =>
+      call(listMembersRoute, { path: `/api/v1/members${query}`, actor });
+
+    it('answers 401 with the error envelope when nobody is signed in', async () => {
+      const response = await list('');
+      expect(response.status).toBe(401);
+      expect(await errorOf(response)).toMatchObject({ code: 'UNAUTHENTICATED' });
+    });
+
+    it('returns the officer’s club only, with exactly the contract fields', async () => {
+      const response = await list(
+        '?pageSize=50&sort=joinedAt&order=desc',
+        s.users.officerA.uniEmail.toUpperCase(),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        items: Array<Record<string, unknown>>;
+        total: number;
+      };
+      expect(body.total).toBeGreaterThan(0);
+      for (const item of body.items) {
+        const member = memberSchema.parse(item);
+        expect(member.club.id).toBe(s.clubA.id);
+        // Nothing beyond the contract leaks (searchName, publicId, isFullAdmin…).
+        expect(Object.keys(item).sort()).toEqual(Object.keys(memberSchema.shape).sort());
+        expect(Object.keys(item.user as object).sort()).toEqual(
+          Object.keys(memberSchema.shape.user.shape).sort(),
+        );
+      }
+    });
+
+    it('answers 422 with located issues for an invalid query', async () => {
+      const response = await list('?pageSize=1000&clubId=not-a-uuid', s.users.officerA.uniEmail);
+      expect(response.status).toBe(422);
+      const error = await errorOf(response);
+      expect(error.issues?.map((issue) => issue.path.join('.')).sort()).toEqual([
+        'query.clubId',
+        'query.pageSize',
+      ]);
+    });
+
+    it('answers 422 for a period that ends before it starts, located on the query', async () => {
+      const response = await list('?from=2026-03-31&to=2026-01-01', s.users.officerA.uniEmail);
+      expect(response.status).toBe(422);
+      expect((await errorOf(response)).issues?.[0]).toMatchObject({
+        path: ['query', 'to'],
+        code: 'period_end_before_start',
+      });
+    });
+
+    it('answers 404 for a filter the caller cannot see, and 422 for one from another club', async () => {
+      const outOfScope = await list(`?clubId=${s.clubB.id}`, s.users.officerA.uniEmail);
+      expect(outOfScope.status).toBe(404);
+
+      const otherClub = await list(
+        `?clubId=${s.clubA.id}&membershipTypeId=${s.types.b}`,
+        s.users.admin.uniEmail,
+      );
+      expect(otherClub.status).toBe(422);
+      expect((await errorOf(otherClub)).issues?.[0]).toMatchObject({
+        path: ['query', 'membershipTypeId'],
+        code: 'membership_type_not_in_club',
+      });
+    });
+
+    it('reports which points it is showing, so the column can be labelled', async () => {
+      const response = await list(
+        `?committeeId=${s.committees.a1.id}&from=2026-01-01&to=2026-06-30`,
+        s.users.officerA.uniEmail,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        pointsBasis: { committee: { id: string; name: string } | null; from: string; to: string };
+      };
+      expect(body.pointsBasis).toEqual({
+        committee: { id: s.committees.a1.id, name: s.committees.a1.name },
+        from: '2026-01-01',
+        to: '2026-06-30',
+      });
+    });
   });
 });

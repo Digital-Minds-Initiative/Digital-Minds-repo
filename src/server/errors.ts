@@ -106,3 +106,54 @@ export class ValidationError extends AppError {
     super(message, { issues, reason });
   }
 }
+
+/*
+ * ─── Refusals several modules share ─────────────────────────
+ *
+ * The rules themselves stay where they belong: the module that owns a write owns the check and
+ * the reason it refuses with — an archived club is refused by members, points and clubs
+ * separately, on purpose (docs/adr/0015-archive-instead-of-delete.md). What they do not need is
+ * ten copies of the same sentence. These are the shared wording and nothing more; each returns
+ * the error so a caller still writes `throw`.
+ */
+
+export function clubArchived(): ConflictError {
+  return new ConflictError('The club is archived.', 'club_archived');
+}
+
+export function committeeArchived(): ConflictError {
+  return new ConflictError('The committee is archived.', 'committee_archived');
+}
+
+export function memberRemovedFromClub(): ConflictError {
+  return new ConflictError('The member was removed from this club.', 'member_removed');
+}
+
+/** A club with no membership types can take no members: the first one is the default. */
+export function clubHasNoMembershipTypes(): ConflictError {
+  return new ConflictError('The club has no membership types yet.', 'club_has_no_membership_types');
+}
+
+/**
+ * Both ids are real and visible, but they are in different clubs. `path` says where the caller
+ * put the committee — the URL for a write, the query string for a list filter.
+ */
+export function committeeNotInClub(
+  path: Array<string | number> = ['params', 'committeeId'],
+): ValidationError {
+  return new ValidationError([
+    { path, code: 'committee_not_in_club', message: 'The committee belongs to another club.' },
+  ]);
+}
+
+export function membershipTypeNotInClub(
+  path: Array<string | number> = ['body', 'membershipTypeId'],
+): ValidationError {
+  return new ValidationError([
+    {
+      path,
+      code: 'membership_type_not_in_club',
+      message: 'The membership type belongs to another club.',
+    },
+  ]);
+}

@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { POST as addPointsRoute } from '@/app/api/v1/members/[memberId]/committees/[committeeId]/points/route';
@@ -7,15 +6,13 @@ import { POST as cancelRoute } from '@/app/api/v1/points/[transactionId]/cancel/
 import { GET as revisionsRoute } from '@/app/api/v1/points/[transactionId]/revisions/route';
 import { PATCH as updateRoute } from '@/app/api/v1/points/[transactionId]/route';
 import { db } from '@/server/db/client';
-import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
-import type { ErrorEnvelope } from '@/shared/contracts/core';
 import {
   memberPointsSchema,
   pointTransactionRevisionSchema,
   pointTransactionSchema,
 } from '@/shared/contracts/points';
 import { actorFor, buildScenario, today, type Scenario } from '@tests/factories/scenario';
-import { APP_ORIGIN } from '@tests/utils/auth';
+import { callRoute as call, errorOf } from '@tests/utils/route';
 
 /*
  * The points endpoints through the real route handlers: every role against every endpoint,
@@ -25,35 +22,6 @@ describe('the points endpoints', () => {
   let s: Scenario;
   /** An ACTIVE transaction in committee A1, replaced before each role run that cancels it. */
   let transactionId: string;
-
-  type Params = Record<string, string>;
-
-  const call = (
-    route: (request: NextRequest, context: { params: Promise<Params> }) => Promise<Response>,
-    options: {
-      method?: 'GET' | 'POST' | 'PATCH';
-      path: string;
-      params: Params;
-      actor?: string;
-      body?: unknown;
-      origin?: string | null;
-      contentType?: string | null;
-    },
-  ) => {
-    const { method = 'GET', body, origin = APP_ORIGIN, contentType = 'application/json' } = options;
-    const headers: Record<string, string> = {};
-    if (options.actor) headers[DEV_ACTOR_HEADER] = options.actor;
-    if (method !== 'GET' && origin) headers.origin = origin;
-    if (body !== undefined && contentType) headers['content-type'] = contentType;
-    const request = new NextRequest(`${APP_ORIGIN}${options.path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return route(request, { params: Promise.resolve(options.params) });
-  };
-
-  const errorOf = async (response: Response) => ((await response.json()) as ErrorEnvelope).error;
 
   const endpoints = {
     memberPoints: (actor?: string) =>

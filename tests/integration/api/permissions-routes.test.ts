@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { GET as clubPermissionsRoute } from '@/app/api/v1/clubs/[clubId]/permissions/route';
@@ -6,12 +5,10 @@ import { GET as roleHistoryRoute } from '@/app/api/v1/clubs/[clubId]/role-histor
 import { PUT as setCommitteeRoleRoute } from '@/app/api/v1/members/[memberId]/committees/[committeeId]/role/route';
 import { PUT as setClubRoleRoute } from '@/app/api/v1/members/[memberId]/role/route';
 import { db } from '@/server/db/client';
-import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
-import type { ErrorEnvelope } from '@/shared/contracts/core';
 import { memberSchema } from '@/shared/contracts/members';
 import { clubPermissionsSchema, roleHistoryResponseSchema } from '@/shared/contracts/permissions';
 import { actorFor, buildScenario, type Scenario } from '@tests/factories/scenario';
-import { APP_ORIGIN } from '@tests/utils/auth';
+import { callRoute as call, errorOf } from '@tests/utils/route';
 
 /*
  * The four role endpoints through the real route handlers: every role against every endpoint,
@@ -19,35 +16,6 @@ import { APP_ORIGIN } from '@tests/utils/auth';
  */
 describe('the role endpoints', () => {
   let s: Scenario;
-
-  type Params = Record<string, string>;
-
-  const call = (
-    route: (request: NextRequest, context: { params: Promise<Params> }) => Promise<Response>,
-    options: {
-      method?: 'GET' | 'PUT';
-      path: string;
-      params: Params;
-      actor?: string;
-      body?: unknown;
-      origin?: string | null;
-      contentType?: string | null;
-    },
-  ) => {
-    const { method = 'GET', body, origin = APP_ORIGIN, contentType = 'application/json' } = options;
-    const headers: Record<string, string> = {};
-    if (options.actor) headers[DEV_ACTOR_HEADER] = options.actor;
-    if (method !== 'GET' && origin) headers.origin = origin;
-    if (body !== undefined && contentType) headers['content-type'] = contentType;
-    const request = new NextRequest(`${APP_ORIGIN}${options.path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return route(request, { params: Promise.resolve(options.params) });
-  };
-
-  const errorOf = async (response: Response) => ((await response.json()) as ErrorEnvelope).error;
 
   /** The four endpoints, aimed at club A. Each takes the acting person's email. */
   const endpoints = {

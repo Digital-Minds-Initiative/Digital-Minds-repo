@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { POST as archiveClubRoute } from '@/app/api/v1/clubs/[clubId]/archive/route';
@@ -22,20 +21,15 @@ import {
   PATCH as updateTypeRoute,
 } from '@/app/api/v1/membership-types/[membershipTypeId]/route';
 import { db } from '@/server/db/client';
-import type { defineRoute } from '@/server/http';
-import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
 import { clubSchema, committeeSchema, membershipTypeSchema } from '@/shared/contracts/clubs';
 import type { ErrorEnvelope } from '@/shared/contracts/core';
 import { actorFor, buildScenario, type Scenario } from '@tests/factories/scenario';
+import { callRoute, type Route } from '@tests/utils/route';
 
 /*
  * The whole clubs surface through the real route handlers: who gets which status on which
  * endpoint, and that the bodies are exactly what the contracts describe.
  */
-
-const APP_ORIGIN = 'http://localhost';
-
-type Route = ReturnType<typeof defineRoute>;
 
 interface CallOptions {
   actor?: string;
@@ -44,23 +38,14 @@ interface CallOptions {
   headers?: Record<string, string>;
 }
 
+/** The shared helper (`@tests/utils/route`), with the positional shape these tests read best. */
 function call(
   route: Route,
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
-  { actor, body, params = {}, headers = {} }: CallOptions = {},
+  options: CallOptions = {},
 ): Promise<Response> {
-  const request = new NextRequest(`${APP_ORIGIN}${path}`, {
-    method,
-    headers: {
-      ...(method === 'GET' ? {} : { origin: APP_ORIGIN }),
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...(actor ? { [DEV_ACTOR_HEADER]: actor } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  return route(request, { params: Promise.resolve(params) });
+  return callRoute(route, { method, path, ...options });
 }
 
 /** What one role aims each endpoint at. */

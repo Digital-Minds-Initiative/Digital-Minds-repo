@@ -7,7 +7,14 @@ import {
   pointTransactionsScope,
   type Actor,
 } from '@/server/authz';
-import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
+import {
+  clubArchived,
+  committeeArchived,
+  committeeNotInClub,
+  ConflictError,
+  memberRemovedFromClub,
+  NotFoundError,
+} from '@/server/errors';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import type {
   CancelPointTransactionBody,
@@ -18,7 +25,7 @@ import type {
   PointTransactionRevision,
   UpdatePointTransactionBody,
 } from '@/shared/contracts/points';
-import { dateToDateOnly, isFutureDate } from '@/shared/lib/dates';
+import { dateToDateOnly } from '@/shared/lib/dates';
 import { collapseWhitespace } from '@/shared/lib/text';
 
 import { toPointTransaction, toRevision } from './mappers';
@@ -37,6 +44,7 @@ import {
   updateTransactionWithRevision,
   type MemberBalances,
 } from './repository';
+import { assertWorkDateNotInFuture } from './work-date';
 
 /*
  * The points ledger (docs/adr/0004-points-ledger.md, amended by
@@ -118,25 +126,13 @@ export async function createPointTransaction(
     { memberId, committeeId },
   );
   if (!target) throw new NotFoundError('Committee');
-  if (target.clubId !== member.clubId) {
-    throw new ValidationError([
-      {
-        path: ['params', 'committeeId'],
-        code: 'committee_not_in_club',
-        message: 'The committee belongs to another club.',
-      },
-    ]);
-  }
+  if (target.clubId !== member.clubId) throw committeeNotInClub();
   assertCanWritePoints(actor, { clubId: target.clubId, committeeId: target.committeeId });
 
-  if (member.removed) {
-    throw new ConflictError('The member was removed from this club.', 'member_removed');
-  }
+  if (member.removed) throw memberRemovedFromClub();
   // An archived club closes all of its committees to new points (ADR 0015).
-  if (target.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
-  if (target.committeeArchived) {
-    throw new ConflictError('The committee is archived.', 'committee_archived');
-  }
+  if (target.clubArchived) throw clubArchived();
+  if (target.committeeArchived) throw committeeArchived();
   const committeeMembershipId = target.committeeMembershipId;
   if (committeeMembershipId === null) {
     throw new ConflictError('The member is not in this committee.', 'not_in_committee');
@@ -232,13 +228,4 @@ export async function listPointTransactionRevisions(
 
   const rows = await findRevisions(scope, transactionId);
   return { items: rows.map(toRevision) };
-}
-
-/** The contract already rejects future dates; this guards internal callers too. */
-function assertWorkDateNotInFuture(workDate: string): void {
-  if (isFutureDate(workDate)) {
-    throw new ValidationError([
-      { path: ['body', 'workDate'], code: 'date_in_future', message: 'date_in_future' },
-    ]);
-  }
 }
