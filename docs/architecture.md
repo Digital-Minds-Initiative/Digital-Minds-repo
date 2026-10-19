@@ -280,6 +280,16 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 
 **CSRF.** `defineRoute` refuses any non-GET request whose `Origin` is not `APP_ORIGIN` (403 `cross_origin`) and any body not sent as `application/json` (400 `json_required`), on top of `SameSite=Lax` cookies.
 
+**Security headers** ([ADR 0024](adr/0024-content-security-policy.md)). `next.config.ts` sends the
+baseline on every response (`nosniff`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`),
+a tighter `default-src 'none'` policy for `/api`, and `Strict-Transport-Security` in production.
+The pages' Content-Security-Policy is built per request in `src/proxy.ts`, because it carries a
+nonce: `script-src 'self' 'nonce-…' 'strict-dynamic'` with no `'unsafe-inline'`, which is what
+makes an injected script inert. `style-src` keeps `'unsafe-inline'` on purpose — the design system
+sets `style` attributes, which a nonce cannot cover. Every answer of a `public` endpoint also
+carries `no-referrer` and `noindex`, in the wrapper and in the config, because the URL of a
+committee view link is the capability.
+
 **Public endpoints** (`access: 'public'`) never receive an actor, even when the caller is signed
 in. The committee view link ([ADR 0023](adr/0023-committee-view-link.md)) is the first of them and
 sets the pattern. A committee's lead, its club's officers and full admins create, renew and turn
@@ -413,7 +423,7 @@ Example: an `events` module that lists a club's events. Backend steps (1–7) an
 
 ## What comes next
 
-- **Sign-in screens** (frontend): the pages for the flow above, built against the mocks in `src/client/features/auth/mocks`, and redirects by sign-in state in `src/proxy.ts`. Add a Content-Security-Policy in `next.config.ts`.
+- **Sign-in screens** (frontend): the pages for the flow above, built against the mocks in `src/client/features/auth/mocks`, and redirects by sign-in state in `src/proxy.ts` — which now also builds the Content-Security-Policy, so the session check goes in the same function ([ADR 0024](adr/0024-content-security-policy.md)).
 - **Mobile app:** move `src/shared/contracts` into a shared package; it will need a token-based session (the cookie and the Origin check are for browsers) — a new ADR.
 - **The public committee view's pages:** the backend is done ([ADR 0023](adr/0023-committee-view-link.md)); `/v/<token>` and the dashboard's copy and renew controls are built against the MSW mocks in `src/client/features/clubs/mocks`. The page must repeat `noindex` and `no-referrer` in its own metadata, and `/v/` belongs in `robots.txt`.
 - **Audit log:** role grants and profile edits (points already have revisions).

@@ -1,10 +1,20 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
+import { STRICT_TRANSPORT_SECURITY } from './src/shared/lib/security-headers';
+
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
-// Baseline hardening for every response. A Content-Security-Policy comes with the auth task,
-// once we know which third-party origins (identity provider) the app talks to.
+const isProduction = process.env.NODE_ENV === 'production';
+
+/*
+ * Baseline hardening for every response.
+ *
+ * The Content-Security-Policy is not here: it carries a per-request nonce, so `src/proxy.ts`
+ * builds one for every page it handles (src/shared/lib/security-headers.ts). The proxy does not
+ * run for /api, which answers JSON and needs nothing but a policy that allows nothing at all —
+ * `apiHeaders` below.
+ */
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -12,7 +22,10 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
 ];
 
-const isProduction = process.env.NODE_ENV === 'production';
+/** A JSON response has no business loading anything, or being framed. */
+const apiHeaders = [
+  { key: 'Content-Security-Policy', value: "default-src 'none'; frame-ancestors 'none'" },
+];
 
 /** For anything anyone can open without signing in, where the URL itself is the permission. */
 const publicHeaders = [
@@ -29,6 +42,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },
+      { source: '/api/:path*', headers: apiHeaders },
       // The baseline above is applied to the route handler's own response, so a public endpoint's
       // stricter Referrer-Policy has to be set here as well to survive it. The URL of a public
       // committee view *is* the capability, so it must not travel in a Referer header at all
@@ -36,6 +50,16 @@ const nextConfig: NextConfig = {
       // one wins for these paths. `/v/` is the public page the link opens.
       { source: '/api/v1/public/:path*', headers: publicHeaders },
       { source: '/v/:path*', headers: publicHeaders },
+      // HTTPS only, for two years, subdomains included — and only in production, because on
+      // http://localhost a browser would then refuse to load the dev server at all.
+      ...(isProduction
+        ? [
+            {
+              source: '/:path*',
+              headers: [{ key: 'Strict-Transport-Security', value: STRICT_TRANSPORT_SECURITY }],
+            },
+          ]
+        : []),
     ];
   },
   /**
