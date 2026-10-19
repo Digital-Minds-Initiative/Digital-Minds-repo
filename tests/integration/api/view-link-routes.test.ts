@@ -10,13 +10,13 @@ import { GET as memberPointsRoute } from '@/app/api/v1/public/committee-views/[t
 import { GET as membersRoute } from '@/app/api/v1/public/committee-views/[token]/members/route';
 import { GET as viewRoute } from '@/app/api/v1/public/committee-views/[token]/route';
 import { db } from '@/server/db/client';
-import type { defineRoute } from '@/server/http';
 import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
 import { committeeViewLinkSchema } from '@/shared/contracts/clubs';
 import type { ErrorEnvelope } from '@/shared/contracts/core';
 import { normalizeForSearch } from '@/shared/lib/arabic';
 import { dateOnlyToDate } from '@/shared/lib/dates';
 import { buildScenario, type Scenario } from '@tests/factories/scenario';
+import { APP_ORIGIN, callRoute, type Route } from '@tests/utils/route';
 
 /*
  * The view link through the real route handlers: the management endpoints behind a session, and
@@ -28,10 +28,6 @@ import { buildScenario, type Scenario } from '@tests/factories/scenario';
  * ways a token can fail answer with one and the same body.
  */
 
-const APP_ORIGIN = 'http://localhost';
-
-type Route = ReturnType<typeof defineRoute>;
-
 interface CallOptions {
   actor?: string;
   params?: Record<string, string>;
@@ -40,23 +36,21 @@ interface CallOptions {
   cookie?: string;
 }
 
+/** The shared helper (`@tests/utils/route`), with a query string these tests pass as pairs. */
 function call(
   route: Route,
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   { actor, params = {}, query = {}, cookie }: CallOptions = {},
 ): Promise<Response> {
-  const url = new URL(`${APP_ORIGIN}${path}`);
-  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
-  const request = new NextRequest(url, {
+  const search = new URLSearchParams(query).toString();
+  return callRoute(route, {
     method,
-    headers: {
-      ...(method === 'GET' ? {} : { origin: APP_ORIGIN }),
-      ...(actor ? { [DEV_ACTOR_HEADER]: actor } : {}),
-      ...(cookie ? { cookie } : {}),
-    },
+    path: search === '' ? path : `${path}?${search}`,
+    params,
+    actor,
+    cookie,
   });
-  return route(request, { params: Promise.resolve(params) });
 }
 
 let s: Scenario;

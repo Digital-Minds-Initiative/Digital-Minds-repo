@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { committeesScope, type Actor } from '@/server/authz';
-import { ConflictError, NotFoundError } from '@/server/errors';
+import { clubArchived, committeeArchived, NotFoundError } from '@/server/errors';
 import type { CommitteeViewLink } from '@/shared/contracts/clubs';
 
 import { assertCanManageViewLink } from './policies';
@@ -91,10 +91,6 @@ function storedLink(committee: CommitteeViewLinkRow): CommitteeViewLink {
 
 /** An archived club or committee accepts nothing new (ADR 0015), a view link included. */
 function assertNotArchived(committee: CommitteeViewLinkRow): void {
-  if (committee.club.archivedAt) {
-    throw new ConflictError('The club is archived.', 'club_archived');
-  }
-  if (committee.archivedAt) {
-    throw new ConflictError('The committee is archived.', 'committee_archived');
-  }
+  if (committee.club.archivedAt) throw clubArchived();
+  if (committee.archivedAt) throw committeeArchived();
 }

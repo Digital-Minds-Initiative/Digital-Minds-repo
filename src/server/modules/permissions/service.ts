@@ -8,7 +8,14 @@ import {
   roleChangesScope,
   type Actor,
 } from '@/server/authz';
-import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
+import {
+  clubArchived,
+  committeeArchived,
+  committeeNotInClub,
+  ConflictError,
+  memberRemovedFromClub,
+  NotFoundError,
+} from '@/server/errors';
 import { getMember, setClubRole, setCommitteeRole } from '@/server/modules/members';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import type { ClubRole, CommitteeRole, Member } from '@/shared/contracts/members';
@@ -50,10 +57,8 @@ export async function setMemberClubRole(
   const target = await findClubRoleTarget(membersScope(actor), memberId);
   if (!target) throw new NotFoundError('Member');
   assertCanSetClubRole(actor);
-  if (target.removed) {
-    throw new ConflictError('The member was removed from this club.', 'member_removed');
-  }
-  if (target.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
+  if (target.removed) throw memberRemovedFromClub();
+  if (target.clubArchived) throw clubArchived();
 
   if (target.currentRole !== role) {
     await recordRoleChange(
@@ -97,24 +102,12 @@ export async function setMemberCommitteeRole(
     { memberId, committeeId },
   );
   if (!committee) throw new NotFoundError('Committee');
-  if (committee.clubId !== member.clubId) {
-    throw new ValidationError([
-      {
-        path: ['params', 'committeeId'],
-        code: 'committee_not_in_club',
-        message: 'The committee belongs to another club.',
-      },
-    ]);
-  }
+  if (committee.clubId !== member.clubId) throw committeeNotInClub();
   assertCanSetCommitteeRole(actor, committee.clubId);
 
-  if (member.removed) {
-    throw new ConflictError('The member was removed from this club.', 'member_removed');
-  }
-  if (committee.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
-  if (committee.archived) {
-    throw new ConflictError('The committee is archived.', 'committee_archived');
-  }
+  if (member.removed) throw memberRemovedFromClub();
+  if (committee.clubArchived) throw clubArchived();
+  if (committee.archived) throw committeeArchived();
   const currentRole = committee.currentRole;
   if (currentRole === null) {
     throw new ConflictError('The member is not in this committee.', 'not_in_committee');

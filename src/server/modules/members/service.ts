@@ -9,7 +9,16 @@ import {
   type Actor,
 } from '@/server/authz';
 import { assertUniversityEmail } from '@/server/email-policy';
-import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
+import {
+  clubArchived,
+  clubHasNoMembershipTypes,
+  committeeArchived,
+  committeeNotInClub,
+  ConflictError,
+  memberRemovedFromClub,
+  membershipTypeNotInClub,
+  NotFoundError,
+} from '@/server/errors';
 import { endUserSessions } from '@/server/modules/auth';
 import { getActivePointsByMember, type MemberBalances } from '@/server/modules/points';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
@@ -203,10 +212,10 @@ async function resolveListFilters(
 
   const clubId = club?.id ?? committee?.clubId ?? types[0]?.clubId ?? null;
   if (committee && committee.clubId !== clubId) {
-    throw filterNotInClub('committeeId', 'committee_not_in_club', 'The committee');
+    throw committeeNotInClub(['query', 'committeeId']);
   }
   if (types.some((type) => type.clubId !== clubId)) {
-    throw filterNotInClub('membershipTypeId', 'membership_type_not_in_club', 'The membership type');
+    throw membershipTypeNotInClub(['query', 'membershipTypeId']);
   }
 
   return {
@@ -214,12 +223,6 @@ async function resolveListFilters(
     from: query.from ?? null,
     to: query.to ?? null,
   };
-}
-
-function filterNotInClub(field: string, code: string, what: string): ValidationError {
-  return new ValidationError([
-    { path: ['query', field], code, message: `${what} belongs to another club.` },
-  ]);
 }
 
 export async function getMember(actor: Actor, memberId: string): Promise<Member> {
@@ -244,7 +247,7 @@ export async function createMember(
 ): Promise<Member> {
   const club = await findClubForMembers(clubsScope(actor), clubId);
   if (!club) throw new NotFoundError('Club');
-  if (club.archived) throw new ConflictError('The club is archived.', 'club_archived');
+  if (club.archived) throw clubArchived();
 
   const committeeIds = [...new Set(body.committeeIds)];
   const committees = await findManageableCommittees(committeesScope(actor), club.id, committeeIds);
@@ -275,12 +278,7 @@ export async function createMember(
     throw membershipTypeNotInClub();
   }
   const membershipTypeId = body.membershipTypeId ?? club.defaultMembershipTypeId;
-  if (!membershipTypeId) {
-    throw new ConflictError(
-      'The club has no membership types yet.',
-      'club_has_no_membership_types',
-    );
-  }
+  if (!membershipTypeId) throw clubHasNoMembershipTypes();
 
   const memberId = await saveNewMember(
     {
@@ -313,9 +311,7 @@ export async function updateMember(
   body: UpdateMemberBody,
 ): Promise<Member> {
   const row = await loadVisibleMember(actor, memberId);
-  if (row.removedAt) {
-    throw new ConflictError('The member was removed from this club.', 'member_removed');
-  }
+  if (row.removedAt) throw memberRemovedFromClub();
   const member = {
     clubId: row.club.id,
     committeeIds: row.committeeMemberships.map((membership) => membership.committee.id),
@@ -401,24 +397,13 @@ export async function addMemberToCommittee(
   committeeId: string,
 ): Promise<Member> {
   const row = await loadVisibleMember(actor, memberId);
-  if (row.removedAt) {
-    throw new ConflictError('The member was removed from this club.', 'member_removed');
-  }
+  if (row.removedAt) throw memberRemovedFromClub();
   const committee = await findCommitteeForMember(committeesScope(actor), committeeId);
   if (!committee) throw new NotFoundError('Committee');
-  if (committee.clubId !== row.club.id) {
-    throw new ValidationError([
-      {
-        path: ['params', 'committeeId'],
-        code: 'committee_not_in_club',
-        message: 'The committee belongs to another club.',
-      },
-    ]);
-  }
+  if (committee.clubId !== row.club.id) throw committeeNotInClub();
   assertCanAddToCommittee(actor, committee.clubId);
-  if (committee.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
-  if (committee.archived)
-    throw new ConflictError('The committee is archived.', 'committee_archived');
+  if (committee.clubArchived) throw clubArchived();
+  if (committee.archived) throw committeeArchived();
 
   await addToCommittee(
     { members: membersScope(actor), committees: committeesScope(actor) },
@@ -451,14 +436,4 @@ async function loadVisibleMember(actor: Actor, memberId: string): Promise<Member
   const row = await findMember(membersScope(actor), committeeMembershipsScope(actor), memberId);
   if (!row) throw new NotFoundError('Member');
   return row;
-}
-
-function membershipTypeNotInClub(): ValidationError {
-  return new ValidationError([
-    {
-      path: ['body', 'membershipTypeId'],
-      code: 'membership_type_not_in_club',
-      message: 'The membership type belongs to another club.',
-    },
-  ]);
 }

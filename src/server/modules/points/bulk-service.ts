@@ -8,7 +8,13 @@ import {
   pointTransactionsScope,
   type Actor,
 } from '@/server/authz';
-import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
+import {
+  clubArchived,
+  committeeArchived,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '@/server/errors';
 import type { ValidationIssue } from '@/shared/contracts/core';
 import {
   POINTS_BULK_MAX_ISSUES,
@@ -17,7 +23,6 @@ import {
   type CommitteePointsBulkBody,
   type PointsBulkResult,
 } from '@/shared/contracts/points';
-import { isFutureDate } from '@/shared/lib/dates';
 import { collapseWhitespace } from '@/shared/lib/text';
 
 import {
@@ -35,6 +40,7 @@ import {
   findPointBatch,
   savePointsBatch,
 } from './repository';
+import { assertWorkDateNotInFuture } from './work-date';
 
 /*
  * Giving several members the same points in one go (docs/adr/0022-bulk-points.md).
@@ -77,10 +83,8 @@ export async function addCommitteePointsBatch(
   if (!committee) throw new NotFoundError('Committee');
   assertCanWritePoints(actor, { clubId: committee.clubId, committeeId: committee.id });
   // An archived club closes all of its committees to new points (ADR 0015).
-  if (committee.clubArchived) throw new ConflictError('The club is archived.', 'club_archived');
-  if (committee.archived) {
-    throw new ConflictError('The committee is archived.', 'committee_archived');
-  }
+  if (committee.clubArchived) throw clubArchived();
+  if (committee.archived) throw committeeArchived();
 
   return addPointsBatch(
     actor,
@@ -104,7 +108,7 @@ export async function addClubPointsBatch(
   const club = await findBulkClubTarget(clubsScope(actor), clubId);
   if (!club) throw new NotFoundError('Club');
   assertCanWriteClubPoints(actor, club.id);
-  if (club.archived) throw new ConflictError('The club is archived.', 'club_archived');
+  if (club.archived) throw clubArchived();
 
   return addPointsBatch(
     actor,
@@ -257,13 +261,4 @@ async function describeBatch(
       count: counts.get(committee.id) ?? 0,
     })),
   };
-}
-
-/** The contract already rejects future dates; this guards internal callers too. */
-function assertWorkDateNotInFuture(workDate: string): void {
-  if (isFutureDate(workDate)) {
-    throw new ValidationError([
-      { path: ['body', 'workDate'], code: 'date_in_future', message: 'date_in_future' },
-    ]);
-  }
 }

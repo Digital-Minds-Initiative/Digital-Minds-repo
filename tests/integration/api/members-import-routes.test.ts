@@ -5,7 +5,6 @@ import { POST as previewRoute } from '@/app/api/v1/clubs/[clubId]/members/import
 import { POST as importRoute } from '@/app/api/v1/clubs/[clubId]/members/import/route';
 import { GET as templateRoute } from '@/app/api/v1/clubs/[clubId]/members/import/template/route';
 import { db } from '@/server/db/client';
-import type { defineRoute } from '@/server/http';
 import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
 import type { ErrorEnvelope } from '@/shared/contracts/core';
 import {
@@ -15,14 +14,12 @@ import {
 } from '@/shared/contracts/members-import';
 import { buildScenario, type Scenario } from '@tests/factories/scenario';
 import { importFile, importFixture } from '@tests/utils/import-file';
+import { APP_ORIGIN, callRoute, type Route } from '@tests/utils/route';
 
 /*
  * The three import endpoints through the real route handlers: who gets which status, what the
  * bodies look like, and that the template downloads as a CSV file Excel can open.
  */
-
-const APP_ORIGIN = 'http://localhost';
-type Route = ReturnType<typeof defineRoute>;
 
 describe('the CSV import endpoints', () => {
   let s: Scenario;
@@ -30,23 +27,15 @@ describe('the CSV import endpoints', () => {
   const file = () =>
     importFile(['الاسم الكامل,البريد الجامعي', 'طالب للاختبار,s441003001@uqu.edu.sa'].join('\n'));
 
+  /** The shared helper (`@tests/utils/route`); every endpoint here takes a club id. */
   function call(
     route: Route,
     method: 'GET' | 'POST',
     path: string,
     options: { actor?: string; body?: unknown; clubId: string; headers?: Record<string, string> },
   ): Promise<Response> {
-    const request = new NextRequest(`${APP_ORIGIN}${path}`, {
-      method,
-      headers: {
-        ...(method === 'GET' ? {} : { origin: APP_ORIGIN }),
-        ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(options.actor ? { [DEV_ACTOR_HEADER]: options.actor } : {}),
-        ...options.headers,
-      },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-    return route(request, { params: Promise.resolve({ clubId: options.clubId }) });
+    const { clubId, ...rest } = options;
+    return callRoute(route, { method, path, params: { clubId }, ...rest });
   }
 
   const endpoints = {
