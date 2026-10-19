@@ -15,6 +15,10 @@ import {
   type CreateMemberBody,
   type UpdateMemberBody,
 } from '@/shared/contracts/members';
+import {
+  confirmMemberImportEndpoint,
+  previewMemberImportEndpoint,
+} from '@/shared/contracts/members-import';
 
 /** One member's record. Under the `members` key, so any change to a member refreshes it. */
 export function useMember(memberId: string | null) {
@@ -110,5 +114,26 @@ export function useRemoveFromCommittee(memberId: string) {
     mutationFn: (committeeId: string) =>
       apiClient.request(removeMemberFromCommitteeEndpoint, { params: { memberId, committeeId } }),
     onSettled: () => refreshAfterChange(queryClient),
+  });
+}
+
+/** Reads a CSV and says what each row would do; writes nothing. */
+export function usePreviewMemberImport(clubId: string) {
+  return useMutation({
+    mutationFn: (file: string) =>
+      apiClient.request(previewMemberImportEndpoint, { params: { clubId }, body: { file } }),
+  });
+}
+
+/** Applies the previewed file; the server refuses it (409 `import_changed`) if anything moved. */
+export function useConfirmMemberImport(clubId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, checksum }: { file: string; checksum: string }) =>
+      apiClient.request(confirmMemberImportEndpoint, {
+        params: { clubId },
+        body: { file, checksum },
+      }),
+    onSuccess: () => refreshAfterChange(queryClient),
   });
 }

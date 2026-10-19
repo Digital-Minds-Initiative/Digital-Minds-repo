@@ -67,7 +67,7 @@ const FIELDS = ['committeeId', 'amount', 'reason', 'workDate'] as const;
  * Digits only (Arabic-Indic ones are accepted), 1 to the limit. It stays a string — the form's
  * input and output types must match — and is turned into a number when the request is built.
  */
-const amountFieldSchema = z
+export const amountFieldSchema = z
   .string()
   .transform((value) => toLatinDigits(value.trim()))
   .pipe(z.string().regex(/^\d+$/, { message: 'invalid_format' }))

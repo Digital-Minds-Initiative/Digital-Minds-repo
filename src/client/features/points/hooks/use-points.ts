@@ -6,11 +6,15 @@ import { apiClient } from '@/client/lib/api-client';
 import { listMembersEndpoint } from '@/shared/contracts/members';
 import {
   cancelPointTransactionEndpoint,
+  clubPointsBulkEndpoint,
+  committeePointsBulkEndpoint,
   createPointTransactionEndpoint,
   getMemberPointsEndpoint,
   listPointTransactionRevisionsEndpoint,
   updatePointTransactionEndpoint,
   type CancelPointTransactionBody,
+  type ClubPointsBulkBody,
+  type CommitteePointsBulkBody,
   type CreatePointTransactionBody,
   type MemberPointsQuery,
   type UpdatePointTransactionBody,
@@ -146,5 +150,58 @@ export function useCancelPoints() {
       body: CancelPointTransactionBody;
     }) => apiClient.request(cancelPointTransactionEndpoint, { params: { transactionId }, body }),
     onSettled: refresh,
+  });
+}
+
+/**
+ * Points for several members of one committee at once. Nothing is written when any of them is
+ * refused (422 `entries_rejected`), so only a success changes the lists.
+ */
+export function useCommitteeBulkPoints(committeeId: string) {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: (body: CommitteePointsBulkBody) =>
+      apiClient.request(committeePointsBulkEndpoint, { params: { committeeId }, body }),
+    onSuccess: refresh,
+  });
+}
+
+/** The same across the committees of one club: (member, committee) pairs. */
+export function useClubBulkPoints(clubId: string) {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: (body: ClubPointsBulkBody) =>
+      apiClient.request(clubPointsBulkEndpoint, { params: { clubId }, body }),
+    onSuccess: refresh,
+  });
+}
+
+/** Every active member of a club, with their committees, read whole — for the club-wide batch. */
+export function useClubMembers(clubId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['members', 'club-roster', clubId] as const,
+    queryFn: async ({ signal }) => {
+      const members = [];
+      for (let page = 1; page <= MAX_PAGES; page += 1) {
+        const result = await apiClient.request(
+          listMembersEndpoint,
+          {
+            query: {
+              page,
+              pageSize: PAGE,
+              sort: 'fullName',
+              order: 'asc',
+              clubId,
+              status: 'active',
+            },
+          },
+          { signal },
+        );
+        members.push(...result.items);
+        if (page >= result.pageCount) break;
+      }
+      return members;
+    },
+    enabled,
   });
 }

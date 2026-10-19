@@ -63,6 +63,23 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 
+  test(`the bulk points and CSV import dialogs · ${scheme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await actAs(page, persona.officerComputing);
+    await page.goto('/dashboard/points');
+    await page.getByRole('button', { name: 'رصد على مستوى النادي' }).click();
+    await expect(page.getByRole('dialog', { name: /^رصد على مستوى / })).toBeVisible();
+    const found = await violations(page, 'club bulk points');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goto('/dashboard/members');
+    await page.getByRole('button', { name: 'استيراد من ملف' }).click();
+    await expect(page.getByRole('dialog', { name: 'استيراد أعضاء من ملف CSV' })).toBeVisible();
+    found.push(...(await violations(page, 'csv import')));
+    expect(found, found.join('\n')).toEqual([]);
+  });
+
   test(`the member sheet and the edit dialog · ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await actAs(page, persona.officerComputing);

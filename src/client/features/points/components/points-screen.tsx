@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { BalancesPanel, type BalanceMember } from './balances-panel';
+import { BulkPointsActions } from './bulk-points-actions';
 import { FilterBar } from './filter-bar';
 import { KpiCards } from './kpi-cards';
 import { MemberPointsSheet, type PointsMember } from './member-points-sheet';
@@ -111,7 +112,20 @@ export function PointsScreen({ title, description }: PointsScreenProps) {
 
   return (
     <div className="grid gap-5">
-      <PageHeader title={title} description={description} />
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <BulkPointsActions
+            committee={selected}
+            clubName={clubName(selected.clubId)}
+            clubCommittees={committees.filter((committee) => committee.clubId === selected.clubId)}
+            members={rows ? rows.map((row) => ({ id: row.id, fullName: row.fullName })) : null}
+            canWrite={canWrite}
+            canWriteClub={!leadOnly}
+          />
+        }
+      />
 
       <KpiCards rows={rows} />
 
