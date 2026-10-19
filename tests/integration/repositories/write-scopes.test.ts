@@ -18,6 +18,7 @@ import {
   reorderMembershipTypes,
   setClubArchivedAt,
   setCommitteeArchivedAt,
+  setCommitteeViewToken,
   updateClub,
   updateCommittee,
   updateMembershipTypeName,
@@ -448,6 +449,28 @@ describe('repository writes apply the scope themselves', () => {
           orderBy: { id: 'asc' },
         }),
       ).toEqual(memberships);
+    });
+
+    it('setCommitteeViewToken', async () => {
+      const storedToken = () =>
+        db.committee.findUniqueOrThrow({
+          where: { id: s.committees.a1.id },
+          select: { viewTokenHash: true, viewTokenCipher: true, viewTokenCreatedAt: true },
+        });
+      const before = await storedToken();
+      // Another club’s scope reaches this committee for neither a new link nor a cleared one
+      // (docs/adr/0023-committee-view-link.md).
+      await expectNotFound(
+        setCommitteeViewToken(committeesScope(officerB), s.committees.a1.id, {
+          hash: 'f'.repeat(64),
+          cipher: new Uint8Array([1, 2, 3]),
+          createdAt: new Date(),
+        }),
+      );
+      await expectNotFound(
+        setCommitteeViewToken(committeesScope(officerB), s.committees.a1.id, null),
+      );
+      expect(await storedToken()).toEqual(before);
     });
 
     it('reorderMembershipTypes', async () => {

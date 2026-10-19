@@ -5,7 +5,6 @@ import { addDays, todayInAppTimeZone } from '@/shared/lib/dates';
 import {
   cancelPointTransactionBodySchema,
   createPointTransactionBodySchema,
-  listPointTransactionsQuerySchema,
   memberPointsQuerySchema,
   POINTS_AMOUNT_LIMIT,
   updatePointTransactionBodySchema,
@@ -152,19 +151,6 @@ describe('memberPointsQuerySchema', () => {
   it('rejects an inverted period', () => {
     expect(
       issueCodes(memberPointsQuerySchema.safeParse({ from: '2026-03-31', to: '2026-01-01' })),
-    ).toContain('period_end_before_start');
-  });
-});
-
-describe('listPointTransactionsQuerySchema', () => {
-  it('filters by work-date period and rejects an inverted one', () => {
-    expect(
-      listPointTransactionsQuerySchema.parse({ from: '2026-01-01', to: '2026-03-31' }).from,
-    ).toBe('2026-01-01');
-    expect(
-      issueCodes(
-        listPointTransactionsQuerySchema.safeParse({ from: '2026-03-31', to: '2026-01-01' }),
-      ),
     ).toContain('period_end_before_start');
   });
 });

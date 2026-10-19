@@ -176,7 +176,9 @@ export async function findClubOfficers(
   const rows = await db.membership.findMany({
     where: { AND: [scope, { clubId, role: 'CLUB_OFFICER', removedAt: null }] },
     select: { id: true, userId: true, user: { select: { fullName: true } } },
-    orderBy: { user: { fullName: 'asc' } },
+    // The Arabic-folded copy, like every other name ordering (ADR 0020): أ/إ/آ and ة/ه
+    // variants of one name sort together instead of pages apart.
+    orderBy: [{ user: { searchName: 'asc' } }, { id: 'asc' }],
   });
   return rows.map((row) => ({
     memberId: row.id,
@@ -196,7 +198,11 @@ export async function findClubLeads(
       committee: { select: { id: true, name: true } },
       membership: { select: { id: true, userId: true, user: { select: { fullName: true } } } },
     },
-    orderBy: [{ committee: { name: 'asc' } }, { membership: { user: { fullName: 'asc' } } }],
+    orderBy: [
+      { committee: { name: 'asc' } },
+      { membership: { user: { searchName: 'asc' } } },
+      { membership: { id: 'asc' } },
+    ],
   });
   return rows.map((row) => ({
     memberId: row.membership.id,

@@ -36,6 +36,7 @@ import {
   findRevisions,
   findTransaction,
   findTransactionsPage,
+  findVisibleCommittee,
   findVisibleMember,
   insertTransaction,
   sumActiveAmount,
@@ -82,6 +83,15 @@ export async function getMemberPoints(
 ): Promise<MemberPoints> {
   const member = await findVisibleMember(membersScope(actor), memberId);
   if (!member) throw new NotFoundError('Member');
+  // The filter is resolved through its own scope first, so it can only narrow what the caller
+  // already sees and says so when it cannot: a committee they cannot see is a 404, and one
+  // from another club than this member's is a 422 (ADR 0020, which settled this for the
+  // members list; this endpoint used to answer an empty page instead).
+  if (query.committeeId !== undefined) {
+    const committee = await findVisibleCommittee(committeesScope(actor), query.committeeId);
+    if (!committee) throw new NotFoundError('Committee');
+    if (committee.clubId !== member.clubId) throw committeeNotInClub(['query', 'committeeId']);
+  }
 
   const scope = pointTransactionsScope(actor);
   const base = { memberId, committeeIds: query.committeeId ? [query.committeeId] : undefined };

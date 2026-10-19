@@ -74,7 +74,7 @@ export const requestOtpEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/auth/otp/request',
   access: 'public',
-  body: z.object({ email: universityEmailSchema }),
+  body: z.strictObject({ email: universityEmailSchema }),
   response: z.object({
     expiresInSeconds: z.number().int(),
     resendAfterSeconds: z.number().int(),
@@ -85,7 +85,7 @@ export const verifyOtpEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/auth/otp/verify',
   access: 'public',
-  body: z.object({ email: universityEmailSchema, code: otpCodeSchema }),
+  body: z.strictObject({ email: universityEmailSchema, code: otpCodeSchema }),
   response: signInStepSchema,
 });
 
@@ -99,7 +99,7 @@ export const completeNameEndpoint = defineEndpoint({
   method: 'POST',
   path: '/api/v1/auth/profile/name',
   access: 'public',
-  body: z.object({ fullName: personNameSchema }),
+  body: z.strictObject({ fullName: personNameSchema }),
   response: signedInStep,
 });
 

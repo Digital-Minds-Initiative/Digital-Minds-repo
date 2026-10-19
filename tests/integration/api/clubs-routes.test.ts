@@ -386,6 +386,30 @@ describe('clubs API', () => {
       });
     });
 
+    it('refuses an unknown field when a club or a committee is created', async () => {
+      const clubs = await db.club.count();
+      const created = await call(createClubRoute, 'POST', '/api/v1/clubs', {
+        actor: s.users.admin.uniEmail,
+        body: { name: 'نادي جديد', slug: 'brand-new', isFullAdmin: true },
+      });
+      expect(created.status).toBe(422);
+      expect((await errorOf(created)).issues?.[0]?.code).toBe('unrecognized_keys');
+      expect(await db.club.count()).toBe(clubs);
+
+      const committee = await call(
+        createCommitteeRoute,
+        'POST',
+        `/api/v1/clubs/${s.clubA.id}/committees`,
+        {
+          actor: s.users.admin.uniEmail,
+          params: { clubId: s.clubA.id },
+          body: { name: 'لجنة جديدة', clubId: s.clubB.id },
+        },
+      );
+      expect(committee.status).toBe(422);
+      expect((await errorOf(committee)).issues?.[0]?.code).toBe('unrecognized_keys');
+    });
+
     it('answers 409 with the reason for a duplicate name', async () => {
       const response = await call(createClubRoute, 'POST', '/api/v1/clubs', {
         actor: s.users.admin.uniEmail,
