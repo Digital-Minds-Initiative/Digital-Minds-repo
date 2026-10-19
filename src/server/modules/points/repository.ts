@@ -79,6 +79,21 @@ function transactionWhere(
 
 // ─── Reads ───────────────────────────────────────────────────
 
+/**
+ * One committee the actor can see, for resolving a list filter: outside the scope it is a 404,
+ * and a committee from another club than the member is a 422 — the same rule the members list
+ * follows (docs/adr/0020-members-list-filtering.md).
+ */
+export async function findVisibleCommittee(
+  scope: CommitteeScope,
+  committeeId: string,
+): Promise<{ id: string; clubId: string } | null> {
+  return db.committee.findFirst({
+    where: { AND: [scope, { id: committeeId }] },
+    select: { id: true, clubId: true },
+  });
+}
+
 /** A member the actor can see, or null. `removed` is why points may be refused for them. */
 export async function findVisibleMember(
   scope: MemberScope,

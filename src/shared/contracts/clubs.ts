@@ -77,7 +77,7 @@ export const clubSchema = z.object({
 });
 export type Club = z.infer<typeof clubSchema>;
 
-export const createClubBodySchema = z.object({
+export const createClubBodySchema = z.strictObject({
   name: entityNameSchema,
   slug: clubSlugSchema,
   description: longTextSchema.optional(),
@@ -156,7 +156,7 @@ export const committeeSchema = z.object({
 });
 export type Committee = z.infer<typeof committeeSchema>;
 
-export const createCommitteeBodySchema = z.object({
+export const createCommitteeBodySchema = z.strictObject({
   name: entityNameSchema,
   description: longTextSchema.optional(),
 });
@@ -254,7 +254,7 @@ export type UpdateMembershipTypeBody = z.output<typeof membershipTypeBodySchema>
 export const deleteMembershipTypeQuerySchema = z.object({ moveMembersTo: idSchema.optional() });
 export type DeleteMembershipTypeQuery = z.output<typeof deleteMembershipTypeQuerySchema>;
 
-export const reorderMembershipTypesBodySchema = z.object({
+export const reorderMembershipTypesBodySchema = z.strictObject({
   ids: z
     .array(idSchema)
     .min(1)

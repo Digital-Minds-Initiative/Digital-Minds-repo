@@ -2,8 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { buildPath } from '../endpoint';
+import { longTextSchema, shortTextSchema } from '../fields';
 import { pageMeta, paginationShape } from '../pagination';
 import { queryArray, queryBoolean, queryInt, searchParamsToObject, toSearchParams } from '../query';
+
+describe('free text', () => {
+  /*
+   * Collapsed, not just trimmed: the CSV import normalises its cells this way (ADR 0021), so
+   * the form has to agree or the same words mean two different values depending on the door
+   * they came through.
+   */
+  it('collapses whitespace in a college, a major or a description', () => {
+    expect(shortTextSchema.parse('  كلية   الحاسب  ')).toBe('كلية الحاسب');
+    expect(shortTextSchema.parse('علوم\tحاسبات')).toBe('علوم حاسبات');
+    expect(longTextSchema.parse(' نادي   طلابي \n تقني ')).toBe('نادي طلابي تقني');
+  });
+
+  it('still refuses text that is only whitespace, or too long', () => {
+    expect(shortTextSchema.safeParse('   ').success).toBe(false);
+    expect(shortTextSchema.safeParse('ا'.repeat(121)).success).toBe(false);
+  });
+});
 
 describe('query helpers', () => {
   it('accepts one value or many and always returns an array', () => {

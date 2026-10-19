@@ -17,7 +17,7 @@ import {
   today,
   type Scenario,
 } from '@tests/factories/scenario';
-import { expectNotFound } from '@tests/utils/assertions';
+import { expectInvalid, expectNotFound } from '@tests/utils/assertions';
 
 /** A balance is the sum of active transactions, per committee, computed at read time. */
 describe('balances', () => {
@@ -193,6 +193,49 @@ describe('balances', () => {
     it('is a 404 for a member nobody may see', async () => {
       const plain = await actorFor(s.users.plain.id);
       await expectNotFound(getMemberPoints(plain, s.memberships.memberA1, pointsQuery()));
+    });
+  });
+  /*
+   * A filter may only narrow what the caller already sees, and has to say when it cannot — the
+   * rule ADR 0020 settled for the members list. This endpoint used to answer an empty page for
+   * a committee the caller could not see, which a caller cannot tell from "no points".
+   */
+  describe('the committee filter', () => {
+    it('is a 404 for a committee the caller cannot see', async () => {
+      await expectNotFound(
+        getMemberPoints(
+          leadA1,
+          s.memberships.memberA1,
+          pointsQuery({ committeeId: s.committees.a2.id }),
+        ),
+      );
+      await expectNotFound(
+        getMemberPoints(
+          officerA,
+          s.memberships.memberA1,
+          pointsQuery({ committeeId: s.committees.b1.id }),
+        ),
+      );
+    });
+
+    it('is a 422 for a committee of another club than the member', async () => {
+      await expectInvalid(
+        getMemberPoints(
+          admin,
+          s.memberships.memberA1,
+          pointsQuery({ committeeId: s.committees.b1.id }),
+        ),
+        'committee_not_in_club',
+      );
+    });
+
+    it('control: a committee the caller can see still narrows the figures', async () => {
+      const points = await getMemberPoints(
+        officerA,
+        s.memberships.memberA1,
+        pointsQuery({ committeeId: s.committees.a1.id }),
+      );
+      expect(points.byCommittee.map((entry) => entry.committee.id)).toEqual([s.committees.a1.id]);
     });
   });
 });

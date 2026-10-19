@@ -10,11 +10,8 @@ import {
   paginationShape,
   pastOrTodayDateSchema,
   periodShape,
-  queryArray,
-  querySearch,
   refinePeriod,
   requireAnyField,
-  sortShape,
 } from '@/shared/contracts/core';
 import { memberCommitteeParamsSchema, memberParamsSchema } from '@/shared/contracts/members';
 import { collapseWhitespace } from '@/shared/lib/text';
@@ -367,53 +364,4 @@ export const clubPointsBulkEndpoint = defineEndpoint({
   body: clubPointsBulkBodySchema,
   response: pointsBulkResultSchema,
   successStatus: 201,
-});
-
-// ─── Drafts for later tasks ──────────────────────────────────
-// No route handlers yet: the ledger list and the committee summary belong to the reports task.
-
-export const pointTransactionSortFields = ['workDate', 'createdAt', 'amount'] as const;
-
-export const listPointTransactionsQuerySchema = z
-  .object({
-    ...paginationShape,
-    ...sortShape(pointTransactionSortFields, { sort: 'workDate', order: 'desc' }),
-    ...periodShape,
-    /** Search in the reason. */
-    q: querySearch(),
-    clubId: idSchema.optional(),
-    committeeId: queryArray(idSchema).optional(),
-    memberId: idSchema.optional(),
-    status: pointStatusFilterSchema.default('all'),
-  })
-  .superRefine(refinePeriod);
-export type ListPointTransactionsQuery = z.output<typeof listPointTransactionsQuerySchema>;
-
-export const listPointTransactionsEndpoint = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/points',
-  access: 'actor',
-  query: listPointTransactionsQuerySchema,
-  response: paginated(pointTransactionSchema).extend({
-    /** Sum of ACTIVE amounts matching the filters (all pages). */
-    totals: z.object({ active: z.number().int() }),
-  }),
-});
-
-/** Balances of every member of a committee, optionally for a work-date period. */
-export const getCommitteePointsSummaryEndpoint = defineEndpoint({
-  method: 'GET',
-  path: '/api/v1/committees/:committeeId/points/summary',
-  access: 'actor',
-  params: z.object({ committeeId: idSchema }),
-  query: z
-    .object({
-      ...paginationShape,
-      ...periodShape,
-      ...sortShape(['period', 'balance', 'fullName'] as const, { sort: 'period', order: 'desc' }),
-    })
-    .superRefine(refinePeriod),
-  response: paginated(balanceSchema.extend({ member: personRefSchema })).extend({
-    committee: committeeRefSchema,
-  }),
 });

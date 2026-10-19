@@ -5,6 +5,9 @@
     // shared with the mobile app), UI primitives export their full Radix surface, and
     // i18n/navigation is the documented replacement for next/link and next/navigation.
     "src/shared/contracts/*.ts",
+    // The list, field and error helpers those contracts are built from: the documented toolkit
+    // for a new endpoint (docs/architecture.md), so one with no caller yet is not dead code.
+    "src/shared/contracts/core/*.ts",
     "src/components/ui/*.tsx",
     "src/i18n/navigation.ts",
     // Wired through the `server-only` alias in vitest.config.ts, which knip does not follow.
