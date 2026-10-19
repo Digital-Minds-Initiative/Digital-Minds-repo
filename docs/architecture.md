@@ -81,6 +81,15 @@ src/server/modules/members/
   import-service.ts the two steps, which run the plan twice (ADR 0021)
   __tests__/        unit tests (policies, ranking, the two pure import halves)
 
+src/server/modules/clubs/
+  view-link-token.ts     a view token: generate it, HMAC it, encrypt and decrypt the stored copy
+  view-link-service.ts   read, create or renew, turn off a committee's link (ADR 0023)
+  public-view-service.ts the three endpoints that link opens — the only ones with no Actor
+  view-rate-limits.ts    what the public view allows per IP and per token
+
+src/server/modules/rate-limit/
+  index.ts          consumeFixedWindow: counts one use of a named limit (owns RateLimitCounter)
+
 src/server/modules/points/
   service.ts        the single add, the edit, the cancel and the reads
   bulk-plan.ts      entries + what the club holds → what to write and what to refuse, and the
@@ -116,7 +125,7 @@ Current modules:
 | ------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services and endpoints (list/search/get/create/update/remove/committees, CSV import), UI |
 | `points`      | the ledger, revisions, balances, bulk batches                | contracts, services and endpoints (single add, edit, cancel, bulk entry; reports: later)            |
-| `clubs`       | clubs, committees, membership types, view links, public view | contracts, services and endpoints (view links: later)                                               |
+| `clubs`       | clubs, committees, membership types, view links, public view | contracts, services and endpoints (clubs, committees, types, view links, the public view)           |
 | `permissions` | appointing officers and leads, and the history of it         | contracts, services and endpoints                                                                   |
 | `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints, mocks; user menu, overview                                          |
 | `system`      | health                                                       | full endpoint                                                                                       |
@@ -206,14 +215,15 @@ member at all, so every member action is a 404 for them:
 | Read a member's points history and balances                   | all |                  club                   |           members of the committees they lead           |
 | Membership types of a club                                    |  ✓  |                    ✓                    |                            —                            |
 | Clubs and committees: create, rename, archive                 |  ✓  |                    —                    |                            —                            |
-| Rotate / disable a committee's view link                      |  ✓  |                    ✓                    |                     — (may read it)                     |
+| Create / renew / turn off a committee's view link             |  ✓  |                    ✓                    |                     their committee                     |
 | Appoint / revoke committee leads                              |  ✓  |                    ✓                    |                            —                            |
 | Appoint / revoke club officers                                |  ✓  |                    —                    |                            —                            |
 | Read who holds which role, and the role history               | all |               their club                |                            —                            |
 
 **Roles are granted through the API** ([ADR 0018](adr/0018-granting-roles.md)): full admins appoint and revoke club officers, a club's officers appoint and revoke the leads of its committees, and the full-admin flag itself is not grantable at all. Every real change writes one append-only `RoleChange` row; setting a role to the value it already holds writes nothing and answers 200, and because the role write is conditional on the previous role, two simultaneous grants leave one row. A change takes effect on the requester's next request — the Actor is rebuilt from the database every time.
 
-Every club-level refusal on a member carries the same reason, `club_management_required`.
+Every club-level refusal on a member carries the same reason, `club_management_required`; the one
+committee-level refusal, on a view link, carries `committee_management_required`.
 Removing is always a soft remove and points are never deleted: a person taken out of a committee
 drops out of its lists and can earn nothing more there, while what they already earned stays in
 their club total. Adding someone whose membership was removed **restores that membership**, with
@@ -270,7 +280,21 @@ await removeFromClub(membersScope(actor), id, actor.userId); // 4. scoped write
 
 **CSRF.** `defineRoute` refuses any non-GET request whose `Origin` is not `APP_ORIGIN` (403 `cross_origin`) and any body not sent as `application/json` (400 `json_required`), on top of `SameSite=Lax` cookies.
 
-**Public endpoints** (`access: 'public'`, e.g. the committee view link) never receive an actor. They are scoped by their capability token and their contracts contain no contact data.
+**Public endpoints** (`access: 'public'`) never receive an actor, even when the caller is signed
+in. The committee view link ([ADR 0023](adr/0023-committee-view-link.md)) is the first of them and
+sets the pattern. A committee's lead, its club's officers and full admins create, renew and turn
+off a link; anyone holding it opens one page without signing in. The token **stands in for the
+Actor**: it is looked up by an HMAC keyed with `AUTH_SECRET` (the database also keeps a copy
+encrypted with the same secret, so the link can be copied again, while a dump of the database
+alone hands out no working links), and the committee id it resolves to is turned into branded
+scopes by `committeeViewMembersScope` and `committeeViewPointsScope` — so the public reads carry
+the same structural boundary as every other read, and cannot reach another committee, a removed
+member or a cancelled transaction. The response contracts are an explicit whitelist (names,
+balances, and each transaction's amount, reason and work date — nothing else), and a contract test
+fails if one of them grows. An unknown, renewed, turned-off or archived token all answer one
+identical 404, and every public answer carries `cache-control: no-store`,
+`referrer-policy: no-referrer` and `x-robots-tag: noindex`, because the URL is the capability. The
+endpoints are rate-limited per IP and per token, separately from sign-in.
 
 ## Data model
 
@@ -391,5 +415,5 @@ Example: an `events` module that lists a club's events. Backend steps (1–7) an
 
 - **Sign-in screens** (frontend): the pages for the flow above, built against the mocks in `src/client/features/auth/mocks`, and redirects by sign-in state in `src/proxy.ts`. Add a Content-Security-Policy in `next.config.ts`.
 - **Mobile app:** move `src/shared/contracts` into a shared package; it will need a token-based session (the cookie and the Origin check are for browsers) — a new ADR.
-- **Public committee view:** implement the contracts in `src/shared/contracts/clubs.ts` (token-scoped, no contact data, rate-limited).
+- **The public committee view's pages:** the backend is done ([ADR 0023](adr/0023-committee-view-link.md)); `/v/<token>` and the dashboard's copy and renew controls are built against the MSW mocks in `src/client/features/clubs/mocks`. The page must repeat `noindex` and `no-referrer` in its own metadata, and `/v/` belongs in `robots.txt`.
 - **Audit log:** role grants and profile edits (points already have revisions).

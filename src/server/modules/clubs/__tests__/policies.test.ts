@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { AuthzError, type Actor } from '@/server/authz';
 
-import { assertCanManageClubsAndCommittees, assertCanManageMembershipTypes } from '../policies';
+import {
+  assertCanManageClubsAndCommittees,
+  assertCanManageMembershipTypes,
+  assertCanManageViewLink,
+} from '../policies';
 
 const CLUB_A = 'club-a';
 const CLUB_B = 'club-b';
@@ -66,5 +70,35 @@ describe('membership types', () => {
     expect(reasonOf(() => assertCanManageMembershipTypes(officerA, CLUB_B))).toBe(
       'club_management_required',
     );
+  });
+});
+
+/*
+ * A committee's view link is the one thing in this module a lead manages (ADR 0023). No request
+ * can reach the refusal — anyone who can see a committee at all either manages its club or leads
+ * it (committeesScope) — so it is proved here rather than in an integration test.
+ */
+describe('a committee view link', () => {
+  const target = { clubId: CLUB_A, committeeId: A1 };
+
+  it('is managed by the committee’s lead, the club’s officers and full admins', () => {
+    for (const actor of [admin, officerA, leadA1]) {
+      expect(reasonOf(() => assertCanManageViewLink(actor, target))).toBeUndefined();
+    }
+  });
+
+  it('is closed to a plain member of the club, with the committee-level reason', () => {
+    expect(reasonOf(() => assertCanManageViewLink(plainMember, target))).toBe(
+      'committee_management_required',
+    );
+  });
+
+  it('is closed to a lead of another committee and to an officer of another club', () => {
+    expect(
+      reasonOf(() => assertCanManageViewLink(leadA1, { clubId: CLUB_A, committeeId: 'other' })),
+    ).toBe('committee_management_required');
+    expect(
+      reasonOf(() => assertCanManageViewLink(officerA, { clubId: CLUB_B, committeeId: 'b1' })),
+    ).toBe('committee_management_required');
   });
 });

@@ -126,3 +126,34 @@ export function pointTransactionsScope(actor: Actor): PointTransactionScope {
   if (committeeIds.length > 0) conditions.push({ committeeId: { in: committeeIds } });
   return scope(conditions.length > 0 ? { OR: conditions } : noRows());
 }
+
+/*
+ * ─── Scopes granted by a capability token ───────────────────
+ *
+ * The public committee view (docs/adr/0023-committee-view-link.md) has no Actor: holding the
+ * view link is the whole permission, and it reaches exactly one committee. The view service
+ * resolves the token to a committee id and builds these, so the boundary is carried by the same
+ * branded types every repository read demands — not by the public service remembering to filter.
+ *
+ * They take a committee id, never a token: whoever calls them has already proved the token.
+ */
+
+/**
+ * Members whose name and points that committee's link may show: an active membership in the
+ * club, holding an active membership in this committee. Someone removed from either drops out,
+ * so they cannot be found by name or by their public id.
+ */
+export function committeeViewMembersScope(committeeId: string): MemberScope {
+  return scope({
+    removedAt: null,
+    committeeMemberships: { some: { committeeId, removedAt: null } },
+  });
+}
+
+/**
+ * Transactions that committee's link may show: its own, and only the ones that still count.
+ * Cancelled transactions are outside the scope, so no public read can reach one.
+ */
+export function committeeViewPointsScope(committeeId: string): PointTransactionScope {
+  return scope({ committeeId, status: 'ACTIVE' });
+}

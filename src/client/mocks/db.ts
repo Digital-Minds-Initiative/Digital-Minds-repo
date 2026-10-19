@@ -1,7 +1,7 @@
 import type { ClubRole, CommitteeRole, MemberProfile } from '@/shared/contracts/members';
 import type { PointTransactionStatus } from '@/shared/contracts/points';
 import { demoClubs, demoKeys, demoPeople, demoProfile, type DemoPersona } from '@/shared/demo/demo';
-import { demoId, demoPublicId } from '@/shared/demo/ids';
+import { demoId, demoPublicId, demoViewToken } from '@/shared/demo/ids';
 import { generateDemoTransactions } from '@/shared/demo/points';
 import { addDays, todayInAppTimeZone } from '@/shared/lib/dates';
 
@@ -41,6 +41,8 @@ export interface MockCommittee {
   name: string;
   description: string | null;
   archivedAt: string | null;
+  /** The public view-only link, or null when the committee has none (ADR 0023). */
+  viewLink: { token: string; createdAt: string } | null;
 }
 
 export interface MockMembershipType {
@@ -139,14 +141,28 @@ export function buildMockDb(today: string): MockDb {
     description: club.description,
     archivedAt: null,
   }));
+  // Two committees start with a view link, one per club, so both states a screen has to show
+  // are in the demo data: a link to copy and renew, and a committee that has none yet. Both are
+  // led by a lead persona, so signing in as ريم or عبدالرحمن shows one straight away
+  // (docs/adr/0023-committee-view-link.md).
+  const committeesWithLead = new Set([
+    demoKeys.committee('computing', 'design'),
+    demoKeys.committee('tuwaiq', 'development'),
+  ]);
   const committees: MockCommittee[] = demoClubs.flatMap((club) =>
-    club.committees.map((committee) => ({
-      id: demoId(demoKeys.committee(club.key, committee.key)),
-      clubId: demoId(demoKeys.club(club.key)),
-      name: committee.name,
-      description: committee.description,
-      archivedAt: null,
-    })),
+    club.committees.map((committee) => {
+      const key = demoKeys.committee(club.key, committee.key);
+      return {
+        id: demoId(key),
+        clubId: demoId(demoKeys.club(club.key)),
+        name: committee.name,
+        description: committee.description,
+        archivedAt: null,
+        viewLink: committeesWithLead.has(key)
+          ? { token: demoViewToken(key), createdAt: `${addDays(today, -30)}T08:00:00.000Z` }
+          : null,
+      } satisfies MockCommittee;
+    }),
   );
   const membershipTypes: MockMembershipType[] = demoClubs.flatMap((club) =>
     club.membershipTypes.map((name, order) => ({

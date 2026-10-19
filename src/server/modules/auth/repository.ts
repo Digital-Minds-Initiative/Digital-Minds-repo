@@ -3,6 +3,7 @@ import 'server-only';
 import type { UserScope } from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
+import { deleteExpiredCounters } from '@/server/modules/rate-limit';
 import { normalizeForSearch } from '@/shared/lib/arabic';
 
 const ownProfileSelect = {
@@ -106,23 +107,6 @@ export async function consumeOtpChallenge(emailHash: string, codeHash: string): 
 /** Removes a code whose email could not be sent, so the cooldown does not block a retry. */
 export async function deleteOtpChallenge(emailHash: string, codeHash: string): Promise<void> {
   await db.otpChallenge.deleteMany({ where: { emailHash, codeHash } });
-}
-
-// ─── Rate limits ────────────────────────────────────────────────────────────────────────────
-
-/** Adds one to a fixed-window counter and returns the new count. */
-export async function incrementRateLimitCounter(
-  key: string,
-  windowStart: Date,
-  expiresAt: Date,
-): Promise<number> {
-  const rows = await db.$queryRaw<Array<{ count: number }>>`
-    INSERT INTO "RateLimitCounter" ("key", "windowStart", "count", "expiresAt")
-    VALUES (${key}, ${windowStart}, 1, ${expiresAt})
-    ON CONFLICT ("key", "windowStart") DO UPDATE
-      SET "count" = "RateLimitCounter"."count" + 1
-    RETURNING "count"`;
-  return Number(rows[0]?.count ?? 0);
 }
 
 // ─── Users ──────────────────────────────────────────────────────────────────────────────────
@@ -238,12 +222,15 @@ export async function completeRegistration(input: {
   });
 }
 
-/** Expired codes, sessions and counters. Called on every code request; indexed by expiresAt. */
+/**
+ * Expired codes, sessions and counters. Called on every code request; indexed by expiresAt. The
+ * counters belong to the rate-limit module, so it deletes its own rows inside this transaction.
+ */
 export async function deleteExpiredAuthRows(now: Date): Promise<void> {
   const expired = { where: { expiresAt: { lte: now } } };
-  await db.$transaction([
-    db.otpChallenge.deleteMany(expired),
-    db.session.deleteMany(expired),
-    db.rateLimitCounter.deleteMany(expired),
-  ]);
+  await db.$transaction(async (tx) => {
+    await tx.otpChallenge.deleteMany(expired);
+    await tx.session.deleteMany(expired);
+    await deleteExpiredCounters(tx, now);
+  });
 }

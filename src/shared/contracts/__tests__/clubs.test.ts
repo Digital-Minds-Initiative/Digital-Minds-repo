@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import {
   clubSlugSchema,
   createClubBodySchema,
   createCommitteeBodySchema,
   membershipTypeBodySchema,
+  PUBLIC_MEMBER_SEARCH_LIMIT,
+  PUBLIC_MEMBER_SEARCH_MIN,
+  publicCommitteeViewEndpoint,
+  publicMemberPointsEndpoint,
   reorderMembershipTypesBodySchema,
+  searchPublicCommitteeMembersEndpoint,
   updateClubBodySchema,
   updateCommitteeBodySchema,
+  viewTokenSchema,
 } from '../clubs';
 
 const ID = '0192d000-0000-7000-8000-000000000001';
@@ -94,4 +101,103 @@ describe('reorderMembershipTypesBodySchema', () => {
   it('refuses an empty list', () => {
     expect(reorderMembershipTypesBodySchema.safeParse({ ids: [] }).success).toBe(false);
   });
+});
+
+/*
+ * The public committee view is the only surface anyone can read without signing in, so its
+ * response schemas are a whitelist: whatever is not listed here is stripped before it is sent
+ * (src/server/http parses every response through the contract). These tests pin the exact set of
+ * fields, so adding one to a public response fails here and has to be a deliberate decision.
+ */
+describe('the public committee view returns nothing but these fields', () => {
+  /** Every leaf path of a schema: objects are walked, `[]` marks an array's items. */
+  function fieldPaths(schema: z.ZodType, prefix = ''): string[] {
+    if (schema instanceof z.ZodObject) {
+      return Object.entries(schema.shape).flatMap(([key, value]) =>
+        fieldPaths(value as z.ZodType, prefix ? `${prefix}.${key}` : key),
+      );
+    }
+    if (schema instanceof z.ZodArray) return fieldPaths(schema.element as z.ZodType, `${prefix}[]`);
+    if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+      return fieldPaths(schema.unwrap() as z.ZodType, prefix);
+    }
+    return [prefix];
+  }
+
+  const fieldsOf = (endpoint: { response: z.ZodType | null }) =>
+    fieldPaths(endpoint.response ?? z.never()).sort();
+
+  it('the committee header: two names', () => {
+    expect(fieldsOf(publicCommitteeViewEndpoint)).toEqual(['club.name', 'committee.name']);
+  });
+
+  it('the member search: a public id, a name and a balance', () => {
+    expect(fieldsOf(searchPublicCommitteeMembersEndpoint)).toEqual([
+      'items[].balance',
+      'items[].fullName',
+      'items[].publicId',
+    ]);
+  });
+
+  it('the points history: amount, reason and work date only', () => {
+    expect(fieldsOf(publicMemberPointsEndpoint)).toEqual([
+      'balance',
+      'member.fullName',
+      'member.publicId',
+      'transactions.items[].amount',
+      'transactions.items[].reason',
+      'transactions.items[].workDate',
+      'transactions.page',
+      'transactions.pageCount',
+      'transactions.pageSize',
+      'transactions.total',
+    ]);
+  });
+
+  it('never mentions contact data, membership types or internal ids', () => {
+    const banned =
+      /email|phone|college|major|level|membershipType|memberId|userId|committeeId|clubId|status|cancel|createdBy|revision|batch/i;
+    const fields = [
+      publicCommitteeViewEndpoint,
+      searchPublicCommitteeMembersEndpoint,
+      publicMemberPointsEndpoint,
+    ].flatMap(fieldsOf);
+    expect(fields.filter((field) => banned.test(field))).toEqual([]);
+  });
+});
+
+describe('the public member search', () => {
+  const schema = searchPublicCommitteeMembersEndpoint.query;
+
+  it.each(['', ' ', 'ا', ' ا '])(
+    'refuses %j: under two characters cannot list the committee',
+    (q) => {
+      expect(schema.safeParse({ q }).success).toBe(false);
+    },
+  );
+
+  it('trims the query', () => {
+    expect(schema.parse({ q: '  محمد  ' })).toEqual({ q: 'محمد' });
+  });
+
+  it('caps the results at twenty', () => {
+    expect(PUBLIC_MEMBER_SEARCH_LIMIT).toBe(20);
+    expect(PUBLIC_MEMBER_SEARCH_MIN).toBe(2);
+  });
+});
+
+describe('viewTokenSchema', () => {
+  const token = 'A'.repeat(31);
+
+  it('accepts 32 URL-safe characters', () => {
+    expect(viewTokenSchema.safeParse(`${token}_`).success).toBe(true);
+    expect(viewTokenSchema.safeParse(`${token}-`).success).toBe(true);
+  });
+
+  it.each([token, `${token}AA`, `${token}+`, `${token}/`, `${token}=`, `${token} `])(
+    'refuses %j',
+    (value) => {
+      expect(viewTokenSchema.safeParse(value).success).toBe(false);
+    },
+  );
 });

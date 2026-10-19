@@ -1,10 +1,17 @@
 import 'server-only';
 
-import type { ClubScope, CommitteeScope, MemberScope, MembershipTypeScope } from '@/server/authz';
+import type {
+  ClubScope,
+  CommitteeScope,
+  MemberScope,
+  MembershipTypeScope,
+  PointTransactionScope,
+} from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
 import type { ClubCommitteeRef, ClubRef } from '@/shared/contracts/clubs';
+import { normalizeForSearch } from '@/shared/lib/arabic';
 
 /*
  * Prisma access for clubs, committees and membership types. Every read and write of a scoped row
@@ -484,4 +491,181 @@ async function renumber(
       data: { order: index },
     });
   }
+}
+
+// ─── Committee view link ─────────────────────────────────────
+
+const viewLinkSelect = {
+  id: true,
+  clubId: true,
+  archivedAt: true,
+  viewTokenHash: true,
+  viewTokenCipher: true,
+  viewTokenCreatedAt: true,
+  club: { select: { archivedAt: true } },
+} satisfies Prisma.CommitteeSelect;
+
+export type CommitteeViewLinkRow = Prisma.CommitteeGetPayload<{ select: typeof viewLinkSelect }>;
+
+/** The committee's stored link, read through the actor's committee scope. */
+export async function findCommitteeViewLink(
+  scope: CommitteeScope,
+  committeeId: string,
+): Promise<CommitteeViewLinkRow | null> {
+  return db.committee.findFirst({
+    where: { AND: [scope, { id: committeeId }] },
+    select: viewLinkSelect,
+  });
+}
+
+/**
+ * Stores a new link, replaces the current one, or clears it (`token: null`). One statement, so
+ * the three columns can never come from two different tokens, and the old `viewTokenHash` stops
+ * matching the moment it commits — which is what makes a renewed link dead immediately.
+ */
+export async function setCommitteeViewToken(
+  scope: CommitteeScope,
+  committeeId: string,
+  token: { hash: string; cipher: Uint8Array<ArrayBuffer>; createdAt: Date } | null,
+): Promise<void> {
+  const { count } = await db.committee.updateMany({
+    where: { AND: [scope, { id: committeeId }] },
+    data: {
+      viewTokenHash: token?.hash ?? null,
+      viewTokenCipher: token?.cipher ?? null,
+      viewTokenCreatedAt: token?.createdAt ?? null,
+    },
+  });
+  if (count !== 1) throw new NotFoundError('Committee');
+}
+
+// ─── Public committee view ───────────────────────────────────
+// Reads for the view link, which has no Actor: the token is the capability. They take the
+// token-derived scopes from src/server/authz (`committeeView*Scope`), so every row they can
+// reach belongs to the one committee the token names (docs/adr/0023-committee-view-link.md).
+
+const publicCommitteeSelect = {
+  id: true,
+  clubId: true,
+  name: true,
+  archivedAt: true,
+  club: { select: { name: true, archivedAt: true } },
+} satisfies Prisma.CommitteeSelect;
+
+export type PublicCommitteeRow = Prisma.CommitteeGetPayload<{
+  select: typeof publicCommitteeSelect;
+}>;
+
+/**
+ * The committee a view token belongs to, or null. Deliberately not scoped: there is no actor to
+ * scope it by, and the HMAC in `hash` is the proof. It is the only unscoped committee read, and
+ * the service turns an archived committee or club into the same 404 as an unknown token.
+ *
+ * One indexed equality on a unique column, with no fallback query, so neither the answer nor the
+ * time it takes says anything about how close a guessed token was (the HMAC already destroyed
+ * any relation between the caller's input and the value compared here).
+ */
+export async function findCommitteeByViewTokenHash(
+  hash: string,
+): Promise<PublicCommitteeRow | null> {
+  return db.committee.findUnique({
+    where: { viewTokenHash: hash },
+    select: publicCommitteeSelect,
+  });
+}
+
+/** What the public view may say about a person: the name they are listed under, nothing else. */
+const publicMemberSelect = {
+  id: true,
+  user: { select: { publicId: true, fullName: true } },
+} satisfies Prisma.MembershipSelect;
+
+export interface PublicMemberRow {
+  /** The membership id. Used to sum points; never sent to a public caller. */
+  id: string;
+  publicId: string;
+  fullName: string;
+}
+
+function toPublicMember(row: Prisma.MembershipGetPayload<{ select: typeof publicMemberSelect }>) {
+  return { id: row.id, publicId: row.user.publicId, fullName: row.user.fullName };
+}
+
+/**
+ * Members of the committee whose folded name contains `search`, ordered like the members list
+ * and capped at `limit`, so the search can never be used to page through the committee.
+ */
+export async function searchCommitteeViewMembers(
+  scope: MemberScope,
+  search: string,
+  limit: number,
+): Promise<PublicMemberRow[]> {
+  const rows = await db.membership.findMany({
+    where: { AND: [scope, { user: { searchName: { contains: normalizeForSearch(search) } } }] },
+    select: publicMemberSelect,
+    orderBy: [{ user: { searchName: 'asc' } }, { id: 'asc' }],
+    take: limit,
+  });
+  return rows.map(toPublicMember);
+}
+
+/** One member of the committee by their public id. */
+export async function findCommitteeViewMember(
+  scope: MemberScope,
+  publicId: string,
+): Promise<PublicMemberRow | null> {
+  const row = await db.membership.findFirst({
+    where: { AND: [scope, { user: { publicId } }] },
+    select: publicMemberSelect,
+  });
+  return row ? toPublicMember(row) : null;
+}
+
+/**
+ * Each member's balance in the committee the scope names: the sum of the transactions the scope
+ * reaches, which are its active ones. A member with none is absent from the map (balance 0).
+ */
+export async function sumCommitteeViewBalances(
+  scope: PointTransactionScope,
+  memberIds: string[],
+): Promise<Map<string, number>> {
+  const balances = new Map<string, number>();
+  if (memberIds.length === 0) return balances;
+
+  const groups = await db.pointTransaction.groupBy({
+    by: ['committeeMembershipId'],
+    where: { AND: [scope, { committeeMembership: { membershipId: { in: memberIds } } }] },
+    _sum: { amount: true },
+  });
+  // A member holds one committee membership per committee, and the scope names one committee, so
+  // grouping by committee membership groups by member.
+  const rows = await db.committeeMembership.findMany({
+    where: { id: { in: groups.map((group) => group.committeeMembershipId) } },
+    select: { id: true, membershipId: true },
+  });
+  const memberByCommitteeMembership = new Map(rows.map((row) => [row.id, row.membershipId]));
+  for (const group of groups) {
+    const memberId = memberByCommitteeMembership.get(group.committeeMembershipId);
+    if (memberId) balances.set(memberId, group._sum.amount ?? 0);
+  }
+  return balances;
+}
+
+/** One member's transactions in the committee the scope names, newest work date first. */
+export async function findCommitteeViewTransactions(
+  scope: PointTransactionScope,
+  memberId: string,
+  page: { skip: number; take: number },
+): Promise<{ rows: Array<{ amount: number; reason: string; workDate: Date }>; total: number }> {
+  const where = { AND: [scope, { committeeMembership: { membershipId: memberId } }] };
+  const [total, rows] = await Promise.all([
+    db.pointTransaction.count({ where }),
+    db.pointTransaction.findMany({
+      where,
+      select: { amount: true, reason: true, workDate: true },
+      orderBy: [{ workDate: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+      ...page,
+    }),
+  ]);
+  return { rows, total };
 }

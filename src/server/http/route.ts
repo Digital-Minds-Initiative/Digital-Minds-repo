@@ -40,7 +40,8 @@ import {
  *  3. validates params, query and body with the endpoint's Zod schemas (422 on failure),
  *  4. calls your handler — which should only call a service and return its result,
  *  5. parses the result through the response schema (fields not in the contract are dropped),
- *  6. maps errors to the standard envelope: AuthzError → 403, NotFoundError → 404, …
+ *  6. maps errors to the standard envelope: AuthzError → 403, NotFoundError → 404, …,
+ *  7. adds the headers a public page needs to every answer of a `public` endpoint.
  *
  * Usage (src/app/api/v1/members/route.ts):
  *   export const GET = defineRoute(listMembersEndpoint, ({ actor, query }) => listMembers(actor, query));
@@ -70,6 +71,19 @@ interface HandlerContext<E extends EndpointDefinition> {
  * could make the server buffer a body of any size at all.
  */
 const MAX_REQUEST_BYTES = 2_000_000;
+
+/**
+ * What every answer of a `public` endpoint carries, errors included (docs/adr/0023-committee-view-link.md).
+ * A public answer is about a named person, reached by a token that is in the URL:
+ *   - it must not be stored by anything in between (`cache-control` is already no-store);
+ *   - the URL must not travel in a Referer header, because the URL is the capability;
+ *   - the endpoint must not be indexed.
+ * The page itself has to repeat this in its own metadata — headers here cover only the API.
+ */
+const PUBLIC_RESPONSE_HEADERS: Record<string, string> = {
+  'referrer-policy': 'no-referrer',
+  'x-robots-tag': 'noindex, nofollow',
+};
 
 /** A handler result with HTTP details: a status override, cookies to set, or a file to download. */
 class HandlerResult<T> {
@@ -196,6 +210,11 @@ export function defineRoute<E extends EndpointDefinition>(
       response = errorResponse(error, requestId);
     }
     for (const cookie of sessionCookies) response.headers.append('set-cookie', cookie);
+    if (endpoint.access === 'public') {
+      for (const [header, value] of Object.entries(PUBLIC_RESPONSE_HEADERS)) {
+        response.headers.set(header, value);
+      }
+    }
     return response;
   };
 }

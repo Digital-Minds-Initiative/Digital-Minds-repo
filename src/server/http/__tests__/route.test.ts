@@ -351,4 +351,49 @@ describe('defineRoute', () => {
       expect((await envelope(response)).code).toBe('INTERNAL');
     });
   });
+  /*
+   * A public answer is about a named person and is reached by a token in the URL, so the URL must
+   * not travel in a Referer header and the endpoint must not be indexed (ADR 0023). An endpoint
+   * that needs an actor carries neither header: those answers are already behind a session.
+   */
+  describe('public endpoints', () => {
+    const pingEndpoint = defineEndpoint({
+      method: 'GET',
+      path: '/api/v1/public/ping',
+      access: 'public',
+      response: z.object({ ok: z.boolean() }),
+    });
+
+    const ping = (handler: ReturnType<typeof defineRoute>) =>
+      handler(new NextRequest('http://localhost/api/v1/public/ping'), {
+        params: Promise.resolve({}),
+      });
+
+    it('answer with no-store, no-referrer and noindex', async () => {
+      const response = await ping(defineRoute(pingEndpoint, async () => ({ ok: true })));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+      expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+    });
+
+    it('carry the same headers on a refusal, so a 404 is not indexed either', async () => {
+      const response = await ping(
+        defineRoute(pingEndpoint, () => Promise.reject(new NotFoundError('Page'))),
+      );
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+      expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+    });
+
+    it('are the only endpoints that carry them', async () => {
+      const response = await call(defineRoute(itemEndpoint, async () => ({ id: ID, name: 'ok' })));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('referrer-policy')).toBeNull();
+      expect(response.headers.get('x-robots-tag')).toBeNull();
+    });
+  });
 });

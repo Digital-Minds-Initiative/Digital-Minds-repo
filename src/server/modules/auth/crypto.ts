@@ -5,7 +5,7 @@ import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 
 import { env } from '@/server/env';
 
 /*
- * Codes and rate-limit keys are stored as HMACs keyed with AUTH_SECRET. A plain hash of a
+ * Codes are stored as HMACs keyed with AUTH_SECRET. A plain hash of a
  * 6-digit code could be reversed by trying all million codes; without the secret it cannot.
  * Session tokens are 256 random bits, so a plain SHA-256 is enough for them.
  */
@@ -26,10 +26,6 @@ export function emailKey(email: string): string {
 
 export function otpCodeHash(email: string, code: string): string {
   return hmac('otp', `${email}:${code}`);
-}
-
-export function rateLimitKey(limit: string, subject: string): string {
-  return hmac('rate', `${limit}:${subject}`);
 }
 
 /** Constant-time comparison of two hex digests. */

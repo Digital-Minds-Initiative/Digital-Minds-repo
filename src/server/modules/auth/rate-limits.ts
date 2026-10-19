@@ -1,12 +1,12 @@
 import 'server-only';
 
 import { RateLimitedError } from '@/server/errors';
-
-import { rateLimitKey } from './crypto';
-import { incrementRateLimitCounter } from './repository';
+import { consumeFixedWindow } from '@/server/modules/rate-limit';
 
 /*
  * Sign-in rate limits, counted in Postgres in fixed windows (docs/adr/0014-email-otp-sign-in.md).
+ * The counting itself belongs to the rate-limit module, which owns the table; these are the
+ * numbers and the refusal that are sign-in's own.
  *
  * The per-email limits are the real protection: with 5 wrong guesses per code and at most 10 codes
  * a day, an attacker gets about 50 guesses a day at one address — a 1 in 20,000 chance. The per-IP
@@ -33,18 +33,10 @@ export async function consumeLimit(
   subject: string | null,
   now: Date,
 ): Promise<void> {
-  if (subject === null) return;
-  const { max, windowSeconds } = SIGN_IN_LIMITS[limit];
-  const windowMs = windowSeconds * 1000;
-  const windowStart = Math.floor(now.getTime() / windowMs) * windowMs;
-  const windowEnd = new Date(windowStart + windowMs);
-
-  const count = await incrementRateLimitCounter(
-    rateLimitKey(limit, subject),
-    new Date(windowStart),
-    windowEnd,
+  const { exceeded, retryAfterSeconds } = await consumeFixedWindow(
+    { name: limit, ...SIGN_IN_LIMITS[limit] },
+    subject,
+    now,
   );
-  if (count > max) {
-    throw new RateLimitedError('too_many_requests', (windowEnd.getTime() - now.getTime()) / 1000);
-  }
+  if (exceeded) throw new RateLimitedError('too_many_requests', retryAfterSeconds);
 }
