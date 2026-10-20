@@ -59,6 +59,9 @@ export default defineConfig({
             APP_ORIGIN: 'http://localhost',
             CLIENT_IP_HEADER: 'x-forwarded-for',
             RESEND_API_KEY: '',
+            // Sending real email from a test run would be a surprise; a developer who has
+            // set EMAIL_TRANSPORT=resend in .env.local does not get one.
+            EMAIL_TRANSPORT: 'console',
           },
         },
       },

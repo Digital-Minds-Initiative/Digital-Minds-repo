@@ -35,6 +35,23 @@ const optionalString = z
  */
 const DEVELOPMENT_AUTH_SECRET = 'development-only-auth-secret-never-use-in-production';
 
+/**
+ * Printing sign-in codes to the log is a development convenience, so that is the default
+ * everywhere except a running production server, which has to send them for real. A production
+ * *build* is not a server: it sends nothing and has no key to validate, so it keeps the console.
+ */
+function resolveEmailTransport(
+  configured: 'console' | 'resend' | undefined,
+  productionServer: boolean,
+): 'console' | 'resend' {
+  return configured ?? (productionServer ? 'resend' : 'console');
+}
+
+/** `next build` also runs with NODE_ENV=production; only a running server is held to production rules. */
+function isProductionServer(nodeEnv: string, phase: string | undefined): boolean {
+  return nodeEnv === 'production' && phase !== 'phase-production-build';
+}
+
 function fallbackSecret(nodeEnv: 'development' | 'test' | 'production'): string {
   return nodeEnv === 'production' ? randomBytes(32).toString('base64') : DEVELOPMENT_AUTH_SECRET;
 }
@@ -82,7 +99,17 @@ const envSchema = (phase: string | undefined) =>
           .regex(/^[a-z0-9-]+$/, 'must be a header name or "none"')
           .optional(),
       ),
-      /** Sends email through Resend when set; otherwise the dev sender prints emails to the console. */
+      /**
+       * Which sender the app uses. `console` prints the message — the sign-in code included —
+       * to the server log and keeps it in memory for tests; `resend` sends it for real.
+       *
+       * Unset means `console` in development and test and `resend` in production, so the app
+       * runs with nothing set and a production server can never quietly not-send. Setting it
+       * to `resend` locally is how you test real delivery; the key is then required, because
+       * "I asked for Resend and forgot the key" must not look like "I wanted the console".
+       */
+      EMAIL_TRANSPORT: z.enum(['console', 'resend']).optional(),
+      /** The Resend API key. Required when the transport is `resend`. */
       RESEND_API_KEY: optionalString,
       /** For example `Digital Minds <no-reply@auth.digitalmindsint.org>`. */
       EMAIL_FROM: optionalString,
@@ -93,11 +120,11 @@ const envSchema = (phase: string | undefined) =>
       NEXT_PUBLIC_API_MOCKING: z.enum(['enabled', 'disabled']).default('disabled'),
     })
     .superRefine((env, ctx) => {
-      // `next build` also runs with NODE_ENV=production (on CI and on laptops with a dev .env).
-      // The guard is for a running production server, where these flags would be dangerous.
-      const isProductionServer =
-        env.NODE_ENV === 'production' && phase !== 'phase-production-build';
-      if (isProductionServer) {
+      // The guards are for a running production server, where these flags would be dangerous —
+      // not for `next build`, which also runs with NODE_ENV=production.
+      const productionServer = isProductionServer(env.NODE_ENV, phase);
+      const emailTransport = resolveEmailTransport(env.EMAIL_TRANSPORT, productionServer);
+      if (productionServer) {
         for (const name of ['APP_ORIGIN', 'AUTH_SECRET', 'RESEND_API_KEY'] as const) {
           if (!env[name]) {
             ctx.addIssue({ code: 'custom', path: [name], message: 'is required in production' });
@@ -120,21 +147,41 @@ const envSchema = (phase: string | undefined) =>
           });
         }
       }
-      if (env.RESEND_API_KEY && !env.EMAIL_FROM) {
+      if (emailTransport === 'resend') {
+        if (!env.RESEND_API_KEY) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['RESEND_API_KEY'],
+            message:
+              'is required when EMAIL_TRANSPORT is "resend": paste your Resend key, or set EMAIL_TRANSPORT=console to print the sign-in code to the terminal instead',
+          });
+        }
+        if (!env.EMAIL_FROM) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['EMAIL_FROM'],
+            message: 'is required when EMAIL_TRANSPORT is "resend"',
+          });
+        }
+      }
+      // The console sender writes sign-in codes to the log, which on a production server is
+      // both a leak and a silent failure to deliver.
+      if (productionServer && emailTransport === 'console') {
         ctx.addIssue({
           code: 'custom',
-          path: ['EMAIL_FROM'],
-          message: 'is required when RESEND_API_KEY is set',
+          path: ['EMAIL_TRANSPORT'],
+          message:
+            'must be "resend" in production (the console sender prints sign-in codes to the log)',
         });
       }
-      if (isProductionServer && env.DEV_ACTOR_SWITCHER) {
+      if (productionServer && env.DEV_ACTOR_SWITCHER) {
         ctx.addIssue({
           code: 'custom',
           path: ['DEV_ACTOR_SWITCHER'],
           message: 'must be false in production (it lets anyone act as any user)',
         });
       }
-      if (isProductionServer && env.NEXT_PUBLIC_API_MOCKING === 'enabled') {
+      if (productionServer && env.NEXT_PUBLIC_API_MOCKING === 'enabled') {
         ctx.addIssue({
           code: 'custom',
           path: ['NEXT_PUBLIC_API_MOCKING'],
@@ -144,6 +191,10 @@ const envSchema = (phase: string | undefined) =>
     })
     .transform((env) => ({
       ...env,
+      EMAIL_TRANSPORT: resolveEmailTransport(
+        env.EMAIL_TRANSPORT,
+        isProductionServer(env.NODE_ENV, phase),
+      ),
       APP_ORIGIN: env.APP_ORIGIN ?? 'http://localhost:3000',
       AUTH_SECRET: env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
       VIEW_LINK_SECRET: env.VIEW_LINK_SECRET ?? env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),

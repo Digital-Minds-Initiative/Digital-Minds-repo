@@ -121,10 +121,61 @@ describe('auth and email settings', () => {
     );
   });
 
-  it('needs a sender address with a Resend key', () => {
-    expect(() => parseServerEnv({ ...valid, RESEND_API_KEY: 're_test' })).toThrow(
-      /EMAIL_FROM is required when RESEND_API_KEY is set/,
-    );
+  describe('the email transport', () => {
+    /*
+     * The sender used to be guessed from whether RESEND_API_KEY was set, which cannot tell "I
+     * want Resend and forgot the key" from "I want the console". It is a choice now.
+     */
+    it('prints to the console in development and test, and sends in production', () => {
+      for (const NODE_ENV of ['development', 'test']) {
+        expect(parseServerEnv({ ...valid, NODE_ENV })).toMatchObject({
+          EMAIL_TRANSPORT: 'console',
+        });
+      }
+      expect(parseServerEnv(production)).toMatchObject({ EMAIL_TRANSPORT: 'resend' });
+    });
+
+    it('needs the key and the sender address when it is asked to send', () => {
+      expect(() =>
+        parseServerEnv({ ...valid, EMAIL_TRANSPORT: 'resend', EMAIL_FROM: 'DM <no-reply@x.org>' }),
+      ).toThrow(/RESEND_API_KEY is required when EMAIL_TRANSPORT is "resend"/);
+      expect(() =>
+        parseServerEnv({ ...valid, EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_test' }),
+      ).toThrow(/EMAIL_FROM is required when EMAIL_TRANSPORT is "resend"/);
+    });
+
+    it('sends from development once both are set', () => {
+      expect(
+        parseServerEnv({
+          ...valid,
+          EMAIL_TRANSPORT: 'resend',
+          RESEND_API_KEY: 're_test',
+          EMAIL_FROM: 'Digital Minds <no-reply@auth.digitalmindsint.org>',
+        }),
+      ).toMatchObject({ EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_test' });
+    });
+
+    // `next build` runs with NODE_ENV=production but sends nothing, and CI builds with no key.
+    it('keeps the console during a production build, so a build needs no key', () => {
+      expect(
+        parseServerEnv({
+          ...valid,
+          NODE_ENV: 'production',
+          NEXT_PHASE: 'phase-production-build',
+        }),
+      ).toMatchObject({ EMAIL_TRANSPORT: 'console' });
+    });
+
+    it('refuses the console sender on a production server', () => {
+      expect(() => parseServerEnv({ ...production, EMAIL_TRANSPORT: 'console' })).toThrow(
+        /EMAIL_TRANSPORT must be "resend" in production/,
+      );
+    });
+
+    it('still refuses a production server with no key at all', () => {
+      const { RESEND_API_KEY: _omitted, ...withoutKey } = production;
+      expect(() => parseServerEnv(withoutKey)).toThrow(/RESEND_API_KEY/);
+    });
   });
   /*
    * The development secret is a fixed string in this repository, so nothing may ever sign with it

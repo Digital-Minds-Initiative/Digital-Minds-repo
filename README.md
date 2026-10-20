@@ -178,7 +178,20 @@ Four more people (رهف، تركي، سلمان، ليان) were added by admin
 
 The switcher needs `DEV_ACTOR_SWITCHER=true` in `.env` (the default in `.env.example`) and only works with `pnpm dev` and in tests: it is compiled out of production builds, and a production server refuses to start with the flag set. A real session (below) always wins over the switcher.
 
-**Signing in for real, locally.** Without `RESEND_API_KEY` in `.env`, no email is sent: the code is printed in the `pnpm dev` terminal instead. Until the sign-in screens exist, use curl (any seeded email, or any `@uqu.edu.sa` address to try the new-person flow):
+**Signing in for real, locally.** `EMAIL_TRANSPORT` picks how the sign-in code reaches you:
+
+- **`console`** (the default in development): no email is sent; the code is printed in the `pnpm dev` terminal.
+- **`resend`**: the code is emailed for real, so you can test delivery to a university inbox. Put these in `.env.local` (git-ignored, and it overrides `.env`), then restart `pnpm dev`:
+
+  ```bash
+  EMAIL_TRANSPORT=resend
+  EMAIL_FROM=Digital Minds <no-reply@auth.digitalmindsint.org>
+  RESEND_API_KEY=re_…   # from the Resend dashboard; never commit it
+  ```
+
+  With `resend` and no key the app refuses to start and names the missing variable, rather than failing on the first sign-in. The sender's domain must be verified in Resend, or Resend refuses the message (the request answers a 500 and the server log says `Resend refused the email (HTTP 403)`). Tests always use the console sender, whatever `.env.local` says.
+
+Until the sign-in screens exist, use curl (any seeded email, or any `@uqu.edu.sa` address to try the new-person flow):
 
 ```bash
 # 1. Ask for a code. Every POST needs an Origin equal to APP_ORIGIN (http://localhost:3000 by default).
@@ -350,7 +363,9 @@ Short version (full walkthrough with code in [docs/architecture.md → Adding a 
 
 **No sign-in email arrives**
 
-- Without `RESEND_API_KEY` none is sent: the code is printed in the `pnpm dev` terminal. A second request within 60 seconds answers `429 resend_cooldown`.
+- With `EMAIL_TRANSPORT=console` (the development default) none is sent: the code is printed in the `pnpm dev` terminal. Set it to `resend` in `.env.local` to send for real (see "Signing in for real, locally" in [Seeded accounts](#3-seeded-accounts)).
+- With `resend`: check the `pnpm dev` terminal for `Resend refused the email (HTTP …)` — a 403 usually means the `EMAIL_FROM` domain is not verified in Resend, a 401 a wrong key. Look in the spam folder too.
+- A second request within 60 seconds answers `429 resend_cooldown`.
 
 **Mock mode does not take effect**
 
@@ -390,7 +405,7 @@ Hosting is not decided yet; whatever runs the app must provide these. A producti
 | `DATABASE_URL`, `ALLOWED_EMAIL_DOMAINS`         | the production database, `uqu.edu.sa`                                                                                                                                                                                                                                                       |
 | `APP_ORIGIN`                                    | the public URL people open, e.g. `https://app.digitalmindsint.org` (CSRF check)                                                                                                                                                                                                             |
 | `AUTH_SECRET`                                   | your own random value, at least 32 characters (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)                                                                                                                                                               |
-| `RESEND_API_KEY`, `EMAIL_FROM`                  | the Resend key and `Digital Minds <no-reply@auth.digitalmindsint.org>`                                                                                                                                                                                                                      |
+| `RESEND_API_KEY`, `EMAIL_FROM`                  | the Resend key and `Digital Minds <no-reply@auth.digitalmindsint.org>`. Leave `EMAIL_TRANSPORT` unset: production defaults to `resend` and refuses `console`                                                                                                                                |
 | `CLIENT_IP_HEADER`                              | **required, no default.** The header your reverse proxy sets with the client IP (`x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`, …), so the per-IP sign-in limits work; or `none` to run without them deliberately. Never name a header the proxy does not set: clients could forge it. |
 | `DEV_ACTOR_SWITCHER`, `NEXT_PUBLIC_API_MOCKING` | `false` and `disabled` (the server refuses anything else)                                                                                                                                                                                                                                   |
 
