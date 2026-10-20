@@ -27,6 +27,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0021](0021-csv-member-import.md)                 | Import members from a CSV behind a preview the import must match                    | Accepted                        |
 | [0022](0022-bulk-points.md)                       | Bulk points: two endpoints, all or nothing, and a key that makes a resend harmless  | Accepted (extends 0019)         |
 | [0023](0023-committee-view-link.md)               | A committee view link: a capability token, stored twice, opening a whitelisted page | Accepted (amends 0002)          |
+| [0024](0024-content-security-policy.md)           | A nonce-based Content-Security-Policy, built per request in the proxy               | Accepted                        |
 
 ## Writing a new ADR
 

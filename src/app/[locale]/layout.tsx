@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 
@@ -29,6 +29,9 @@ export default async function LocaleLayout({ children, params }: LayoutProps<'/[
   // Without a saved choice, the init script applies the device's theme before paint.
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   const direction = localeDirection[locale];
+  // The Content-Security-Policy is built per request in src/proxy.ts, which passes its nonce
+  // along; Next.js puts it on its own scripts, and this is the one script we write ourselves.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
     <html
@@ -40,7 +43,7 @@ export default async function LocaleLayout({ children, params }: LayoutProps<'/[
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
         <NextIntlClientProvider>
