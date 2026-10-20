@@ -19,11 +19,18 @@ import { DashboardNav } from './dashboard-nav';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
 
-// Development only: compiled out of production builds.
-const DevActorSwitcher =
-  process.env.NODE_ENV === 'production'
-    ? () => null
-    : dynamic(() => import('./dev-actor-switcher'), { ssr: false });
+/**
+ * The persona switcher appears only where the server will honour it: never in a production build
+ * (compiled out), and in development only with DEV_ACTOR_SWITCHER=true — the same flag
+ * `resolveActor` checks, passed to the browser by next.config.ts. A button the server ignores
+ * would only mislead.
+ */
+const devActorSwitcherEnabled =
+  process.env.NODE_ENV !== 'production' && process.env.DEV_ACTOR_SWITCHER === 'true';
+
+const DevActorSwitcher = devActorSwitcherEnabled
+  ? dynamic(() => import('./dev-actor-switcher'), { ssr: false })
+  : () => null;
 
 const SIDEBAR_KEY = 'dm-sidebar-collapsed';
 const SIDEBAR_EVENT = 'dm-sidebar-change';
@@ -171,9 +178,7 @@ function ActorGate({ children }: { children: ReactNode }) {
       <EmptyState
         icon={LogIn}
         title={t('signedOut.title')}
-        description={
-          process.env.NODE_ENV === 'production' ? t('signedOut.body') : t('signedOut.devBody')
-        }
+        description={devActorSwitcherEnabled ? t('signedOut.devBody') : t('signedOut.body')}
         action={
           <Button asChild>
             <Link href="/login">{t('signedOut.action')}</Link>
