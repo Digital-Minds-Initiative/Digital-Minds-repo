@@ -39,6 +39,10 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
   poweredByHeader: false,
+  // The dashboard shows the persona switcher only when the server honours it, so the browser needs
+  // the same flag. Passed through rather than duplicated as a NEXT_PUBLIC_ variable that could
+  // drift from it; it is "true" or "false", nothing secret. Production builds ignore it.
+  env: { DEV_ACTOR_SWITCHER: process.env.DEV_ACTOR_SWITCHER ?? 'false' },
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },
