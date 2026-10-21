@@ -122,30 +122,42 @@ export type MemberSortField = (typeof memberSortFields)[number];
  * `sort` and `order` are optional because their defaults depend on the rest of the query: with
  * a work-date period the question being asked is "who earned the most", so the default becomes
  * points descending instead of name ascending.
+ *
+ * The list and the export (members-export.ts) share these fields, so a file holds exactly the
+ * rows the table showed. The club is not among them: the export takes it from its URL.
  */
+export const memberListFiltersShape = {
+  sort: z.enum(memberSortFields).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
+  /** Work-date period for the points shown; it never removes a member from the list. */
+  ...periodShape,
+  /** Name (Arabic-normalised), university email, or phone digits. */
+  q: querySearch(),
+  /** One committee: members currently in it, and its points in the column. */
+  committeeId: idSchema.optional(),
+  membershipTypeId: queryArray(idSchema).optional(),
+  role: clubRoleSchema.optional(),
+  registered: queryBoolean().optional(),
+  status: memberStatusSchema.default('active'),
+};
+
+/** The defaults `sort` and `order` take from the rest of the filters. */
+export function withMemberSortDefaults<
+  T extends { sort?: MemberSortField; order?: 'asc' | 'desc'; from?: string; to?: string },
+>(filters: T): T & { sort: MemberSortField; order: 'asc' | 'desc' } {
+  const hasPeriod = filters.from !== undefined || filters.to !== undefined;
+  const sort = filters.sort ?? (hasPeriod ? 'points' : 'fullName');
+  return { ...filters, sort, order: filters.order ?? (sort === 'points' ? 'desc' : 'asc') };
+}
+
 export const listMembersQuerySchema = z
   .object({
     ...paginationShape,
-    sort: z.enum(memberSortFields).optional(),
-    order: z.enum(['asc', 'desc']).optional(),
-    /** Work-date period for the points shown; it never removes a member from the list. */
-    ...periodShape,
-    /** Name (Arabic-normalised), university email, or phone digits. */
-    q: querySearch(),
+    ...memberListFiltersShape,
     clubId: idSchema.optional(),
-    /** One committee: members currently in it, and its points in the column. */
-    committeeId: idSchema.optional(),
-    membershipTypeId: queryArray(idSchema).optional(),
-    role: clubRoleSchema.optional(),
-    registered: queryBoolean().optional(),
-    status: memberStatusSchema.default('active'),
   })
   .superRefine(refinePeriod)
-  .transform((query) => {
-    const hasPeriod = query.from !== undefined || query.to !== undefined;
-    const sort = query.sort ?? (hasPeriod ? 'points' : 'fullName');
-    return { ...query, sort, order: query.order ?? (sort === 'points' ? 'desc' : 'asc') };
-  });
+  .transform(withMemberSortDefaults);
 export type ListMembersQuery = z.output<typeof listMembersQuerySchema>;
 export type ListMembersQueryInput = z.input<typeof listMembersQuerySchema>;
 
