@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/patterns/empty-state';
 import { Button } from '@/components/ui/button';
 import { DirectionalIcon } from '@/components/ui/directional-icon';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Link } from '@/i18n/navigation';
+import { Link, usePathname } from '@/i18n/navigation';
 
 import { DashboardNav } from './dashboard-nav';
 import { Logo } from './logo';
@@ -158,12 +158,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** Shows the page only to actors with dashboard access; explains why otherwise. */
+/** Shows a page only to actors with dashboard access — except the home page, open to every member. */
 function ActorGate({ children }: { children: ReactNode }) {
   const t = useTranslations('dashboard');
   const tErrors = useTranslations('common.errors');
   const tActions = useTranslations('common.actions');
   const me = useMe();
+  const pathname = usePathname();
 
   if (me.isPending) {
     return (
@@ -201,7 +202,9 @@ function ActorGate({ children }: { children: ReactNode }) {
       />
     );
   }
-  if (!me.data.access.canAccessDashboard) {
+  // The home page is everyone's: someone who manages nothing sees their own memberships there.
+  // The management screens stay closed to them.
+  if (!me.data.access.canAccessDashboard && pathname !== '/dashboard') {
     return (
       <EmptyState icon={ShieldOff} title={t('noAccess.title')} description={t('noAccess.body')} />
     );

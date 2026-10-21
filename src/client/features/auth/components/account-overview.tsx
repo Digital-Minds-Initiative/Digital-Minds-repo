@@ -11,6 +11,7 @@ import { PixelIcon } from '@/components/ui/pixel-icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from '@/i18n/navigation';
 
+import { MemberOverview } from './member-overview';
 import { useMe } from '../hooks/use-me';
 
 /** Dashboard home: the actor's roles, what they can manage, and their own memberships. */
@@ -29,6 +30,9 @@ export function AccountOverview() {
       </div>
     );
   }
+
+  // Nobody here manages a club or a committee: the page is about their own memberships.
+  if (!me.access.canAccessDashboard) return <MemberOverview me={me} />;
 
   const officerOf = me.memberships.filter((membership) => membership.role === 'CLUB_OFFICER');
   const leadOf = me.memberships.flatMap((membership) =>

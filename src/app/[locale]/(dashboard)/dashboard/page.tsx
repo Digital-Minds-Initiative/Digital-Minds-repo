@@ -18,7 +18,7 @@ export default async function DashboardPage({ params }: PageProps<'/[locale]/das
   const t = await getTranslations('dashboard');
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title={t('title')} description={t('welcomeDescription')} />
+      <PageHeader title={t('title')} />
       <AccountOverview />
     </div>
   );
