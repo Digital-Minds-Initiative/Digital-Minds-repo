@@ -91,7 +91,19 @@ export async function listMembers(
   query: ListMembersQuery,
 ): Promise<ListMembersResponse> {
   const basis = await resolveListFilters(actor, query);
-  const filters: MemberFilters = {
+  const { items, total } = await findListedMembers(
+    actor,
+    toMemberFilters(query),
+    query,
+    basis,
+    query,
+  );
+  return { items, ...pageMeta(total, query.page, query.pageSize), pointsBasis: basis };
+}
+
+/** The list's filters as the repository takes them. */
+export function toMemberFilters(query: Omit<ListMembersQuery, 'page' | 'pageSize'>): MemberFilters {
+  return {
     search: query.q,
     clubId: query.clubId,
     committeeId: query.committeeId,
@@ -100,13 +112,27 @@ export async function listMembers(
     registered: query.registered,
     status: query.status,
   };
-  const period = { from: query.from, to: query.to };
+}
+
+/**
+ * One page of the list, in its order, with the points the column shows. The members export reads
+ * its rows through here too, so a file holds what the table would have shown, in the same order
+ * (docs/adr/0025-members-export.md).
+ */
+export async function findListedMembers(
+  actor: Actor,
+  filters: MemberFilters,
+  order: { sort: ListMembersQuery['sort']; order: 'asc' | 'desc'; from?: string; to?: string },
+  basis: MemberPointsBasis,
+  page: { page: number; pageSize: number },
+): Promise<{ items: Member[]; total: number }> {
+  const period = { from: order.from, to: order.to };
   const pointsIn = basis.committee?.id ?? null;
 
   const { rows, total } =
-    query.sort === 'points'
-      ? await pageByPoints(actor, filters, period, pointsIn, query)
-      : await pageByColumn(actor, filters, { sort: query.sort, order: query.order }, query);
+    order.sort === 'points'
+      ? await pageByPoints(actor, filters, period, pointsIn, { ...page, order: order.order })
+      : await pageByColumn(actor, filters, { sort: order.sort, order: order.order }, page);
 
   // Two queries for the whole page, whatever its size (docs/adr/0019-points-rules.md).
   const balances = await getActivePointsByMember(
@@ -114,11 +140,7 @@ export async function listMembers(
     rows.map((row) => row.id),
     period,
   );
-  return {
-    items: rows.map((row) => toMember(row, balances.get(row.id), pointsIn)),
-    ...pageMeta(total, query.page, query.pageSize),
-    pointsBasis: basis,
-  };
+  return { items: rows.map((row) => toMember(row, balances.get(row.id), pointsIn)), total };
 }
 
 /** Sorting by something the database can order: it counts, sorts and pages in two queries. */
@@ -194,9 +216,9 @@ function pointsOf(balances: MemberBalances | undefined, committeeId: string | nu
  * one asked for, else the committee's, else the membership types'. Everything else must agree
  * with it.
  */
-async function resolveListFilters(
+export async function resolveListFilters(
   actor: Actor,
-  query: ListMembersQuery,
+  query: Pick<ListMembersQuery, 'clubId' | 'committeeId' | 'membershipTypeId' | 'from' | 'to'>,
 ): Promise<MemberPointsBasis> {
   const typeIds = query.membershipTypeId ?? [];
   const [club, committee, types] = await Promise.all([

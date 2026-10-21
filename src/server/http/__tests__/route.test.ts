@@ -375,6 +375,27 @@ describe('defineRoute', () => {
       expect(await response.text()).toBe('a,b\r\n');
     });
 
+    it('sends bytes with an Arabic name in filename* and an ASCII one beside it', async () => {
+      const bytesEndpoint = { ...fileEndpoint, response: z.instanceof(Uint8Array) };
+      const response = await callFile(
+        defineRoute(bytesEndpoint, async () =>
+          withFile(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+            contentType: 'application/octet-stream',
+            filename: 'أعضاء.xlsx',
+            fallbackFilename: 'members.xlsx',
+          }),
+        ),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-disposition')).toBe(
+        `attachment; filename="members.xlsx"; filename*=UTF-8''${encodeURIComponent('أعضاء.xlsx')}`,
+      );
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(
+        new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+      );
+    });
+
     it('still validates the text against the contract', async () => {
       const response = await callFile(
         defineRoute(fileEndpoint, async () =>

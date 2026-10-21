@@ -9,6 +9,7 @@ export {
   removeMemberFromCommittee,
   updateMember,
 } from './service';
+export { exportMembers } from './export-service';
 export {
   confirmMemberImport,
   getMemberImportTemplate,

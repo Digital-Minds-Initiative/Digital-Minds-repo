@@ -29,6 +29,7 @@ import {
   emptyResponse,
   errorResponse,
   fileResponse,
+  type FileDownload,
   jsonResponse,
   ResponseContractError,
 } from './responses';
@@ -91,7 +92,7 @@ class HandlerResult<T> {
     readonly data: T,
     readonly status?: number,
     readonly cookies: readonly string[] = [],
-    readonly file?: { contentType: string; filename: string },
+    readonly file?: FileDownload,
   ) {}
 }
 
@@ -101,15 +102,21 @@ export function withStatus<T>(status: number, data: T): HandlerResult<T> {
 }
 
 /**
- * Sends the handler's text as a file to download instead of as JSON. The endpoint's response
- * schema is that text (`z.string()`), so the contract still describes what comes back —
+ * Sends the handler's text or bytes as a file to download instead of as JSON. The endpoint's
+ * response schema is that data (`z.string()`, `z.instanceof(Uint8Array)`), so the contract still
+ * describes what comes back —
  * `withFile(buildTemplate(), { contentType: 'text/csv; charset=utf-8', filename: '…csv' })`.
+ * A name that is not ASCII also needs a `fallbackFilename` that is (see `contentDisposition`).
  */
-export function withFile<T extends string>(
-  text: T,
-  file: { contentType: string; filename: string },
+export function withFile<T extends string | Uint8Array>(
+  data: T,
+  file: FileDownload,
 ): HandlerResult<T> {
-  return new HandlerResult(text, 200, [], file);
+  return new HandlerResult(data, 200, [], {
+    contentType: file.contentType,
+    filename: file.filename,
+    ...(file.fallbackFilename === undefined ? {} : { fallbackFilename: file.fallbackFilename }),
+  });
 }
 
 /**
@@ -303,8 +310,8 @@ function successResponse(
     const parsed = endpoint.response.safeParse(wrapped.data);
     if (!parsed.success) throw new ResponseContractError(parsed.error);
     if (wrapped.file) {
-      if (typeof parsed.data !== 'string') {
-        throw new Error('withFile needs an endpoint whose response is the file’s text.');
+      if (typeof parsed.data !== 'string' && !(parsed.data instanceof Uint8Array)) {
+        throw new Error('withFile needs an endpoint whose response is the file’s text or bytes.');
       }
       response = fileResponse(parsed.data, wrapped.file, requestId);
     } else {
