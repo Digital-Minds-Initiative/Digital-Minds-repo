@@ -60,6 +60,25 @@ export function mockWithCookies<T>(data: T, cookies: readonly string[]): MockWit
   return new MockWithCookies(data, cookies);
 }
 
+class MockFile<T> {
+  constructor(
+    readonly data: T,
+    readonly file: { contentType: string; filename: string; fallbackFilename: string },
+  ) {}
+}
+
+/**
+ * Return this from a mock resolver to answer with a file download instead of JSON, with the
+ * headers the real `withFile` sends (src/server/http): the bytes, their type, and the ASCII and
+ * RFC 5987 names in `Content-Disposition`.
+ */
+export function mockFile<T extends Uint8Array>(
+  data: T,
+  file: { contentType: string; filename: string; fallbackFilename: string },
+): MockFile<T> {
+  return new MockFile(data, file);
+}
+
 interface MockRequestContext<E> {
   params: EndpointParams<E>;
   query: EndpointQuery<E>;
@@ -68,7 +87,8 @@ interface MockRequestContext<E> {
   request: Request;
 }
 
-type MockResult<E> = EndpointResult<E> | MockWithCookies<EndpointResult<E>> | MockError;
+type MockResult<E> =
+  EndpointResult<E> | MockWithCookies<EndpointResult<E>> | MockFile<EndpointResult<E>> | MockError;
 
 type MockResolver<E> = (context: MockRequestContext<E>) => MockResult<E> | Promise<MockResult<E>>;
 
@@ -129,6 +149,18 @@ export function mockEndpoint<E extends EndpointDefinition>(
 
     if (result instanceof MockError) {
       return errorResponse(result.code, result.message, result.details);
+    }
+    if (result instanceof MockFile) {
+      const bytes = endpoint.response?.parse(result.data);
+      if (!(bytes instanceof Uint8Array)) throw new Error('mockFile needs a bytes response.');
+      return new HttpResponse(new Uint8Array(bytes), {
+        status: 200,
+        headers: {
+          'content-type': result.file.contentType,
+          'cache-control': 'no-store',
+          'content-disposition': `attachment; filename="${result.file.fallbackFilename}"; filename*=UTF-8''${encodeURIComponent(result.file.filename)}`,
+        },
+      });
     }
     const { data, cookies: setCookies } =
       result instanceof MockWithCookies ? result : { data: result, cookies: [] };
