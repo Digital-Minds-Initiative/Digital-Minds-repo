@@ -55,10 +55,10 @@ own `findListedMembers`. The export therefore gets the same scopes, the same 404
 type out of reach, the same 422 for one from another club, the same order (including the
 JavaScript points ranking) and the same `Member` objects. Those objects already hold only what the
 actor may see, including a member's committee list narrowed to the committees a lead leads. The
-export adds no read rule of its own except one. An actor whose `membersScope` reaches nobody in the
-club (an ordinary member, an officer of another club, a lead elsewhere) gets a 404 for the club,
-where the list would answer an empty page. An empty file of a club you cannot list is not an
-answer worth giving.
+export adds no read rule of its own. The club in the URL goes through `clubsScope`, which reaches
+exactly the clubs whose members the actor can list: the clubs they manage and the clubs of the
+committees they lead. So an ordinary member, an officer of another club and a lead elsewhere get
+the same 404 the list gives for that `clubId`, never an empty file.
 
 No role sees fewer fields than another in the list today (leads see contact data for their
 committees, ADR 0017), so there is no column a role may not export and no 403. If that changes,
@@ -146,8 +146,6 @@ full admins will get one.
   export work beyond the shared shape.
 - A frontend sending stale filters with a selection gets `entries_rejected` naming the stale rows.
   That is deliberate: untick them, or refresh, and send again.
-- An ordinary member who calls the endpoint for their own club gets a 404 where the list gives an
-  empty page. The two endpoints differ there on purpose.
 - An exported file is not a live view; nothing can revoke it. The log and the rate limit are what
   we have, and the log will need a reader before it is useful.
 - `write-excel-file` is a production dependency. Its browser entry is used only by the MSW mock,

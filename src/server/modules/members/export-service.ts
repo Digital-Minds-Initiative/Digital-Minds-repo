@@ -1,12 +1,6 @@
 import 'server-only';
 
-import {
-  canReadClubMembers,
-  clubsScope,
-  committeeMembershipsScope,
-  membersScope,
-  type Actor,
-} from '@/server/authz';
+import { clubsScope, committeeMembershipsScope, membersScope, type Actor } from '@/server/authz';
 import { NotFoundError, ValidationError } from '@/server/errors';
 import {
   MEMBER_EXPORT_CONTENT_TYPE,
@@ -25,8 +19,7 @@ import { findListedMembers, resolveListFilters, toMemberFilters } from './servic
  * The members export (docs/adr/0025-members-export.md). It is the members list, written to a
  * file: the same filters resolved through the same scopes, the same rows in the same order, the
  * same `Member` objects and the same points. Nothing here decides who sees what — that is the
- * list's — except that an actor who could list nobody in the club is told so with a 404 instead
- * of being handed an empty file.
+ * list's.
  */
 
 export interface MemberExportFile {
@@ -47,8 +40,11 @@ export async function exportMembers(
   // First, before any lookup: every attempt costs the same, whatever it would have answered.
   await consumeMemberExportLimit(actor.userId, now);
 
+  // `clubsScope` reaches exactly the clubs whose members the actor can list (managed, or with a
+  // committee they lead), so an ordinary member, an officer of another club and a lead elsewhere
+  // all stop here with the list's own 404 — never with an empty file.
   const club = await findClubForExport(clubsScope(actor), clubId);
-  if (!club || !canReadClubMembers(actor, club.id)) throw new NotFoundError('Club');
+  if (!club) throw new NotFoundError('Club');
 
   const query = { ...body.filters, clubId: club.id };
   const basis = await resolveListFilters(actor, query);

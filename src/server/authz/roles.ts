@@ -70,15 +70,6 @@ export function canManageCommittee(actor: Actor, target: CommitteeTarget): boole
   return canManageClub(actor, target.clubId) || isLeadOf(actor, target.committeeId);
 }
 
-/**
- * Whether `membersScope` can reach any member of this club: full admin, its officer, or the lead
- * of one of its committees. For refusing with a 404 a request that would otherwise answer with
- * nothing — an ordinary member exporting their own club (docs/adr/0025-members-export.md).
- */
-export function canReadClubMembers(actor: Actor, clubId: string): boolean {
-  return canManageClub(actor, clubId) || clubIdsWithLedCommittees(actor).includes(clubId);
-}
-
 /** Whether the actor has any management scope at all (and may open the dashboard). */
 export function hasDashboardAccess(actor: Actor): boolean {
   return actor.isFullAdmin || officerClubIds(actor).length > 0 || ledCommitteeIds(actor).length > 0;

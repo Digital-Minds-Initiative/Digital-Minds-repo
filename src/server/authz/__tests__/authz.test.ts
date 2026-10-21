@@ -5,7 +5,6 @@ import {
   committeeViewPointsScope,
   canManageClub,
   canManageCommittee,
-  canReadClubMembers,
   clubsScope,
   committeeMembershipsScope,
   committeesScope,
@@ -162,19 +161,6 @@ describe('role hierarchy', () => {
     expect(hasDashboardAccess(leadA1)).toBe(true);
     expect(hasDashboardAccess(plainMember)).toBe(false);
     expect(hasDashboardAccess(nobody)).toBe(false);
-  });
-
-  it('reads the members of a club exactly where membersScope reaches into it', () => {
-    expect(canReadClubMembers(admin, CLUB_B)).toBe(true);
-    expect(canReadClubMembers(officerA, CLUB_A)).toBe(true);
-    expect(canReadClubMembers(leadA1, CLUB_A)).toBe(true);
-    expect(canReadClubMembers(mixed, CLUB_A)).toBe(true);
-
-    expect(canReadClubMembers(officerA, CLUB_B)).toBe(false);
-    expect(canReadClubMembers(leadA1, CLUB_B)).toBe(false);
-    expect(canReadClubMembers(mixed, CLUB_B)).toBe(false);
-    expect(canReadClubMembers(plainMember, CLUB_A)).toBe(false);
-    expect(canReadClubMembers(nobody, CLUB_A)).toBe(false);
   });
 });
 
