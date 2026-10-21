@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 
 import { cn } from '@/client/lib/utils';
+import { DELAYS } from '@/components/motion/delays';
 import { PixelSticker, type PixelStickerName } from '@/components/ui/pixel-sticker';
 
 /**
@@ -32,17 +33,24 @@ const TINTS: Record<PaperCardTint, string> = {
 interface Spot {
   place: string;
   tilt: string;
+  /** The same tilt in degrees, for the entrance animation to land on. */
+  rot: number;
   delay: string;
 }
 
 /** Back to front, from the inline-start edge. Cards past the fourth share the last spot. */
 const SPOTS: readonly Spot[] = [
-  { place: 'top-[14%] start-0 z-10', tilt: 'rotate-3', delay: '-1s' },
-  { place: 'top-[2%] start-[21.5%] z-20', tilt: '-rotate-2', delay: '-3s' },
-  { place: 'top-[28%] start-[42%] z-30', tilt: 'rotate-3', delay: '-5s' },
-  { place: 'top-[10%] start-[66.5%] z-40', tilt: '-rotate-4', delay: '0s' },
+  { place: 'top-[14%] start-0 z-10', tilt: 'rotate-3', rot: 3, delay: '-1s' },
+  { place: 'top-[2%] start-[21.5%] z-20', tilt: '-rotate-2', rot: -2, delay: '-3s' },
+  { place: 'top-[28%] start-[42%] z-30', tilt: 'rotate-3', rot: 3, delay: '-5s' },
+  { place: 'top-[10%] start-[66.5%] z-40', tilt: '-rotate-4', rot: -4, delay: '0s' },
 ];
-const LAST_SPOT: Spot = { place: 'top-[10%] start-[66.5%] z-40', tilt: '-rotate-4', delay: '0s' };
+const LAST_SPOT: Spot = {
+  place: 'top-[10%] start-[66.5%] z-40',
+  tilt: '-rotate-4',
+  rot: -4,
+  delay: '0s',
+};
 
 interface StickerSpot {
   name: PixelStickerName;
@@ -136,12 +144,14 @@ function LineText({ text }: { text: string }) {
 const RAIL_MASK =
   'radial-gradient(circle at 50% 4.5cqw, transparent 1.6cqw, black 1.9cqw) 0 0 / 100% 9cqw repeat-y';
 
-function Card({ card, spot }: { card: PaperCardItem; spot: Spot }) {
+function Card({ card, spot, index }: { card: PaperCardItem; spot: Spot; index: number }) {
   return (
     <li
       className={cn(
         'absolute w-[35%] drop-shadow-[0_16px_22px_color-mix(in_oklab,var(--slab)_45%,transparent)]',
         'motion-safe:animate-[folder-float_8s_ease-in-out_infinite]',
+        // Pointed at, a card comes to the front and its shadow deepens.
+        'transition-[filter] duration-(--duration-slow) hover:z-[60] hover:drop-shadow-[0_26px_30px_color-mix(in_oklab,var(--slab)_55%,transparent)]',
         spot.place,
       )}
       style={{ animationDelay: spot.delay }}
@@ -149,10 +159,18 @@ function Card({ card, spot }: { card: PaperCardItem; spot: Spot }) {
       <div
         className={cn(
           '[container-type:inline-size] relative flex aspect-[210/290] rounded-cell border border-paper-rule text-on-paper',
-          'transition-transform duration-(--duration-slow) ease-out motion-safe:hover:-translate-y-1.5',
+          'transition-[translate,rotate] duration-(--duration-slow) ease-out motion-safe:hover:-translate-y-1.5 motion-safe:hover:rotate-0',
+          // One after another on load: they arrive tilted too far and settle with a small bounce.
+          'motion-safe:animate-[card-settle_0.9s_cubic-bezier(0.34,1.3,0.64,1)_backwards]',
           spot.tilt,
           TINTS[card.tint],
         )}
+        style={
+          {
+            '--rot': `${spot.rot}deg`,
+            animationDelay: `${DELAYS.heroCards + index * DELAYS.heroCardsStep}ms`,
+          } as CSSProperties
+        }
       >
         <div
           aria-hidden
@@ -210,15 +228,15 @@ export function PaperCards({ cards, className }: { cards: PaperCardItem[]; class
     <div aria-hidden className={cn('relative mt-8 aspect-[1/0.82] w-full lg:mt-6', className)}>
       <ul className="m-0 list-none p-0">
         {cards.map((card, index) => (
-          <Card key={card.key} card={card} spot={SPOTS[index] ?? LAST_SPOT} />
+          <Card key={card.key} card={card} spot={SPOTS[index] ?? LAST_SPOT} index={index} />
         ))}
       </ul>
-      {STICKERS.map((sticker) => (
+      {STICKERS.map((sticker, index) => (
         <div
           key={sticker.name}
           className={cn(
             'pointer-events-none absolute drop-shadow-[0_4px_6px_color-mix(in_oklab,var(--slab)_40%,transparent)]',
-            'motion-safe:animate-[sticker-bob_var(--bob)_ease-in-out_infinite]',
+            'motion-safe:animate-[sticker-bob_var(--bob)_steps(6)_infinite]',
             sticker.place,
             sticker.size,
           )}
@@ -230,7 +248,13 @@ export function PaperCards({ cards, className }: { cards: PaperCardItem[]; class
             } as CSSProperties
           }
         >
-          <PixelSticker name={sticker.name} />
+          {/* Each sticker pops in, in pixel steps, after the cards; the outer box keeps its float. */}
+          <div
+            className="motion-safe:animate-[sticker-in_0.4s_steps(4)_backwards]"
+            style={{ animationDelay: `${DELAYS.stickers + index * DELAYS.stickersStep}ms` }}
+          >
+            <PixelSticker name={sticker.name} />
+          </div>
         </div>
       ))}
     </div>

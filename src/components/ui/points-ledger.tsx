@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { cn } from '@/client/lib/utils';
+import { Stagger } from '@/components/motion/stagger';
+import { useInView } from '@/components/motion/use-in-view';
 
 import { useTweenedNumber } from './use-tweened-number';
 
@@ -75,10 +77,14 @@ const ROW_COLUMNS =
 export function PointsLedger({ rows, labels, state, className }: PointsLedgerProps) {
   const own = usePointsLedger(rows);
   const { cancelled, pulse, total, toggle } = state ?? own;
-  const balance = useTweenedNumber(total);
+  // The balance counts up from 0 the first time the ledger is on screen.
+  const root = useRef<HTMLDivElement>(null);
+  const seen = useInView(root);
+  const balance = useTweenedNumber(seen ? total : 0);
 
   return (
     <div
+      ref={root}
       className={cn(
         'overflow-hidden rounded-card border border-border bg-surface-1 p-4 text-fg sm:p-5',
         className,
@@ -116,11 +122,11 @@ export function PointsLedger({ rows, labels, state, className }: PointsLedgerPro
         <span>{labels.reason}</span>
         <span className="text-end">{labels.points}</span>
       </div>
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      <Stagger as="ul" itemAs="li" step={100} className="m-0 flex list-none flex-col gap-2 p-0">
         {rows.map((row) => {
           const isCancelled = cancelled.has(row.id);
           return (
-            <li key={row.id}>
+            <div key={row.id}>
               <button
                 type="button"
                 aria-pressed={isCancelled}
@@ -147,6 +153,10 @@ export function PointsLedger({ rows, labels, state, className }: PointsLedgerPro
                 >
                   <svg viewBox="0 0 12 12" className="size-3" fill="none">
                     <path
+                      key={String(isCancelled)}
+                      pathLength={1}
+                      strokeDasharray={1}
+                      className="motion-safe:animate-[draw-stroke_0.35s_ease-out_both]"
                       d={isCancelled ? 'M3 3l6 6M9 3l-6 6' : 'M2.5 6.5l2.2 2.2L9.5 3.5'}
                       stroke="currentColor"
                       strokeWidth={1.8}
@@ -187,10 +197,10 @@ export function PointsLedger({ rows, labels, state, className }: PointsLedgerPro
                   {Math.abs(row.points)}
                 </span>
               </button>
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </Stagger>
     </div>
   );
 }

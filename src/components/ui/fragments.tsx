@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 
 import { attachCursor, attachDrag } from '@/client/lib/dm-engine';
 import { cn } from '@/client/lib/utils';
+import { useRevealOnView } from '@/components/motion/reveal';
 
 /**
  * An archive page: student work as loose pieces of paper you can pick up and
@@ -37,8 +38,10 @@ const KIND_CLASS: Record<FragmentPiece['kind'], string> = {
   custom: 'lg:w-fit',
 };
 
-function Piece({ piece }: { piece: FragmentPiece }) {
+function Piece({ piece, index }: { piece: FragmentPiece; index: number }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Stuck on the board one after another when it scrolls into view.
+  useRevealOnView(ref);
 
   useEffect(() => {
     const el = ref.current;
@@ -50,6 +53,7 @@ function Piece({ piece }: { piece: FragmentPiece }) {
     <div
       ref={ref}
       data-piece={piece.key}
+      data-reveal="drop"
       className={cn(
         'static mx-auto w-full max-w-md text-on-paper select-none sm:mx-0 sm:max-w-none',
         piece.kind !== 'custom' && 'rounded-cell border border-paper-rule',
@@ -62,7 +66,15 @@ function Piece({ piece }: { piece: FragmentPiece }) {
         KIND_CLASS[piece.kind],
         piece.className,
       )}
-      style={{ top: piece.top, insetInlineStart: piece.start, zIndex: piece.z }}
+      style={
+        {
+          top: piece.top,
+          insetInlineStart: piece.start,
+          zIndex: piece.z,
+          '--reveal-delay': `${index * 90}ms`,
+          '--reveal-tilt': `${piece.tiltDeg}deg`,
+        } as CSSProperties
+      }
     >
       {piece.content}
     </div>
@@ -98,8 +110,8 @@ export function Fragments({ pieces, header, className }: FragmentsProps) {
       <div className="relative z-10 pb-2 sm:col-span-2 lg:p-8">{header}</div>
       {/* Desktop: a centred 880px canvas the pieces are placed on; elsewhere it dissolves into the grid. */}
       <div className="contents lg:absolute lg:inset-x-0 lg:inset-y-0 lg:mx-auto lg:block lg:w-[min(100%,1040px)]">
-        {pieces.map((piece) => (
-          <Piece key={piece.key} piece={piece} />
+        {pieces.map((piece, index) => (
+          <Piece key={piece.key} piece={piece} index={index} />
         ))}
       </div>
       <div

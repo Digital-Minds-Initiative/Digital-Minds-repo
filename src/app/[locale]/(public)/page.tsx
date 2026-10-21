@@ -1,7 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 
+import { DELAYS } from '@/components/motion/delays';
+import { Reveal } from '@/components/motion/reveal';
+import { RevealWords } from '@/components/motion/reveal-words';
 import { Button } from '@/components/ui/button';
-import { DitherSeam } from '@/components/ui/dither-seam';
 import { FolderStack, type FolderItem } from '@/components/ui/folder-stack';
 import { Fragments, type FragmentPiece } from '@/components/ui/fragments';
 import { Hero } from '@/components/ui/hero';
@@ -9,6 +11,7 @@ import { IdeaNote } from '@/components/ui/idea-note';
 import { MissionNote } from '@/components/ui/mission-note';
 import { MomentScrap } from '@/components/ui/moment-scrap';
 import { PaperCards, type PaperCardItem } from '@/components/ui/paper-cards';
+import { PixelDivider } from '@/components/ui/pixel-divider';
 import { PixelSticker } from '@/components/ui/pixel-sticker';
 import { type PointsLedgerRow } from '@/components/ui/points-ledger';
 import { PointsSystem } from '@/components/ui/points-system';
@@ -20,7 +23,8 @@ import { resolveLocale } from '@/i18n/locale';
 import { Link } from '@/i18n/navigation';
 
 /** Lilac is the platform's primary action colour on the dark surfaces. */
-const PRIMARY_ACTION = 'border-tuwaiq-lilac bg-tuwaiq-lilac text-deep hover:bg-tuwaiq-lilac/85';
+const PRIMARY_ACTION =
+  'border-tuwaiq-lilac bg-tuwaiq-lilac text-deep hover:bg-tuwaiq-lilac/85 motion-safe:animate-[glow-pulse_3s_ease-in-out_infinite] motion-safe:transition-[translate,box-shadow] motion-safe:hover:translate-y-0.5 motion-safe:hover:animate-none motion-safe:hover:shadow-none motion-safe:active:translate-y-0.5';
 
 /** Create an account (primary) and sign in (secondary), side by side and stacked on small screens. */
 function AuthCtas({ signUp, signIn }: { signUp: string; signIn: string }) {
@@ -32,7 +36,7 @@ function AuthCtas({ signUp, signIn }: { signUp: string; signIn: string }) {
       <Button
         asChild
         variant="outline"
-        className="border-on-hero text-on-hero hover:bg-on-hero/10 hover:text-on-hero"
+        className="relative overflow-hidden border-on-hero text-on-hero before:absolute before:inset-0 before:-z-10 before:origin-right before:scale-x-0 before:bg-on-hero/10 before:transition-[scale] before:duration-300 before:ease-out hover:bg-transparent hover:text-on-hero hover:before:scale-x-100"
       >
         <Link href="/login">{signIn}</Link>
       </Button>
@@ -305,7 +309,7 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
             backgroundSize: '24px 24px',
           }}
         />
-        <div className="relative px-4 py-12 sm:py-16 lg:py-24">
+        <div className="relative px-4 pt-12 pb-12 sm:px-6 sm:pt-16 sm:pb-16 lg:px-8 lg:pt-[104px] lg:pb-24">
           <div className="mx-auto w-full max-w-6xl">
             <Hero
               tone="on-hero"
@@ -327,24 +331,34 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
         </div>
       </section>
 
-      <DitherSeam from="var(--hero-surface)" to="var(--canvas)" cell={8} cols={150} rows={2} />
+      <PixelDivider from="var(--hero-surface)" to="var(--canvas)" />
 
-      <section id="about" className="scroll-mt-4 px-4 py-12 sm:py-16 lg:py-24">
+      <section id="about" className="scroll-mt-24 px-4 py-12 sm:py-16 lg:py-24">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
-          <div className="order-2 mx-auto w-full max-w-xl lg:order-1">
-            <FolderStack items={folders} />
+          <div data-drift className="order-2 mx-auto w-full max-w-xl lg:order-1">
+            <Reveal variant="start" delay={4 * DELAYS.sectionStep}>
+              <FolderStack items={folders} />
+            </Reveal>
           </div>
-          <div className="order-1 lg:order-2">
-            <SpecLabel className="mb-4 block">{t('folders.sectionLabel')}</SpecLabel>
-            <h2 className="mb-5 font-serif text-[clamp(2rem,1.4rem+2.6vw,3.5rem)] leading-[1.25] font-medium text-balance">
-              {t('folders.title')}
-            </h2>
-            <p className="mb-4 max-w-xl text-base leading-8 text-muted sm:text-lg">
-              {t('folders.body1')}
-            </p>
-            <p className="max-w-xl text-base leading-8 text-muted sm:text-lg">
-              {t('folders.body2')}
-            </p>
+          <div data-drift="slow" className="order-1 lg:order-2">
+            <SpecLabel typed className="mb-4 block">
+              {t('folders.sectionLabel')}
+            </SpecLabel>
+            <Reveal delay={DELAYS.sectionStep}>
+              <h2 className="mb-5 font-serif text-[clamp(2rem,1.4rem+2.6vw,3.5rem)] leading-[1.25] font-medium text-balance">
+                {t('folders.title')}
+              </h2>
+            </Reveal>
+            <Reveal delay={2 * DELAYS.sectionStep}>
+              <p className="mb-4 max-w-xl text-base leading-8 text-muted sm:text-lg">
+                {t('folders.body1')}
+              </p>
+            </Reveal>
+            <Reveal delay={3 * DELAYS.sectionStep}>
+              <p className="max-w-xl text-base leading-8 text-muted sm:text-lg">
+                {t('folders.body2')}
+              </p>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -370,7 +384,7 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
         }}
       />
 
-      <section id="features" className="px-4 py-12 sm:py-16 lg:py-24">
+      <section id="features" className="scroll-mt-24 px-4 py-12 sm:py-16 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">
           <Fragments
             pieces={featurePieces}
@@ -387,13 +401,23 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
         </div>
       </section>
 
+      <PixelDivider from="var(--canvas)" to="var(--hero-surface)" />
+
       <section className="bg-hero px-4 py-12 text-on-hero sm:py-16 lg:py-24">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-start gap-6">
-          <h2 className="font-serif text-3xl font-semibold sm:text-4xl">{t('closing.title')}</h2>
-          <p className="max-w-xl text-base leading-8 text-on-hero-muted sm:text-lg">
-            {t('closing.body')}
-          </p>
-          <AuthCtas signIn={t('cta.signIn')} signUp={t('cta.signUp')} />
+          <RevealWords
+            as="h2"
+            className="font-serif text-3xl font-semibold sm:text-4xl"
+            text={t('closing.title')}
+          />
+          <Reveal delay={4 * DELAYS.sectionStep}>
+            <p className="max-w-xl text-base leading-8 text-on-hero-muted sm:text-lg">
+              {t('closing.body')}
+            </p>
+          </Reveal>
+          <Reveal delay={5 * DELAYS.sectionStep} className="w-full sm:w-auto">
+            <AuthCtas signIn={t('cta.signIn')} signUp={t('cta.signUp')} />
+          </Reveal>
         </div>
       </section>
     </>

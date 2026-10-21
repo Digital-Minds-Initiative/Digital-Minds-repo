@@ -1,7 +1,7 @@
 'use client';
 
 import { RotateCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 import { cn } from '@/client/lib/utils';
 import { DoodleCross, DoodleStar, ScrapPaper, Tape } from '@/components/ui/scrapbook';
@@ -30,6 +30,14 @@ export interface TicTacToeLabels {
 }
 
 const COMPUTER_DELAY_MS = 450;
+
+/** Arrow keys move one cell on the screen: the drawing's columns run left to right in every language. */
+const ARROW_STEP = {
+  ArrowRight: { row: 0, col: 1 },
+  ArrowLeft: { row: 0, col: -1 },
+  ArrowDown: { row: 1, col: 0 },
+  ArrowUp: { row: -1, col: 0 },
+} as const;
 
 /** Where each cell's centre is in the 120×120 drawing. */
 const CENTRES = [24, 61, 97] as const;
@@ -93,6 +101,7 @@ export function TicTacToeNote({
 }) {
   const [board, setBoard] = useState<Board>(EMPTY_BOARD);
   const [human, setHuman] = useState<Mark>('X');
+  const cellRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const win = winnerOf(board);
   const draw = !win && isFull(board);
@@ -130,6 +139,17 @@ export function TicTacToeNote({
   function restart(as: Mark = human) {
     setHuman(as);
     setBoard(EMPTY_BOARD);
+  }
+
+  /** One cell in the pressed direction from the focused one; nothing wraps past the edge. */
+  function onGridKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step = ARROW_STEP[event.key as keyof typeof ARROW_STEP];
+    const from = cellRefs.current.findIndex((cell) => cell === document.activeElement);
+    if (!step || from < 0) return;
+    event.preventDefault();
+    const row = Math.floor(from / 3) + step.row;
+    const col = (from % 3) + step.col;
+    if (row >= 0 && row < 3 && col >= 0 && col < 3) cellRefs.current[row * 3 + col]?.focus();
   }
 
   const winLine = win
@@ -170,18 +190,29 @@ export function TicTacToeNote({
             />
           ) : null}
         </svg>
-        <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+        {/* The drawing above is laid out left to right whatever the page direction, so the cells
+            over it are too: in a right-to-left page the first cell would sit under the drawing's last. */}
+        <div
+          dir="ltr"
+          onKeyDown={onGridKeyDown}
+          className="absolute inset-0 grid grid-cols-3 grid-rows-3"
+        >
           {board.map((mark, index) => (
             <button
               key={index}
+              ref={(node) => {
+                cellRefs.current[index] = node;
+              }}
               type="button"
-              disabled={over || !humanTurn || mark !== null}
+              // Not `disabled`: a disabled button drops focus, and a player on the keyboard would lose
+              // their place after every move. Pressing a cell that cannot be played does nothing.
+              aria-disabled={over || !humanTurn || mark !== null}
               aria-label={`${labels.cell.replace('{n}', String(index + 1))}، ${mark ?? labels.empty}`}
               onClick={() => {
-                if (!humanTurn || mark !== null) return;
+                if (over || !humanTurn || mark !== null) return;
                 setBoard((current) => place(current, index, human));
               }}
-              className="cursor-pointer rounded-md outline-none focus-visible:outline-2 focus-visible:outline-tuwaiq-indigo focus-visible:outline-solid enabled:hover:bg-tuwaiq-lilac/15 disabled:cursor-default"
+              className="cursor-pointer rounded-md outline-none focus-visible:outline-2 focus-visible:outline-tuwaiq-indigo focus-visible:outline-solid aria-disabled:cursor-default aria-[disabled=false]:hover:bg-tuwaiq-lilac/15"
             />
           ))}
         </div>

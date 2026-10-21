@@ -2,8 +2,9 @@
 
 import { Moon, Sun } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
 import { readCookie } from '@/shared/lib/cookies';
 
@@ -59,6 +60,8 @@ export function ThemeToggle({ className }: { className?: string }) {
   const t = useTranslations('common.theme');
   // Unknown on the server when no choice is saved; settled right after hydration.
   const theme = useSyncExternalStore(subscribe, appliedTheme, () => null);
+  // Bumped on every press so the icon's half turn starts again.
+  const [turns, setTurns] = useState(0);
 
   return (
     <Button
@@ -67,10 +70,19 @@ export function ThemeToggle({ className }: { className?: string }) {
       className={className}
       aria-label={t('dark')}
       aria-pressed={theme === 'dark'}
-      onClick={() => saveTheme(appliedTheme() === 'dark' ? 'light' : 'dark')}
+      onClick={() => {
+        setTurns((current) => current + 1);
+        saveTheme(appliedTheme() === 'dark' ? 'light' : 'dark');
+      }}
     >
       {/* The icon follows the applied theme via CSS, so it is right on the first paint. */}
-      <span className="grid place-items-center *:col-start-1 *:row-start-1">
+      <span
+        key={turns}
+        className={cn(
+          'grid place-items-center *:col-start-1 *:row-start-1',
+          turns > 0 && 'motion-safe:animate-[spin-half_0.4s_steps(4)]',
+        )}
+      >
         <Sun
           aria-hidden
           className="transition-[rotate,scale,opacity] duration-700 ease-out motion-reduce:transition-none dark:scale-50 dark:-rotate-90 dark:opacity-0"
