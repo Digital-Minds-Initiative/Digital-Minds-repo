@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Actor } from '@/server/authz';
 import { db } from '@/server/db/client';
@@ -528,11 +528,29 @@ describe('exporting members', () => {
       ).map((row) => row.id);
     }, 120_000);
 
-    it('refuses 5001 members with too_many_rows, before building anything', async () => {
+    it('refuses 5001 members with too_many_rows, before reading a single row', async () => {
       const before = await exportCount();
-      await expectInvalid(exportMembers(admin, bigClub.id, body()), 'too_many_rows');
+      const reads = vi.spyOn(db.membership, 'findMany');
+      try {
+        await expectInvalid(exportMembers(admin, bigClub.id, body()), 'too_many_rows');
+        // One COUNT decided it: no member row was read, let alone written to a file.
+        expect(reads).not.toHaveBeenCalled();
+      } finally {
+        reads.mockRestore();
+      }
       expect(await exportCount()).toBe(before);
     });
+
+    it('still refuses when members were added between the count and the read', async () => {
+      // The count says 5000 — the club had that many a moment ago — but 5001 are there by the
+      // time the rows are read. The file is refused, not cut off at an arbitrary member.
+      const count = vi.spyOn(db.membership, 'count').mockResolvedValueOnce(5000);
+      try {
+        await expectInvalid(exportMembers(admin, bigClub.id, body()), 'too_many_rows');
+      } finally {
+        count.mockRestore();
+      }
+    }, 60_000);
 
     it('exports 5000 members, picked by filter or by id', async () => {
       // One of the 5001 removed: the default (active) list is exactly at the limit.
