@@ -1,6 +1,6 @@
 'use client';
 
-import { Crown, Info, Plus, RotateCw, ShieldCheck, UserMinus } from 'lucide-react';
+import { Crown, Plus, RotateCw, ShieldCheck, UserMinus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toaster';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Me } from '@/shared/contracts/auth';
 
 import { AppointDialog } from './appoint-dialog';
@@ -28,6 +27,9 @@ interface HoldersPanelProps {
   club: { id: string; name: string };
   access: RoleAccess;
   me: Me;
+  /** The "appoint an officer" button lives in the page's toolbar, so its dialog is opened from there. */
+  appointingOfficer: boolean;
+  onAppointingOfficerChange: (open: boolean) => void;
 }
 
 type Revoking =
@@ -41,14 +43,29 @@ type Appointing = { kind: 'officer' } | { kind: 'lead'; committee: { id: string;
  * and full admins appoint and remove committee leads. A committee with no lead is listed too, with
  * the button to appoint one.
  */
-export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
+export function HoldersPanel({
+  club,
+  access,
+  me,
+  appointingOfficer,
+  onAppointingOfficerChange,
+}: HoldersPanelProps) {
   const t = useTranslations('permissions');
   const errorText = useErrorText();
   const holders = useClubPermissions(club.id);
   const committees = useClubCommittees(club.id);
   const setClubRole = useSetClubRole();
   const setCommitteeRole = useSetCommitteeRole();
-  const [appointing, setAppointing] = useState<Appointing | null>(null);
+  const [leadAppointing, setLeadAppointing] = useState<Extract<
+    Appointing,
+    { kind: 'lead' }
+  > | null>(null);
+  const appointing: Appointing | null =
+    leadAppointing ?? (appointingOfficer ? { kind: 'officer' } : null);
+  const closeAppointing = () => {
+    setLeadAppointing(null);
+    onAppointingOfficerChange(false);
+  };
   const [revoking, setRevoking] = useState<Revoking | null>(null);
 
   if (holders.isPending || committees.isPending) {
@@ -82,55 +99,45 @@ export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
   return (
     <div className="grid gap-6">
       <section aria-label={t('officers.title')} className="grid gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="grid gap-1">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               <ShieldCheck className="size-5 text-primary" aria-hidden />
               {t('officers.title')}
+              <Badge variant="neutral">{officers.length}</Badge>
             </h2>
-            <Badge variant="neutral">{t('officers.assignedBy')}</Badge>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t('officers.scopeLabel')}
-                  className="rounded-full p-0.5 text-fg-subtle outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid"
-                >
-                  <Info className="size-4" aria-hidden />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>{t('officers.scope')}</TooltipContent>
-            </Tooltip>
+            <p className="text-sm text-fg-muted">
+              {t('officers.scope')}{' '}
+              <span className="text-fg-subtle">{t('officers.assignedBy')}</span>
+            </p>
           </div>
-          {access.canSetOfficers ? (
-            <Button size="sm" onClick={() => setAppointing({ kind: 'officer' })}>
-              <Plus aria-hidden />
-              {t('officers.appoint')}
-            </Button>
-          ) : null}
         </div>
         {officers.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border-strong px-4 py-3 text-sm text-fg-muted">
             {t('officers.empty')}
           </p>
         ) : (
-          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3 p-0">
             {officers.map((officer) => (
               <li
                 key={officer.memberId}
-                className="flex items-center gap-3 rounded-card border border-border bg-surface-1 p-3"
+                className="flex items-center gap-3 rounded-card border border-border bg-surface-1 px-3 py-2.5 transition-colors hover:bg-surface-2"
               >
                 <Avatar name={officer.fullName} />
-                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="truncate font-medium">{officer.fullName}</span>
-                  {isMe(officer.fullName) ? (
-                    <Badge variant="primary">{t('officers.you')}</Badge>
-                  ) : null}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{officer.fullName}</span>
+                    {isMe(officer.fullName) ? (
+                      <Badge variant="primary">{t('officers.you')}</Badge>
+                    ) : null}
+                  </span>
+                  <span className="text-xs text-fg-muted">{t('officers.roleLabel')}</span>
                 </span>
                 {access.canSetOfficers ? (
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    className="text-fg-muted hover:text-danger"
                     aria-label={t('officers.revokeLabel', { name: officer.fullName })}
                     onClick={() =>
                       setRevoking({
@@ -150,37 +157,41 @@ export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
       </section>
 
       <section aria-label={t('leads.title')} className="grid gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Crown className="size-5 text-primary" aria-hidden />
-          {t('leads.title')}
-        </h2>
+        <div className="grid gap-1">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Crown className="size-5 text-primary" aria-hidden />
+            {t('leads.title')}
+            <Badge variant="neutral">{leads.length}</Badge>
+          </h2>
+          <p className="text-sm text-fg-muted">{t('leads.description')}</p>
+        </div>
         {committees.data.items.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border-strong px-4 py-3 text-sm text-fg-muted">
             {t('leads.noCommittees')}
           </p>
         ) : (
-          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(21rem,1fr))] items-start gap-3 p-0">
             {committees.data.items.map((committee) => {
               const committeeLeads = leads.filter((lead) => lead.committee.id === committee.id);
               return (
                 <li
                   key={committee.id}
-                  className="grid content-start gap-2 rounded-card border border-border bg-surface-1 p-4"
+                  className="grid content-start gap-3 rounded-card border border-border bg-surface-1 p-4"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-semibold">{committee.name}</h3>
-                      <Badge variant={committeeLeads.length === 0 ? 'neutral' : 'info'}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h3 className="truncate text-base font-semibold">{committee.name}</h3>
+                      <Badge variant={committeeLeads.length === 0 ? 'warning' : 'info'}>
                         {t('leads.count', { count: committeeLeads.length })}
                       </Badge>
                     </div>
                     {access.canSetLeads ? (
                       <Button
-                        variant="outline"
+                        variant={committeeLeads.length === 0 ? 'primary' : 'outline'}
                         size="sm"
                         aria-label={t('leads.appointFor', { committee: committee.name })}
                         onClick={() =>
-                          setAppointing({
+                          setLeadAppointing({
                             kind: 'lead',
                             committee: { id: committee.id, name: committee.name },
                           })
@@ -192,14 +203,14 @@ export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
                     ) : null}
                   </div>
                   {committeeLeads.length > 0 ? (
-                    <ul className="m-0 grid list-none gap-1 p-0">
+                    <ul className="m-0 grid list-none gap-0.5 border-t border-border/60 p-0 pt-2">
                       {committeeLeads.map((lead) => (
                         <li
                           key={lead.memberId}
                           className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-2"
                         >
                           <Avatar name={lead.fullName} size="sm" />
-                          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
                             <span className="truncate text-sm font-medium">{lead.fullName}</span>
                             {isMe(lead.fullName) ? (
                               <Badge variant="primary">{t('leads.you')}</Badge>
@@ -209,6 +220,7 @@ export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
                             <Button
                               variant="ghost"
                               size="icon-sm"
+                              className="text-fg-muted hover:text-danger"
                               aria-label={t('leads.revokeLabel', {
                                 name: lead.fullName,
                                 committee: committee.name,
@@ -228,7 +240,11 @@ export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
                         </li>
                       ))}
                     </ul>
-                  ) : null}
+                  ) : (
+                    <p className="border-t border-border/60 pt-3 text-sm text-fg-muted">
+                      {t('leads.empty')}
+                    </p>
+                  )}
                 </li>
               );
             })}
@@ -242,7 +258,7 @@ export function HoldersPanel({ club, access, me }: HoldersPanelProps) {
         }
         open={appointing !== null}
         onOpenChange={(open) => {
-          if (!open) setAppointing(null);
+          if (!open) closeAppointing();
         }}
         title={
           appointing?.kind === 'lead'

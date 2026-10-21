@@ -1,5 +1,8 @@
 'use client';
 
+import { DELAYS } from '@/components/motion/delays';
+import { Reveal } from '@/components/motion/reveal';
+
 import { MonthlyLeaderboard } from './monthly-leaderboard';
 import {
   PointsLedger,
@@ -44,12 +47,20 @@ export function PointsSystem({ ledger, board }: PointsSystemProps) {
     <>
       <section className="px-4 py-12 sm:py-16 lg:py-24">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
-          <div className="order-2 min-w-0 lg:order-1">
+          <Reveal
+            variant="start"
+            delay={2 * DELAYS.sectionStep}
+            className="order-2 min-w-0 lg:order-1"
+          >
             <PointsLedger rows={ledger.rows} labels={ledger.labels} state={state} />
-          </div>
+          </Reveal>
           <div className="order-1 min-w-0 lg:order-2">
-            <SpecLabel className="mb-4 block">{ledger.sectionLabel}</SpecLabel>
-            <h2 className={headingClass}>{ledger.title}</h2>
+            <SpecLabel typed className="mb-4 block">
+              {ledger.sectionLabel}
+            </SpecLabel>
+            <Reveal delay={DELAYS.sectionStep}>
+              <h2 className={headingClass}>{ledger.title}</h2>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -57,10 +68,16 @@ export function PointsSystem({ ledger, board }: PointsSystemProps) {
       <section className="px-4 py-12 sm:py-16 lg:py-24">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <div>
-            <SpecLabel className="mb-4 block">{board.sectionLabel}</SpecLabel>
-            <h2 className={headingClass}>{board.title}</h2>
+            <SpecLabel typed className="mb-4 block">
+              {board.sectionLabel}
+            </SpecLabel>
+            <Reveal delay={DELAYS.sectionStep}>
+              <h2 className={headingClass}>{board.title}</h2>
+            </Reveal>
           </div>
-          <MonthlyLeaderboard entries={entries} panelLabel={board.panelLabel} />
+          <Reveal variant="end" delay={2 * DELAYS.sectionStep}>
+            <MonthlyLeaderboard entries={entries} panelLabel={board.panelLabel} />
+          </Reveal>
         </div>
       </section>
     </>

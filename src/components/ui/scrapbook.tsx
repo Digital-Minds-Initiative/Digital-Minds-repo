@@ -95,6 +95,7 @@ export function Tape({ tone = 'lilac', className }: { tone?: TapeTone; className
   return (
     <span
       aria-hidden
+      data-tape
       className={cn('absolute z-20 block h-5 w-16 opacity-85', TAPE_TONES[tone], className)}
       style={
         {

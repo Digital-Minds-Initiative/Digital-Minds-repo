@@ -4,6 +4,7 @@ import { RotateCcw, Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
+import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,22 +20,19 @@ import {
   memberStatusSchema,
   type ListMembersQuery,
 } from '@/shared/contracts/members';
-import { todayInAppTimeZone } from '@/shared/lib/dates';
 
 import { CommitteeFilter } from './committee-filter';
 import { useClubTypes } from '../hooks/use-member-actions';
 
 const ALL = 'all';
 
-/**
- * A typed date the API will accept, or nothing: an empty or half-typed field, a day outside
- * [min, max], clears that end of the period rather than sending a request the server refuses.
- */
-function validDate(value: string, min: string | undefined, max: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-  if ((min && value < min) || value > max) return undefined;
-  return value;
-}
+/** One height for the search box and every filter; a filter that narrows the list is tinted. */
+const filterClass = (active: boolean) =>
+  cn(
+    'h-9 w-full gap-2 sm:w-auto',
+    active && 'border-primary/50 bg-primary-subtle font-medium text-primary-subtle-fg',
+  );
+
 const SEARCH_DEBOUNCE_MS = 300;
 
 interface MembersToolbarProps {
@@ -74,11 +72,10 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
     query.from ||
     query.to,
   );
-  const today = todayInAppTimeZone();
 
   return (
     <>
-      <div className="relative min-w-64 flex-[2_1_20rem]">
+      <div className="relative w-full sm:w-72">
         <Search
           className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
           aria-hidden
@@ -89,7 +86,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
           onChange={(event) => setSearch(event.target.value)}
           placeholder={t('search')}
           aria-label={t('search')}
-          className="ps-9"
+          className="h-9 ps-9"
         />
       </div>
 
@@ -100,7 +97,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
             onChange({ clubId: value === ALL ? undefined : value, committeeId: undefined })
           }
         >
-          <SelectTrigger className="w-full sm:w-44" aria-label={t('club')}>
+          <SelectTrigger className={filterClass(Boolean(query.clubId))} aria-label={t('club')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -114,7 +111,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
         </Select>
       ) : null}
 
-      {committees.length > 0 ? (
+      {committees.length > 1 ? (
         <CommitteeFilter
           committees={committees}
           selected={query.committeeId}
@@ -126,7 +123,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
         value={query.status}
         onValueChange={(value) => onChange({ status: memberStatusSchema.parse(value) })}
       >
-        <SelectTrigger className="w-full sm:w-40" aria-label={t('status')}>
+        <SelectTrigger className={filterClass(query.status !== 'active')} aria-label={t('status')}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -143,7 +140,10 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
             onChange({ membershipTypeId: value === ALL ? undefined : [value] })
           }
         >
-          <SelectTrigger className="w-full sm:w-44" aria-label={t('membershipType')}>
+          <SelectTrigger
+            className={filterClass(Boolean(query.membershipTypeId?.length))}
+            aria-label={t('membershipType')}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -163,7 +163,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
           onChange({ role: value === ALL ? undefined : clubRoleSchema.parse(value) })
         }
       >
-        <SelectTrigger className="w-full sm:w-44" aria-label={t('role')}>
+        <SelectTrigger className={filterClass(Boolean(query.role))} aria-label={t('role')}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -179,7 +179,10 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
           onChange({ registered: value === ALL ? undefined : value === 'yes' })
         }
       >
-        <SelectTrigger className="w-full sm:w-44" aria-label={t('registered')}>
+        <SelectTrigger
+          className={filterClass(query.registered !== undefined)}
+          aria-label={t('registered')}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -189,39 +192,10 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
         </SelectContent>
       </Select>
 
-      <fieldset className="m-0 flex flex-wrap items-center gap-2 border-0 p-0">
-        <legend className="sr-only">{t('period')}</legend>
-        <Input
-          type="date"
-          value={query.from ?? ''}
-          // No later than today (work dates never are) or than the end already chosen.
-          max={query.to ?? today}
-          onChange={(event) =>
-            onChange({ from: validDate(event.target.value, undefined, query.to ?? today) })
-          }
-          aria-label={t('periodFrom')}
-          title={t('periodFrom')}
-          className="w-full sm:w-40"
-        />
-        <span className="text-sm text-fg-subtle" aria-hidden>
-          –
-        </span>
-        <Input
-          type="date"
-          value={query.to ?? ''}
-          min={query.from}
-          max={today}
-          onChange={(event) => onChange({ to: validDate(event.target.value, query.from, today) })}
-          aria-label={t('periodTo')}
-          title={t('periodTo')}
-          className="w-full sm:w-40"
-        />
-      </fieldset>
-
       {hasFilters ? (
         <Button
           variant="ghost"
-          size="sm"
+          className="h-9"
           onClick={() => {
             setSearch('');
             onChange({

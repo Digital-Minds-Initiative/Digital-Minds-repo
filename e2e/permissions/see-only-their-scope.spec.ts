@@ -220,6 +220,14 @@ for (const { who, email } of [
       await expect(page.getByText('لا تملك صلاحيات إدارية')).toBeVisible();
       await expect(page.getByRole('button', { name: /^فتح ملف / })).toHaveCount(0);
     });
+
+    test('still has a home page of their own, with no management in it', async ({ page }) => {
+      await actAs(page, email);
+      await page.goto('/dashboard');
+      await expect(page.getByText(/^أهلاً /)).toBeVisible();
+      await expect(page.getByText('لا تملك صلاحيات إدارية')).toHaveCount(0);
+      await expect(page.getByRole('navigation', { name: 'أقسام لوحة التحكم' })).toHaveCount(0);
+    });
   });
 }
 

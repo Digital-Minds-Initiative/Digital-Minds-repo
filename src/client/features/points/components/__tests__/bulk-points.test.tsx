@@ -163,12 +163,14 @@ describe('bulk points — one committee', { timeout: 30_000 }, () => {
     const dialog = await openCommitteeBatch(user);
     await user.click(within(dialog).getAllByRole('checkbox')[0] as HTMLElement);
     await user.click(within(dialog).getByRole('button', { name: 'تسجيل النقاط لعضو واحد' }));
-    expect(await within(dialog).findAllByText('هذا الحقل مطلوب')).not.toHaveLength(0);
+    expect(await within(dialog).findAllByText('هذا الحقل مطلوب.')).not.toHaveLength(0);
     await user.type(within(dialog).getByLabelText(/عدد النقاط/), '0');
     await user.type(within(dialog).getByLabelText(/السبب/), 'سبب');
     await user.click(within(dialog).getByRole('button', { name: 'تسجيل النقاط لعضو واحد' }));
     // The form's own rule, so nothing is sent for it.
-    expect(await within(dialog).findByText('القيمة أقصر أو أصغر من المسموح')).toBeTruthy();
+    expect(
+      await within(dialog).findByText('النص أقصر من الحد الأدنى، أو القيمة أقل من الحد المسموح.'),
+    ).toBeTruthy();
   });
 
   it('writes nothing when one member can no longer be given points, unticks them, then sends the rest', async () => {

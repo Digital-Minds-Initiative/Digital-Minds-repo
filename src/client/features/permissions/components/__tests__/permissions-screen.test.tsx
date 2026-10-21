@@ -159,7 +159,7 @@ describe('PermissionsScreen — appointing and removing', { timeout: 30_000 }, (
     }).length;
     await user.click(remove);
     const confirm = await screen.findByRole('alertdialog');
-    await user.click(within(confirm).getByRole('button', { name: 'إزالة' }));
+    await user.click(within(confirm).getByRole('button', { name: 'إزالة الصلاحية' }));
     await waitFor(
       () =>
         expect(
@@ -186,16 +186,6 @@ describe('PermissionsScreen — appointing and removing', { timeout: 30_000 }, (
 });
 
 describe('PermissionsScreen — the lighter layout', { timeout: 30_000 }, () => {
-  it('keeps the guide behind a button and opens it in a dialog', async () => {
-    const user = await renderPage(OFFICER);
-    await screen.findAllByRole('button', { name: /^تعيين قائد لـ/ }, { timeout: 15_000 });
-    expect(screen.queryByRole('region', { name: 'من يستطيع ماذا' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'دليل الصلاحيات' }));
-    const dialog = await screen.findByRole('dialog', { name: 'من يستطيع ماذا' });
-    expect(within(dialog).getByText('صلاحيتك')).toBeTruthy();
-    expect(within(dialog).getAllByRole('listitem')).toHaveLength(3);
-  });
-
   it('puts the tabs under the title and a lead count and initials on each committee', async () => {
     await renderPage(OFFICER);
     const design = (

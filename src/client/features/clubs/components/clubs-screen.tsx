@@ -8,6 +8,7 @@ import { useMe } from '@/client/features/auth';
 import { useErrorText } from '@/client/lib/use-error-text';
 import { cn } from '@/client/lib/utils';
 import { EmptyState } from '@/components/patterns/empty-state';
+import { PageHeader } from '@/components/patterns/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -25,7 +26,7 @@ import { clubAccess } from '../lib/access';
  * per club (see `clubAccess`). An officer whose only club is archived gets an empty list from the
  * server, so that case has its own message that points at "show archived".
  */
-export function ClubsScreen() {
+export function ClubsScreen({ title, description }: { title: string; description: string }) {
   const t = useTranslations('clubs');
   const errorText = useErrorText();
   const toggleId = useId();
@@ -36,58 +37,71 @@ export function ClubsScreen() {
   const clubs = useClubs(includeArchived);
   const createClub = useCreateClub();
 
+  const isFullAdmin = me.data?.user.isFullAdmin === true;
+  // The title and the main action share the top of the page, whatever the list below is doing.
+  const header = (
+    <PageHeader
+      title={title}
+      description={description}
+      actions={
+        isFullAdmin ? (
+          <Button onClick={() => setCreating(true)}>
+            <Plus aria-hidden />
+            {t('toolbar.addClub')}
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+
   if (clubs.isPending || me.isPending) {
     return (
-      <div className="grid gap-4" aria-busy>
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-64 w-full" />
+      <div className="flex flex-col gap-6">
+        {header}
+        <div className="grid gap-4" aria-busy>
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-64 w-full" />
+        </div>
       </div>
     );
   }
   if (clubs.isError || me.isError) {
     return (
-      <EmptyState
-        title={t('states.loadFailed')}
-        description={errorText(clubs.error ?? me.error)}
-        action={
-          <Button
-            variant="outline"
-            onClick={() => {
-              void clubs.refetch();
-              void me.refetch();
-            }}
-          >
-            <RotateCw aria-hidden />
-            {t('states.retry')}
-          </Button>
-        }
-      />
+      <div className="flex flex-col gap-6">
+        {header}
+        <EmptyState
+          title={t('states.loadFailed')}
+          description={errorText(clubs.error ?? me.error)}
+          action={
+            <Button
+              variant="outline"
+              onClick={() => {
+                void clubs.refetch();
+                void me.refetch();
+              }}
+            >
+              <RotateCw aria-hidden />
+              {t('states.retry')}
+            </Button>
+          }
+        />
+      </div>
     );
   }
 
-  const isFullAdmin = me.data.user.isFullAdmin;
   const items = clubs.data.items;
   const selected = items.find((club) => club.id === selectedId) ?? items[0];
 
   return (
-    <div className="grid gap-5">
+    <div className="flex flex-col gap-6">
+      {header}
       {/* With a club open the archived switch sits in that club's control bar; without one it stays here. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {selected ? (
-          <span />
-        ) : (
-          <div className="flex items-center gap-2">
-            <Switch id={toggleId} checked={includeArchived} onCheckedChange={setIncludeArchived} />
-            <Label htmlFor={toggleId}>{t('toolbar.showArchived')}</Label>
-          </div>
-        )}
-        {isFullAdmin ? (
-          <Button onClick={() => setCreating(true)}>
-            <Plus aria-hidden />
-            {t('toolbar.addClub')}
-          </Button>
-        ) : null}
-      </div>
+      {selected ? null : (
+        <div className="flex items-center gap-2">
+          <Switch id={toggleId} checked={includeArchived} onCheckedChange={setIncludeArchived} />
+          <Label htmlFor={toggleId}>{t('toolbar.showArchived')}</Label>
+        </div>
+      )}
 
       {!selected ? (
         <EmptyClubs
@@ -98,8 +112,11 @@ export function ClubsScreen() {
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[16rem_1fr]">
           {items.length > 1 ? (
-            <nav aria-label={t('toolbar.clubsLabel')}>
-              <ul className="m-0 grid list-none gap-2 p-0">
+            <nav
+              aria-label={t('toolbar.clubsLabel')}
+              className="rounded-card border border-border bg-surface-1 p-2"
+            >
+              <ul className="m-0 grid list-none gap-1 p-0">
                 {items.map((club) => (
                   <li key={club.id}>
                     <button
@@ -107,11 +124,11 @@ export function ClubsScreen() {
                       aria-current={club.id === selected.id ? 'true' : undefined}
                       onClick={() => setSelectedId(club.id)}
                       className={cn(
-                        'flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-start text-sm font-medium transition-colors',
+                        'flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-start text-sm font-medium transition-colors',
                         'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
                         club.id === selected.id
-                          ? 'border-primary bg-primary-subtle text-primary-subtle-fg'
-                          : 'border-border bg-surface-1 text-fg hover:bg-surface-3',
+                          ? 'bg-primary-subtle font-semibold text-primary-subtle-fg'
+                          : 'text-fg hover:bg-surface-2',
                       )}
                     >
                       <span className="truncate">{club.name}</span>

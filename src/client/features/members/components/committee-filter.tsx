@@ -39,9 +39,9 @@ export function CommitteeFilter({ committees, selected, onChange }: CommitteeFil
           type="button"
           aria-label={t('committee')}
           className={cn(
-            'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-surface-1 px-3 py-1 text-sm text-fg shadow-sm sm:w-44',
+            'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-surface-1 px-3 py-1 text-sm text-fg shadow-sm sm:w-auto',
             'transition-colors outline-none focus-visible:border-ring focus-visible:outline-2 focus-visible:outline-ring/30 focus-visible:outline-solid',
-            chosen && 'border-primary',
+            chosen && 'border-primary/50 bg-primary-subtle font-medium text-primary-subtle-fg',
           )}
         >
           <span className="truncate">{chosen?.name ?? t('allCommittees')}</span>

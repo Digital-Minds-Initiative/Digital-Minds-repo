@@ -32,12 +32,12 @@ export function DataTablePagination<TData extends RowData>({
   const pageCount = Math.max(table.getPageCount(), 1);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-sm text-fg-muted">
       <span aria-live="polite" className="font-medium text-fg">
         {/* Not "no results" while the first page is still on its way. */}
         {isLoading ? null : t('total', { total: table.getRowCount() })}
       </span>
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <div className="flex items-center gap-2">
           <span aria-hidden>{t('rowsPerPage')}</span>
           <Select
@@ -56,44 +56,46 @@ export function DataTablePagination<TData extends RowData>({
             </SelectContent>
           </Select>
         </div>
-        <span>{t('pageOf', { page: pageIndex + 1, pageCount })}</span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label={t('firstPage')}
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.setPageIndex(0)}
-          >
-            <DirectionalIcon icon={ChevronsLeft} />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label={t('previousPage')}
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.previousPage()}
-          >
-            <DirectionalIcon icon={ChevronLeft} />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label={t('nextPage')}
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.nextPage()}
-          >
-            <DirectionalIcon icon={ChevronRight} />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label={t('lastPage')}
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.setPageIndex(pageCount - 1)}
-          >
-            <DirectionalIcon icon={ChevronsRight} />
-          </Button>
+        <div className="flex items-center gap-3">
+          <span className="tabular-nums">{t('pageOf', { page: pageIndex + 1, pageCount })}</span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label={t('firstPage')}
+              disabled={!table.getCanPreviousPage()}
+              onClick={() => table.setPageIndex(0)}
+            >
+              <DirectionalIcon icon={ChevronsLeft} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label={t('previousPage')}
+              disabled={!table.getCanPreviousPage()}
+              onClick={() => table.previousPage()}
+            >
+              <DirectionalIcon icon={ChevronLeft} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label={t('nextPage')}
+              disabled={!table.getCanNextPage()}
+              onClick={() => table.nextPage()}
+            >
+              <DirectionalIcon icon={ChevronRight} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label={t('lastPage')}
+              disabled={!table.getCanNextPage()}
+              onClick={() => table.setPageIndex(pageCount - 1)}
+            >
+              <DirectionalIcon icon={ChevronsRight} />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

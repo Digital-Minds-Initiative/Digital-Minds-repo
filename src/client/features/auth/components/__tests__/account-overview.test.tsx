@@ -78,3 +78,17 @@ describe('AccountOverview — a way into every section', { timeout: 20_000 }, ()
     expect(await hrefs(MEMBER)).toEqual([]);
   });
 });
+
+describe('AccountOverview — a member with no role', { timeout: 20_000 }, () => {
+  it('greets them and lists their own clubs and committees', async () => {
+    actor.email = MEMBER;
+    renderWithProviders(<AccountOverview />);
+    expect(await screen.findByText(/^أهلاً /, undefined, { timeout: 8000 })).toBeTruthy();
+    const clubs = await screen.findByRole('region', { name: 'عضوياتي' });
+    expect(clubs.querySelectorAll('h3').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('عضو فعّال').length).toBeGreaterThan(0);
+    // Their own page: no management cards, no way into the management screens.
+    expect(screen.queryByText('نطاق صلاحياتك')).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'أقسام لوحة التحكم' })).toBeNull();
+  });
+});

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { cn } from '@/client/lib/utils';
+import { DELAYS } from '@/components/motion/delays';
+import { useInView } from '@/components/motion/use-in-view';
 
 import { useTweenedNumber } from './use-tweened-number';
 
@@ -33,8 +35,9 @@ function rankMap(entries: LeaderboardEntry[]): Record<string, number> {
 const signature = (entries: LeaderboardEntry[]) =>
   entries.map((entry) => `${entry.id}:${entry.points}`).join('|');
 
-function Score({ points }: { points: number }) {
-  const shown = useTweenedNumber(points);
+/** Counts up from 0 once the board is on screen (`seen`), and follows the total after that. */
+function Score({ points, seen }: { points: number; seen: boolean }) {
+  const shown = useTweenedNumber(seen ? points : 0);
   return <>{shown}</>;
 }
 
@@ -46,6 +49,8 @@ export function MonthlyLeaderboard({ entries, panelLabel, className }: MonthlyLe
   const [seen, setSeen] = useState(entries);
   const [bumps, setBumps] = useState<Record<string, number>>({});
   const ranks = rankMap(entries);
+  const board = useRef<HTMLDivElement>(null);
+  const onScreen = useInView(board);
 
   // Compare with what was shown before (during render, so the glow starts with the new order).
   if (signature(seen) !== signature(entries)) {
@@ -62,6 +67,7 @@ export function MonthlyLeaderboard({ entries, panelLabel, className }: MonthlyLe
 
   return (
     <div
+      ref={board}
       className={cn('rounded-card border border-border bg-surface-1 p-4 text-fg sm:p-6', className)}
     >
       <div className="mb-2 font-mono text-[11px] leading-4 font-medium tracking-[0.08em] text-fg-muted uppercase [direction:ltr]">
@@ -79,7 +85,16 @@ export function MonthlyLeaderboard({ entries, panelLabel, className }: MonthlyLe
                 'transition-transform duration-[650ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
                 rank === entries.length - 1 && 'border-b-0',
               )}
-              style={{ height: ROW_HEIGHT, transform: `translateY(${rank * ROW_HEIGHT}px)` }}
+              style={{
+                height: ROW_HEIGHT,
+                transform: `translateY(${rank * ROW_HEIGHT}px)`,
+                // Rows come in from the last place to the first, one after another.
+                ...(seen
+                  ? {
+                      animation: `reveal-up 0.5s ease-out ${(entries.length - 1 - rank) * DELAYS.sectionStep}ms backwards`,
+                    }
+                  : { opacity: 0 }),
+              }}
             >
               {bump > 0 ? (
                 <span
@@ -95,6 +110,11 @@ export function MonthlyLeaderboard({ entries, panelLabel, className }: MonthlyLe
                     'w-12 font-mono text-5xl leading-none font-bold [font-variant-numeric:lining-nums_tabular-nums]',
                     rank === 0 ? 'text-primary' : 'text-fg-muted',
                     bump > 0 && 'motion-safe:animate-[rank-swap_0.5s_ease-out_both]',
+                    // First place pulses once as the board comes in.
+                    seen &&
+                      rank === 0 &&
+                      bump === 0 &&
+                      'motion-safe:animate-[rank-pulse_0.6s_ease-out_1s_backwards]',
                   )}
                 >
                   {rank + 1}
@@ -107,7 +127,7 @@ export function MonthlyLeaderboard({ entries, panelLabel, className }: MonthlyLe
                 data-testid={`score-${entry.id}`}
                 className="relative font-mono text-4xl leading-none font-bold [font-variant-numeric:lining-nums_tabular-nums] [direction:ltr]"
               >
-                <Score points={entry.points} />
+                <Score points={entry.points} seen={onScreen} />
               </span>
             </li>
           );

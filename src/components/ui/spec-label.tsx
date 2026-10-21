@@ -1,6 +1,7 @@
 import type * as React from 'react';
 
 import { cn } from '@/client/lib/utils';
+import { TypeText } from '@/components/motion/type-text';
 
 /**
  * Metadata set like an instrument panel: mono, upper-case Latin, an arrow, a code with
@@ -11,12 +12,15 @@ export interface SpecLabelProps extends React.ComponentProps<'span'> {
   arrow?: '→' | '↓' | '↗' | '·';
   index?: string;
   tone?: 'default' | 'on-deep' | 'on-hero';
+  /** Type the label one character at a time when it first scrolls into view (text only). */
+  typed?: boolean;
 }
 
 export function SpecLabel({
   arrow,
   index,
   tone = 'default',
+  typed = false,
   className,
   children,
   ...props
@@ -40,7 +44,7 @@ export function SpecLabel({
         <sub className="ms-px align-[-2px] text-[9px] tracking-[0.04em]">{index}</sub>
       ) : null}
       {arrow || index ? ' ' : null}
-      {children}
+      {typed && typeof children === 'string' ? <TypeText text={children} /> : children}
     </span>
   );
 }

@@ -18,6 +18,7 @@
     "signIn": "تسجيل الدخول",
     "dashboard": "لوحة التحكم",
     "footer": "© {year} Digital Minds",
-    "signUp": "إنشاء حساب"
+    "signUp": "إنشاء حساب",
+    "logoColor": "تغيير لون الشعار"
   }
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -98,28 +98,8 @@ describe('MembersToolbar — every filter the API offers', { timeout: 20_000 }, 
   });
 });
 
-describe('MembersToolbar — the work-date period', { timeout: 20_000 }, () => {
-  it('sends the start of the period', async () => {
-    const onChange = vi.fn();
-    renderToolbar(onChange);
-    fireEvent.change(screen.getByLabelText('من تاريخ'), { target: { value: '2026-03-01' } });
-    expect(onChange).toHaveBeenLastCalledWith({ from: '2026-03-01' });
-  });
-
-  it('sends nothing for an end before the start or after today', async () => {
-    const onChange = vi.fn();
-    renderToolbar(onChange, { from: '2026-03-01' });
-    const to = screen.getByLabelText('إلى تاريخ');
-    expect(to.getAttribute('min')).toBe('2026-03-01');
-    fireEvent.change(to, { target: { value: '2026-02-01' } });
-    expect(onChange).toHaveBeenLastCalledWith({ to: undefined });
-    fireEvent.change(to, { target: { value: '2999-01-01' } });
-    expect(onChange).toHaveBeenLastCalledWith({ to: undefined });
-    fireEvent.change(to, { target: { value: '2026-03-31' } });
-    expect(onChange).toHaveBeenLastCalledWith({ to: '2026-03-31' });
-  });
-
-  it('clears the period with the other filters', async () => {
+describe('MembersToolbar — a period already in the address', { timeout: 20_000 }, () => {
+  it('clears it with the other filters', async () => {
     const onChange = vi.fn();
     const user = renderToolbar(onChange, { from: '2026-03-01' });
     await user.click(screen.getByRole('button', { name: 'مسح عوامل التصفية' }));

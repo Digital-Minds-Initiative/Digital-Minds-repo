@@ -68,7 +68,7 @@ async function renderTable(email: string, search = '') {
   await screen.findByRole('button', { name: `فتح ملف ${MEMBER_NAME}` }, { timeout: 8000 });
   // The table redraws its rows once the club's types arrive (the type badges depend on them); let
   // that settle so a click is not lost to a row replaced between press and release.
-  await waitFor(() => expect(screen.getAllByTestId(/^member-stat-/).length).toBeGreaterThan(2), {
+  await waitFor(() => expect(screen.getByTestId('member-stat-total')).toBeTruthy(), {
     timeout: 8000,
   });
   await new Promise((resolve) => setTimeout(resolve, 400));
@@ -278,16 +278,14 @@ describe('member actions — for a full admin', { timeout: 30_000 }, () => {
 });
 
 describe('members page — numbers and table', { timeout: 30_000 }, () => {
-  it('shows the four numbers, and the registered and waiting ones add up to the total', async () => {
+  it('shows the member total and, to an officer, how many hold a role', async () => {
     await renderTable(OFFICER);
     const number = (key: string) => Number(screen.getByTestId(`member-stat-${key}`).textContent);
     await waitFor(() => expect(number('total')).toBeGreaterThan(0), { timeout: 8000 });
-    expect(number('registered') + number('pending')).toBe(number('total'));
-    expect(number('pending')).toBeGreaterThan(0);
-    expect(number('roles')).toBeGreaterThan(0);
+    await waitFor(() => expect(number('roles')).toBeGreaterThan(0), { timeout: 8000 });
   });
 
-  it('shows a committee lead three numbers: who holds the roles is for officers', async () => {
+  it('shows a committee lead only the total: who holds the roles is for officers', async () => {
     await renderTable(LEAD);
     await waitFor(() => expect(screen.getByTestId('member-stat-total')).toBeTruthy(), {
       timeout: 8000,

@@ -40,12 +40,9 @@
     "roleOfficer": "مدراء الشؤون",
     "roleMember": "بدون صلاحية إدارية",
     "registered": "التسجيل",
-    "allRegistered": "الكل",
+    "allRegistered": "كل حالات التسجيل",
     "registeredYes": "مسجّلون",
-    "registeredNo": "لم يسجّلوا بعد",
-    "period": "فترة تاريخ العمل",
-    "periodFrom": "من تاريخ",
-    "periodTo": "إلى تاريخ"
+    "registeredNo": "لم يسجّلوا بعد"
   },
   "status": {
     "registered": "مسجّل",
@@ -53,10 +50,9 @@
     "removed": "مُزال"
   },
   "levelValue": "المستوى {level}",
-  "bulk": {
-    "copyEmails": "نسخ البريد الجامعي",
-    "copied": "{count, plural, one {تم نسخ عنوان بريد واحد} two {تم نسخ عنوانَي بريد} few {تم نسخ # عناوين بريد} many {تم نسخ # عنوان بريد} other {تم نسخ # عنوان بريد}}",
-    "copyFailed": "تعذّر النسخ إلى الحافظة"
+  "selection": {
+    "selectAll": "{count, plural, one {تحديد العضو الوحيد} two {تحديد العضوين} few {تحديد كل الـ # أعضاء} many {تحديد كل الـ # عضواً} other {تحديد كل الـ # عضو}}",
+    "failed": "تعذّر تحديد جميع الأعضاء. حاول مرة أخرى."
   },
   "empty": {
     "title": "لا يوجد أعضاء",
@@ -70,8 +66,6 @@
   "stats": {
     "label": "أرقام الأعضاء",
     "total": "إجمالي الأعضاء",
-    "registered": "مسجّلون",
-    "pending": "بانتظار التسجيل",
     "roles": "القادة والإدارة"
   },
   "toolbar": {
@@ -85,8 +79,8 @@
     "remove": "إزالة من النادي",
     "openMember": "فتح ملف {name}",
     "copyEmail": "نسخ بريد {name}",
-    "emailCopied": "تم نسخ البريد",
-    "copyFailed": "تعذّر نسخ البريد",
+    "emailCopied": "تم نسخ البريد الجامعي",
+    "copyFailed": "تعذّر نسخ البريد الجامعي",
     "column": "إجراءات"
   },
   "sheet": {
@@ -168,10 +162,15 @@
       "title": "إضافة عضو",
       "description": "يُضاف بالبريد الجامعي. إن كان للبريد حساب سابق يبقى اسمه كما هو، وإن كان الشخص مُزالاً من النادي يعود بسجله ونقاطه.",
       "submit": "إضافة العضو",
+      "sections": {
+        "basic": "المعلومات الأساسية",
+        "membership": "العضوية واللجان",
+        "extra": "معلومات إضافية"
+      },
       "added": "أُضيف العضو",
       "alreadyIn": "هذا الشخص عضو في النادي بالفعل.",
       "openExisting": "فتح ملفه",
-      "genericError": "تحقّق من البيانات المدخلة."
+      "genericError": "لم تُضف البيانات. تحقّق من الحقول المظلّلة وحاول مرة أخرى."
     },
     "edit": {
       "title": "تعديل بيانات {name}",
@@ -281,9 +280,9 @@
     "done": {
       "title": "تم الاستيراد",
       "added": "أُضيف: {count}",
-      "restored": "أُعيد: {count}",
-      "skippedExisting": "موجودون من قبل: {count}",
-      "skippedInvalid": "تُخطّوا لمشاكل: {count}",
+      "restored": "أُعيدت عضويتهم: {count}",
+      "skippedExisting": "أعضاء مسجّلون مسبقاً: {count}",
+      "skippedInvalid": "تم تخطيهم بسبب أخطاء: {count}",
       "close": "تم"
     }
   }
