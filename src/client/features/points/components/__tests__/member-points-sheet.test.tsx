@@ -161,8 +161,10 @@ describe('MemberPointsSheet — changing the ledger', { timeout: 20_000 }, () =>
     await user.type(within(dialog).getByLabelText(/عدد النقاط/), '5000');
     await user.click(within(dialog).getByRole('button', { name: 'تسجيل الحركة' }));
     // Nothing is sent: the reason is missing and the amount is above 1000.
-    expect((await within(dialog).findAllByText('هذا الحقل مطلوب')).length).toBeGreaterThan(0);
-    expect(within(dialog).getByText('القيمة أطول أو أكبر من المسموح')).toBeTruthy();
+    expect((await within(dialog).findAllByText('هذا الحقل مطلوب.')).length).toBeGreaterThan(0);
+    expect(
+      within(dialog).getByText('النص أطول من الحد الأقصى، أو القيمة أكبر من الحد المسموح.'),
+    ).toBeTruthy();
     expect(balance()).toBe(before);
 
     await user.clear(within(dialog).getByLabelText(/عدد النقاط/));
@@ -187,7 +189,7 @@ describe('MemberPointsSheet — changing the ledger', { timeout: 20_000 }, () =>
     const dialog = await screen.findByRole('dialog', { name: 'إلغاء هذه الحركة؟' });
     // The reason is required.
     await user.click(within(dialog).getByRole('button', { name: 'إلغاء الحركة' }));
-    expect((await within(dialog).findAllByText('هذا الحقل مطلوب')).length).toBeGreaterThan(0);
+    expect((await within(dialog).findAllByText('هذا الحقل مطلوب.')).length).toBeGreaterThan(0);
     await user.type(within(dialog).getByLabelText(/سبب الإلغاء/), 'إدخال مكرر');
     await user.click(within(dialog).getByRole('button', { name: 'إلغاء الحركة' }));
     await waitFor(() => expect(balance()).toBe(before - amount));
