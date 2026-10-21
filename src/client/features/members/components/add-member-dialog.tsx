@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
 import { ApiError } from '@/client/lib/api-client';
@@ -18,7 +18,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -78,6 +77,18 @@ export interface AddMemberDialogProps {
 export function AddMemberDialog(props: AddMemberDialogProps) {
   // Mounted only while open, so every opening starts with an empty form.
   return props.open ? <AddMemberForm {...props} /> : null;
+}
+
+/** A titled group of fields: a light heading and one gap, no box around it. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-4">
+      <h3 className="border-b border-border/60 pb-2 text-xs font-semibold text-fg-muted">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
 }
 
 function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogProps) {
@@ -184,162 +195,174 @@ function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogPro
         if (!form.formState.isSubmitting) onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-xl overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="px-6 pe-12 pt-6 pb-4">
           <DialogTitle>{t('add.title')}</DialogTitle>
           <DialogDescription>{t('add.description')}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={onFormSubmit} noValidate className="grid gap-4">
-          {clubs.length > 1 ? (
-            <FormField
-              control={form.control}
-              name="clubId"
-              label={t('fields.club')}
-              render={({ field, controlProps }) => (
-                <Select
-                  value={field.value}
-                  onValueChange={(value) => {
-                    field.onChange(value);
-                    form.setValue('membershipTypeId', DEFAULT_TYPE);
-                    form.setValue('committeeIds', []);
-                  }}
-                >
-                  <SelectTrigger id={controlProps.id}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clubs.map((club) => (
-                      <SelectItem key={club.id} value={club.id}>
-                        {club.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        <form onSubmit={onFormSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <div className="grid gap-6 overflow-y-auto px-6 py-5">
+            <Section title={t('add.sections.basic')}>
+              {clubs.length > 1 ? (
+                <FormField
+                  control={form.control}
+                  name="clubId"
+                  label={t('fields.club')}
+                  render={({ field, controlProps }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        form.setValue('membershipTypeId', DEFAULT_TYPE);
+                        form.setValue('committeeIds', []);
+                      }}
+                    >
+                      <SelectTrigger id={controlProps.id} className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clubs.map((club) => (
+                          <SelectItem key={club.id} value={club.id}>
+                            {club.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              ) : (
+                <p className="text-sm font-medium">{clubs[0]?.name}</p>
               )}
-            />
-          ) : (
-            <p className="text-sm font-medium">{clubs[0]?.name}</p>
-          )}
-
-          <FormField
-            control={form.control}
-            name="uniEmail"
-            label={t('fields.email')}
-            required
-            render={({ field, controlProps }) => (
-              <Input
-                {...field}
-                {...controlProps}
-                type="email"
-                dir="ltr"
-                inputMode="email"
-                autoComplete="off"
-                placeholder={t('fields.emailPlaceholder')}
-                autoFocus
-              />
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="fullName"
-            label={t('fields.fullName')}
-            required
-            render={({ field, controlProps }) => (
-              <Input {...field} {...controlProps} autoComplete="off" />
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="membershipTypeId"
-            label={t('fields.membershipType')}
-            render={({ field, controlProps }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger id={controlProps.id}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={DEFAULT_TYPE}>{t('defaultType')}</SelectItem>
-                  {(types.data?.items ?? []).map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-
-          {(committees.data?.items.length ?? 0) > 0 ? (
-            <fieldset className="m-0 grid gap-2 border-0 p-0">
-              <legend className="mb-1 text-sm font-medium">{t('fields.committees')}</legend>
-              {committees.data?.items.map((committee) => {
-                const id = `add-member-committee-${committee.id}`;
-                return (
-                  <div key={committee.id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={id}
-                      checked={committeeIds.includes(committee.id)}
-                      onCheckedChange={(checked) =>
-                        form.setValue(
-                          'committeeIds',
-                          checked === true
-                            ? [...committeeIds, committee.id]
-                            : committeeIds.filter((existing) => existing !== committee.id),
-                        )
-                      }
-                    />
-                    <Label htmlFor={id}>{committee.name}</Label>
-                  </div>
-                );
-              })}
-            </fieldset>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {textFields.map((spec) => (
               <FormField
-                key={spec.name}
                 control={form.control}
-                name={spec.name}
-                label={spec.label}
-                description={'hint' in spec ? spec.hint : undefined}
+                name="uniEmail"
+                label={t('fields.email')}
+                required
                 render={({ field, controlProps }) => (
                   <Input
                     {...field}
                     {...controlProps}
+                    type="email"
+                    dir="ltr"
+                    inputMode="email"
                     autoComplete="off"
-                    dir={'dir' in spec ? spec.dir : undefined}
-                    inputMode={'inputMode' in spec ? spec.inputMode : undefined}
+                    placeholder={t('fields.emailPlaceholder')}
+                    autoFocus
                   />
                 )}
               />
-            ))}
-          </div>
+              <FormField
+                control={form.control}
+                name="fullName"
+                label={t('fields.fullName')}
+                required
+                render={({ field, controlProps }) => (
+                  <Input {...field} {...controlProps} autoComplete="off" />
+                )}
+              />
+            </Section>
 
-          {existingId ? (
-            <div role="alert" className="grid gap-2 rounded-md bg-warning-subtle p-3 text-sm">
-              <p className="font-medium text-warning-subtle-fg">{t('add.alreadyIn')}</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-fit"
-                onClick={() => {
-                  onOpenChange(false);
-                  onOpenMember(existingId);
-                }}
-              >
-                {t('add.openExisting')}
-              </Button>
-            </div>
-          ) : null}
-          {formError ? (
-            <p role="alert" className="text-sm font-medium text-danger">
-              {formError}
-            </p>
-          ) : null}
-          <DialogFooter>
+            <Section title={t('add.sections.membership')}>
+              <FormField
+                control={form.control}
+                name="membershipTypeId"
+                label={t('fields.membershipType')}
+                render={({ field, controlProps }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id={controlProps.id} className="h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={DEFAULT_TYPE}>{t('defaultType')}</SelectItem>
+                      {(types.data?.items ?? []).map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          {type.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {(committees.data?.items.length ?? 0) > 0 ? (
+                <fieldset className="m-0 grid gap-2 border-0 p-0">
+                  <legend className="mb-2 text-sm font-medium">{t('fields.committees')}</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {committees.data?.items.map((committee) => {
+                      const id = `add-member-committee-${committee.id}`;
+                      return (
+                        <label
+                          key={committee.id}
+                          htmlFor={id}
+                          className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border bg-surface-1 px-3 text-sm transition-colors hover:bg-surface-2 has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary-subtle has-data-[state=checked]:font-medium has-data-[state=checked]:text-primary-subtle-fg"
+                        >
+                          <Checkbox
+                            id={id}
+                            checked={committeeIds.includes(committee.id)}
+                            onCheckedChange={(checked) =>
+                              form.setValue(
+                                'committeeIds',
+                                checked === true
+                                  ? [...committeeIds, committee.id]
+                                  : committeeIds.filter((existing) => existing !== committee.id),
+                              )
+                            }
+                          />
+                          <span className="truncate">{committee.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ) : null}
+            </Section>
+
+            <Section title={t('add.sections.extra')}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {textFields.map((spec) => (
+                  <FormField
+                    key={spec.name}
+                    control={form.control}
+                    name={spec.name}
+                    label={spec.label}
+                    description={'hint' in spec ? spec.hint : undefined}
+                    render={({ field, controlProps }) => (
+                      <Input
+                        {...field}
+                        {...controlProps}
+                        autoComplete="off"
+                        dir={'dir' in spec ? spec.dir : undefined}
+                        inputMode={'inputMode' in spec ? spec.inputMode : undefined}
+                      />
+                    )}
+                  />
+                ))}
+              </div>
+            </Section>
+
+            {existingId ? (
+              <div role="alert" className="grid gap-2 rounded-md bg-warning-subtle p-3 text-sm">
+                <p className="font-medium text-warning-subtle-fg">{t('add.alreadyIn')}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onOpenMember(existingId);
+                  }}
+                >
+                  {t('add.openExisting')}
+                </Button>
+              </div>
+            ) : null}
+            {formError ? (
+              <p role="alert" className="text-sm font-medium text-danger">
+                {formError}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter className="border-t border-border/60 bg-surface-1/40 px-6 py-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t('cancel')}
             </Button>

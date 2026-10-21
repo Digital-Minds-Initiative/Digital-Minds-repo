@@ -5,48 +5,33 @@ import { useMemo } from 'react';
 
 import { apiClient } from '@/client/lib/api-client';
 import { listMembershipTypesEndpoint } from '@/shared/contracts/clubs';
-import { listMembersEndpoint, type ListMembersQueryInput } from '@/shared/contracts/members';
+import { listMembersEndpoint } from '@/shared/contracts/members';
 import { listClubPermissionsEndpoint } from '@/shared/contracts/permissions';
 
-/** The total of a members list asked for one row: only the count is used. */
-async function totalOf(
-  filter: Pick<ListMembersQueryInput, 'clubId' | 'registered'>,
-  signal: AbortSignal,
-): Promise<number> {
-  const result = await apiClient.request(
-    listMembersEndpoint,
-    {
-      query: {
-        page: 1,
-        pageSize: 1,
-        sort: 'fullName',
-        order: 'asc',
-        status: 'active',
-        ...(filter.clubId ? { clubId: filter.clubId } : {}),
-        ...(filter.registered === undefined ? {} : { registered: filter.registered }),
-      },
-    },
-    { signal },
-  );
-  return result.total;
-}
-
 /**
- * How many active members the person can see — all of them, those who have signed up and those
- * who have not — for one club or for every club in their scope. Three counts of the members list,
- * so they agree with the table and respect what the server lets this person see. Stored under the
- * `members` key, so adding, editing or removing a member refreshes them.
+ * How many active members the person can see, for one club or for every club in their scope. One
+ * count of the members list, so it agrees with the table and respects what the server lets this
+ * person see. Stored under the `members` key, so adding, editing or removing a member refreshes it.
  */
-export function useMemberCounts(clubId: string | undefined) {
+export function useMemberCount(clubId: string | undefined) {
   return useQuery({
     queryKey: ['members', 'stats', clubId ?? null] as const,
     queryFn: async ({ signal }) => {
-      const [total, registered, pending] = await Promise.all([
-        totalOf({ clubId }, signal),
-        totalOf({ clubId, registered: true }, signal),
-        totalOf({ clubId, registered: false }, signal),
-      ]);
-      return { total, registered, pending };
+      const result = await apiClient.request(
+        listMembersEndpoint,
+        {
+          query: {
+            page: 1,
+            pageSize: 1,
+            sort: 'fullName',
+            order: 'asc',
+            status: 'active',
+            ...(clubId ? { clubId } : {}),
+          },
+        },
+        { signal },
+      );
+      return result.total;
     },
   });
 }

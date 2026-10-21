@@ -52,9 +52,6 @@ test.describe('the members table shows what the API returns', () => {
     const data = await openAs(page, persona.officerComputing);
     await expect.poll(() => shownNames(page)).toEqual(data.items.map((m) => m.user.fullName));
     await expect(page.getByTestId('member-stat-total')).toHaveText(String(data.total));
-    const registered = Number(await page.getByTestId('member-stat-registered').innerText());
-    const pending = Number(await page.getByTestId('member-stat-pending').innerText());
-    expect(registered + pending).toBe(data.total);
   });
 
   test('search narrows the list, survives a reload, and clearing brings everyone back', async ({
@@ -103,13 +100,10 @@ test.describe('the members table shows what the API returns', () => {
     await expect(page.getByRole('columnheader', { name: /نقاط لجنة التصميم/ })).toBeVisible();
   });
 
-  test('a period ranks by points, highest first, with the dates in the header', async ({
+  test('a period in the address ranks by points, highest first, with the dates in the header', async ({
     page,
   }) => {
-    await openAs(page, persona.officerComputing);
-    const ranked = nextList(page);
-    await page.getByLabel('من تاريخ').fill('2026-01-01');
-    const data = await ranked;
+    const data = await openAs(page, persona.officerComputing, '?from=2026-01-01');
     expect(data.pointsBasis.from).toBe('2026-01-01');
     const points = data.items.map((m) => m.points);
     expect([...points].sort((a, b) => b - a)).toEqual(points);

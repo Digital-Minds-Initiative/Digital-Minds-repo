@@ -1,12 +1,12 @@
 'use client';
 
 import { functionalUpdate } from '@tanstack/react-table';
-import { Copy, RotateCw, UsersRound } from 'lucide-react';
+import { RotateCw, UsersRound } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useState } from 'react';
 
 import { useMe } from '@/client/features/auth';
-import { ApiError } from '@/client/lib/api-client';
+import { apiClient, ApiError } from '@/client/lib/api-client';
 import {
   DataTable,
   type ColumnVisibilityState,
@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/patterns/empty-state';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import {
+  listMembersEndpoint,
   memberSortFields,
   type ListMembersQuery,
   type Member,
@@ -44,6 +45,9 @@ const DEFAULT_COLUMN_VISIBILITY: ColumnVisibilityState = {
 };
 
 const getRowId = (member: Member) => member.id;
+
+/** The largest page the API serves: selecting everyone takes the fewest requests. */
+const SELECT_ALL_PAGE_SIZE = 100;
 
 function isSortField(id: string): id is MemberSortField {
   return (memberSortFields as readonly string[]).includes(id);
@@ -83,6 +87,7 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
 
   const [columnVisibility, setColumnVisibility] = useState(DEFAULT_COLUMN_VISIBILITY);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectingAll, setSelectingAll] = useState(false);
   // Selection belongs to the visible page: clear it whenever the query changes.
   const queryKey = JSON.stringify(query);
   const [selectionQueryKey, setSelectionQueryKey] = useState(queryKey);
@@ -114,15 +119,23 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
     [setQuery],
   );
 
-  async function copyEmails(ids: string[]) {
-    const emails = (members.data?.items ?? [])
-      .filter((member) => ids.includes(member.id))
-      .map((member) => member.user.uniEmail);
+  /** Selects every member the filters match, not only the page on screen. */
+  async function selectEveryone() {
+    setSelectingAll(true);
     try {
-      await navigator.clipboard.writeText(emails.join(', '));
-      toast.success(t('bulk.copied', { count: emails.length }));
+      const picked: RowSelectionState = {};
+      for (let page = 1, pageCount = 1; page <= pageCount; page += 1) {
+        const result = await apiClient.request(listMembersEndpoint, {
+          query: { ...query, page, pageSize: SELECT_ALL_PAGE_SIZE },
+        });
+        for (const member of result.items) picked[member.id] = true;
+        pageCount = result.pageCount;
+      }
+      setRowSelection(picked);
     } catch {
-      toast.error(t('bulk.copyFailed'));
+      toast.error(t('selection.failed'));
+    } finally {
+      setSelectingAll(false);
     }
   }
 
@@ -171,12 +184,18 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
         isLoading={members.isPending}
         isFetching={members.isFetching}
         toolbar={<MembersToolbar query={query} onChange={onFiltersChange} access={me?.access} />}
-        bulkActions={({ ids }) => (
-          <Button variant="outline" size="sm" onClick={() => void copyEmails(ids)}>
-            <Copy aria-hidden />
-            {t('bulk.copyEmails')}
-          </Button>
-        )}
+        bulkActions={({ ids }) =>
+          ids.length < (members.data?.total ?? 0) ? (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={selectingAll}
+              onClick={() => void selectEveryone()}
+            >
+              {t('selection.selectAll', { count: members.data?.total ?? 0 })}
+            </Button>
+          ) : null
+        }
         emptyState={
           <EmptyState
             variant="plain"

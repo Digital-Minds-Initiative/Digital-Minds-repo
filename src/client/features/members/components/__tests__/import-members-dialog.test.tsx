@@ -184,8 +184,8 @@ describe('ImportMembersDialog — confirming', { timeout: 30_000 }, () => {
     await user.click(screen.getByRole('button', { name: 'تأكيد استيراد شخص واحد' }));
     expect(await screen.findByText('تم الاستيراد', undefined, { timeout: 8000 })).toBeTruthy();
     expect(screen.getByText('أُضيف: 1')).toBeTruthy();
-    expect(screen.getByText('موجودون من قبل: 1')).toBeTruthy();
-    expect(screen.getByText('تُخطّوا لمشاكل: 3')).toBeTruthy();
+    expect(screen.getByText('أعضاء مسجّلون مسبقاً: 1')).toBeTruthy();
+    expect(screen.getByText('تم تخطيهم بسبب أخطاء: 3')).toBeTruthy();
     const db = getMockDb();
     const person = db.users.find((candidate) => candidate.uniEmail === NEW_EMAIL);
     expect(person).toBeDefined();

@@ -106,7 +106,7 @@ export function useMemberColumns({
                 type="button"
                 aria-label={tRow('openMember', { name: row.original.user.fullName })}
                 onClick={() => onOpen(row.original)}
-                className="w-fit max-w-full cursor-pointer truncate rounded-sm text-start font-medium text-fg outline-none hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid"
+                className="w-fit max-w-full cursor-pointer truncate rounded-sm text-start text-sm font-semibold text-fg outline-none hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid"
               >
                 {row.original.user.fullName}
               </button>
@@ -129,6 +129,11 @@ export function useMemberColumns({
                   <Copy className="size-3.5" aria-hidden />
                 </button>
               </span>
+              {row.original.removedAt ? (
+                <Badge variant="danger" className="mt-0.5 w-fit">
+                  {t('status.removed')}
+                </Badge>
+              ) : null}
             </div>
           </div>
         ),
@@ -172,12 +177,15 @@ export function useMemberColumns({
           row.original.committees.length === 0 ? (
             <span className="text-fg-subtle">{t('none')}</span>
           ) : (
-            <ul className="flex max-w-72 flex-wrap gap-1">
+            <ul className="flex max-w-80 min-w-44 flex-wrap gap-1.5">
               {row.original.committees.map((committee) => (
-                <li key={committee.id}>
-                  <Badge variant={committee.role === 'LEAD' ? 'info' : 'neutral'}>
+                <li key={committee.id} className="max-w-full">
+                  <Badge
+                    variant={committee.role === 'LEAD' ? 'info' : 'neutral'}
+                    className="max-w-full"
+                  >
                     {committee.role === 'LEAD' ? <Crown aria-hidden /> : null}
-                    {committee.name}
+                    <span className="truncate">{committee.name}</span>
                     {committee.role === 'LEAD' ? (
                       <span className="sr-only"> ({t('leadBadge')})</span>
                     ) : null}
@@ -255,19 +263,6 @@ export function useMemberColumns({
           return level === null ? t('none') : t('levelValue', { level });
         },
       }),
-      column.display({
-        id: 'status',
-        header: t('columns.status'),
-        meta: { label: t('columns.status') },
-        cell: ({ row }) =>
-          row.original.removedAt ? (
-            <Badge variant="danger">{t('status.removed')}</Badge>
-          ) : row.original.user.isRegistered ? (
-            <Badge variant="success">{t('status.registered')}</Badge>
-          ) : (
-            <Badge variant="warning">{t('status.notRegistered')}</Badge>
-          ),
-      }),
       column.accessor('joinedAt', {
         header: t('columns.joinedAt'),
         enableSorting: true,
@@ -291,6 +286,7 @@ export function useMemberColumns({
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  className="text-fg-muted hover:text-fg"
                   aria-label={tRow('label', { name: member.user.fullName })}
                 >
                   <MoreVertical aria-hidden />
