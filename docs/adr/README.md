@@ -28,6 +28,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0022](0022-bulk-points.md)                       | Bulk points: two endpoints, all or nothing, and a key that makes a resend harmless  | Accepted (extends 0019)         |
 | [0023](0023-committee-view-link.md)               | A committee view link: a capability token, stored twice, opening a whitelisted page | Accepted (amends 0002)          |
 | [0024](0024-content-security-policy.md)           | A nonce-based Content-Security-Policy, built per request in the proxy               | Accepted                        |
+| [0025](0025-members-export.md)                    | Members export: the list written to a file, refused rather than trimmed, and logged | Accepted                        |
 
 ## Writing a new ADR
 
