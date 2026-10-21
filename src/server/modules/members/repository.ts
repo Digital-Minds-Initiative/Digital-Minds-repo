@@ -181,20 +181,6 @@ export async function countMembers(
   return db.membership.count({ where: memberWhere(scope, nested, filters) });
 }
 
-/** The ids among `memberIds` that match the filters inside the scope. */
-export async function findMatchingMemberIds(
-  scope: MemberScope,
-  nested: CommitteeMembershipScope,
-  filters: MemberFilters,
-  memberIds: string[],
-): Promise<Set<string>> {
-  const rows = await db.membership.findMany({
-    where: memberWhere(scope, nested, { ...filters, memberIds }),
-    select: { id: true },
-  });
-  return new Set(rows.map((row) => row.id));
-}
-
 /** The page's rows once the service has decided which ids are on it, in no particular order. */
 export async function findMembersByIds(
   scope: MemberScope,

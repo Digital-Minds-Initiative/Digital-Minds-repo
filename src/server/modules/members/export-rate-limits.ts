@@ -12,7 +12,7 @@ import { consumeFixedWindow } from '@/server/modules/rate-limit';
  * Counted per user id, not per IP: an export always has an Actor, and one person on a campus
  * network must not be limited by everyone else on it.
  */
-export const MEMBER_EXPORT_LIMIT = {
+const MEMBER_EXPORT_LIMIT = {
   name: 'memberExportPerActorHour',
   max: 30,
   windowSeconds: 60 * 60,
