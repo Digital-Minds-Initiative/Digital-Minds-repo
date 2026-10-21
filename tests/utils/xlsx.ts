@@ -14,6 +14,8 @@ export interface OpenedWorkbook {
   sheetXml: (index: number) => string;
   /** `xl/styles.xml`. */
   stylesXml: string;
+  /** Every text part of the package (sheets, shared strings, styles…) joined, for "never in the file". */
+  allXml: string;
 }
 
 export async function openWorkbook(bytes: Uint8Array): Promise<OpenedWorkbook> {
@@ -28,6 +30,9 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenedWorkbook> {
     sheets: new Map(sheets.map((sheet) => [sheet.sheet, sheet.data as unknown[][]])),
     sheetXml: (index) => read(`xl/worksheets/sheet${String(index)}.xml`),
     stylesXml: read('xl/styles.xml'),
+    allXml: Object.values(files)
+      .map((file) => strFromU8(file))
+      .join('\n'),
   };
 }
 

@@ -31,6 +31,7 @@ import {
   removeFromCommittee,
   saveMemberChanges,
   saveImportedMembers,
+  saveMemberExport,
   saveNewMember,
 } from '@/server/modules/members/repository';
 import {
@@ -377,6 +378,24 @@ describe('repository writes apply the scope themselves', () => {
     expect(await db.pointTransaction.count()).toBe(transactions);
     expect(await db.pointBatch.count()).toBe(batches);
     expect(await db.pointBatch.findUnique({ where: { id: input.batch.id } })).toBeNull();
+  });
+
+  it('saveMemberExport cannot log an export into a club out of scope', async () => {
+    const before = await db.memberExport.count();
+    const record = {
+      clubId: s.clubA.id,
+      exportedById: s.users.officerB.id,
+      selection: 'ALL' as const,
+      selectedCount: null,
+      filters: { status: 'active', search: false },
+      columns: ['fullName'],
+      rowCount: 1,
+    };
+    await expectNotFound(saveMemberExport(clubsScope(officerB), record));
+    expect(await db.memberExport.count()).toBe(before);
+    // The same record in the actor's own club is written.
+    await saveMemberExport(clubsScope(officerB), { ...record, clubId: s.clubB.id });
+    expect(await db.memberExport.count()).toBe(before + 1);
   });
 
   describe('clubs, committees and membership types', () => {
