@@ -39,6 +39,14 @@ enum PointTransactionStatus {
   CANCELLED
 }
 
+/// How the members of an export were chosen (docs/adr/0025-members-export.md).
+enum MemberExportSelection {
+  /// Every member the list's filters matched.
+  ALL
+  /// Members ticked in the table, each checked against the same filters.
+  IDS
+}
+
 enum PointRevisionAction {
   UPDATED
   CANCELLED
@@ -70,6 +78,7 @@ model User {
   createdPointBatches        PointBatch[]
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
+  memberExports              MemberExport[]
   sessions                   Session[]
 }
 
@@ -88,6 +97,7 @@ model Club {
   memberships     Membership[]
   pointBatches    PointBatch[]
   roleChanges     RoleChange[]
+  memberExports   MemberExport[]
 }
 
 model Committee {
@@ -298,6 +308,31 @@ model RoleChange {
 
   @@index([clubId, createdAt])
   @@index([membershipId, createdAt])
+}
+
+/// Append-only: one row per members export that produced a file (docs/adr/0025-members-export.md).
+/// It records who took which data out of the platform, never the data itself — no names, no
+/// contact details, and not even the search text, only that a search narrowed the list.
+model MemberExport {
+  id            String                @id @default(uuid(7)) @db.Uuid
+  clubId        String                @db.Uuid
+  exportedById  String                @db.Uuid
+  selection     MemberExportSelection
+  /// IDS only: how many members were ticked (CHECK: set exactly for IDS, and equal to rowCount).
+  selectedCount Int?
+  /// The list filters and sort the file was built with, the search text replaced by `search: true`.
+  filters       Json
+  /// The exported columns, in the file's order (CHECK: at least one).
+  columns       String[]
+  /// Members in the file (CHECK: 0..5000).
+  rowCount      Int
+  createdAt     DateTime              @default(now())
+
+  club       Club @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  exportedBy User @relation(fields: [exportedById], references: [id], onDelete: Restrict)
+
+  @@index([clubId, createdAt])
+  @@index([exportedById, createdAt])
 }
 
 // ─── Sign-in (docs/adr/0014-email-otp-sign-in.md) ─────────────────────────────────────────────
