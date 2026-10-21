@@ -69,7 +69,7 @@ afterAll(() => server.close());
 async function renderScreen(email: string) {
   actor.email = email;
   const user = userEvent.setup();
-  renderWithProviders(<ClubsScreen />);
+  renderWithProviders(<ClubsScreen title="الأندية واللجان" description="وصف" />);
   return user;
 }
 
@@ -144,7 +144,7 @@ describe('ClubsScreen — changes', { timeout: 20_000 }, () => {
     await screen.findByRole('heading', { name: 'نادي الحاسبات' });
     await user.click(screen.getByRole('button', { name: 'إجراءات النادي' }));
     await user.click(await screen.findByRole('menuitem', { name: 'أرشفة النادي' }));
-    await user.click(await screen.findByRole('button', { name: 'أرشفة' }));
+    await user.click(await screen.findByRole('button', { name: 'أرشفة النادي' }));
     // Archived clubs leave the list unless "show archived" is on; the detail follows the next club.
     await waitFor(
       () => expect(screen.queryByRole('button', { name: /نادي الحاسبات/ })).toBeNull(),

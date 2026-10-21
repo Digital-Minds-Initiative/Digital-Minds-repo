@@ -79,7 +79,7 @@ test.describe('the clubs page', () => {
 
     await card.getByRole('button', { name: `إجراءات اللجنة ${renamed}` }).click();
     await page.getByRole('menuitem', { name: 'أرشفة اللجنة' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'أرشفة' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'أرشفة اللجنة' }).click();
     await expect(page.getByRole('alertdialog')).toBeHidden();
     // Archived committees leave the list until «إظهار المؤرشف» is on.
     await expect(card.getByRole('heading', { name: renamed })).toHaveCount(0);
@@ -95,7 +95,7 @@ test.describe('the clubs page', () => {
 
     await card.getByRole('button', { name: `إجراءات اللجنة ${renamed}` }).click();
     await page.getByRole('menuitem', { name: 'استعادة اللجنة' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'استعادة' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'استعادة اللجنة' }).click();
     await expect(page.getByRole('alertdialog')).toBeHidden();
     await expect(archived).toContainText('نشطة');
     const restored = (await committeesOf(page, club.tuwaiq)).find((c) => c.name === renamed);
@@ -180,7 +180,7 @@ test.describe('the permissions page', () => {
     await card
       .getByRole('button', { name: `إزالة قيادة ${appointed?.fullName} من ${committee}` })
       .click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'إزالة' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'إزالة الصلاحية' }).click();
     await expect(card).not.toContainText(appointed?.fullName ?? '');
 
     await page.getByRole('tab', { name: 'سجل التغييرات' }).click();
