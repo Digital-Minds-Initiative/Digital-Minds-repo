@@ -68,6 +68,7 @@ The source tree is split by who runs the code ([ADR 0013](adr/0013-server-client
 ```text
 src/shared/contracts/members.ts     Zod schemas + endpoint definitions + types (server, browser, later mobile)
 src/shared/contracts/members-import.ts   a big enough corner of it to keep apart (the CSV import)
+src/shared/contracts/members-export.ts   another one: the Excel export
 
 src/server/modules/members/
   index.ts          the module's entry point: service functions (server-only)
@@ -79,6 +80,9 @@ src/server/modules/members/
   import-csv.ts     bytes → rows: encoding, delimiter, headers, cell normalisation (pure)
   import-plan.ts    rows + what the club holds → what each row would do, and its checksum (pure)
   import-service.ts the two steps, which run the plan twice (ADR 0021)
+  export-service.ts the export: the list's own reads, refused whole, logged (ADR 0025)
+  export-file.ts    members → .xlsx: cells, the formula guard, the about sheet, file names (pure)
+  export-rate-limits.ts  what one person may export per hour
   __tests__/        unit tests (policies, ranking, the two pure import halves)
 
 src/server/modules/clubs/
@@ -121,14 +125,14 @@ src/components/    the design system (ui/, patterns/, shell/); src/i18n, src/sty
 
 Current modules:
 
-| Module        | Owns                                                         | Implemented now                                                                                     |
-| ------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `members`     | club memberships, profiles, committee assignment, CSV import | contracts, services and endpoints (list/search/get/create/update/remove/committees, CSV import), UI |
-| `points`      | the ledger, revisions, balances, bulk batches                | contracts, services and endpoints (single add, edit, cancel, bulk entry; reports: later)            |
-| `clubs`       | clubs, committees, membership types, view links, public view | contracts, services and endpoints (clubs, committees, types, view links, the public view)           |
-| `permissions` | appointing officers and leads, and the history of it         | contracts, services and endpoints                                                                   |
-| `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)    | contracts, services, endpoints, mocks; user menu, overview                                          |
-| `system`      | health                                                       | full endpoint                                                                                       |
+| Module        | Owns                                                                     | Implemented now                                                                                                   |
+| ------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `members`     | club memberships, profiles, committee assignment, CSV import, export log | contracts, services and endpoints (list/search/get/create/update/remove/committees, CSV import, Excel export), UI |
+| `points`      | the ledger, revisions, balances, bulk batches                            | contracts, services and endpoints (single add, edit, cancel, bulk entry; reports: later)                          |
+| `clubs`       | clubs, committees, membership types, view links, public view             | contracts, services and endpoints (clubs, committees, types, view links, the public view)                         |
+| `permissions` | appointing officers and leads, and the history of it                     | contracts, services and endpoints                                                                                 |
+| `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)                | contracts, services, endpoints, mocks; user menu, overview                                                        |
+| `system`      | health                                                                   | full endpoint                                                                                                     |
 
 ## Contracts and API conventions
 
@@ -174,7 +178,7 @@ export const listMembersEndpoint = defineEndpoint({
 | 500    | `INTERNAL`          | anything unexpected (logged with the `requestId`; details never leave the server)                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 - **Responses are parsed by their contract** before sending: fields not in the contract are dropped. This is the safety net for public endpoints, which must never return phone numbers or emails.
-- **Files** go both ways through JSON, not multipart: an upload is base64 in the body (so the `application/json` rule and the Origin check stay intact, and the server sees the original bytes), and a download is a handler returning `withFile(text, …)` whose contract response is that text — the CSV import and its template are the only ones today ([ADR 0021](adr/0021-csv-member-import.md)). No endpoint accepts a body over 2 MB.
+- **Files** go both ways through JSON, not multipart: an upload is base64 in the body (so the `application/json` rule and the Origin check stay intact, and the server sees the original bytes), and a download is a handler returning `withFile(data, …)` whose contract response is that data — text (`z.string()`, the import template, [ADR 0021](adr/0021-csv-member-import.md)) or bytes (`z.instanceof(Uint8Array)`, the members export, [ADR 0025](adr/0025-members-export.md)). A name that is not ASCII goes in `filename*` (RFC 5987) beside an ASCII `fallbackFilename`. No endpoint accepts a body over 2 MB.
 - `code` is for programs; the UI translates it (`common.errors.<code>`). `message` is English, for developers. Custom validation messages are keys (`date_in_future`) translated under `common.validation`.
 
 ## Authorization model
@@ -197,28 +201,29 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 member rows are settled in [ADR 0017](adr/0017-member-permissions.md); an ordinary member sees no
 member at all, so every member action is a 404 for them:
 
-| Action                                                        |  ★  |                    O                    |                            L                            |
-| ------------------------------------------------------------- | :-: | :-------------------------------------: | :-----------------------------------------------------: |
-| Read clubs, committees, membership types                      | all |               their club                | their club, the committees they lead, that club's types |
-| Read, search and view members (with their contact data)       | all |                  club                   |           members of the committees they lead           |
-| Add a person to the club, and to any committees of it         |  ✓  |                    ✓                    |                            —                            |
-| Add to / remove from a committee                              |  ✓  |                    ✓                    |                            —                            |
-| Remove from the club / restore a removed member               |  ✓  |                    ✓                    |                            —                            |
-| Edit this club's fields (phone, email, college, major, level) |  ✓  |                    ✓                    |                            —                            |
-| Edit the full name                                            |  ✓  |                    ✓                    |                    — (nor their own)                    |
-| Edit the university email                                     |  ✓  | only while the person is not registered |                            —                            |
-| Change membership type                                        |  ✓  |                    ✓                    |           members of the committees they lead           |
-| CSV import                                                    |  ✓  |                    ✓                    |                            —                            |
-| Add points, edit and cancel any transaction                   |  ✓  |                    ✓                    |                     their committee                     |
-| Bulk points for one committee                                 |  ✓  |                    ✓                    |                     their committee                     |
-| Bulk points across a club's committees                        |  ✓  |                    ✓                    |                            —                            |
-| Read a member's points history and balances                   | all |                  club                   |           members of the committees they lead           |
-| Membership types of a club                                    |  ✓  |                    ✓                    |                            —                            |
-| Clubs and committees: create, rename, archive                 |  ✓  |                    —                    |                            —                            |
-| Create / renew / turn off a committee's view link             |  ✓  |                    ✓                    |                     their committee                     |
-| Appoint / revoke committee leads                              |  ✓  |                    ✓                    |                            —                            |
-| Appoint / revoke club officers                                |  ✓  |                    —                    |                            —                            |
-| Read who holds which role, and the role history               | all |               their club                |                            —                            |
+| Action                                                            |  ★  |                    O                    |                            L                            |
+| ----------------------------------------------------------------- | :-: | :-------------------------------------: | :-----------------------------------------------------: |
+| Read clubs, committees, membership types                          | all |               their club                | their club, the committees they lead, that club's types |
+| Read, search and view members (with their contact data)           | all |                  club                   |           members of the committees they lead           |
+| Add a person to the club, and to any committees of it             |  ✓  |                    ✓                    |                            —                            |
+| Add to / remove from a committee                                  |  ✓  |                    ✓                    |                            —                            |
+| Remove from the club / restore a removed member                   |  ✓  |                    ✓                    |                            —                            |
+| Edit this club's fields (phone, email, college, major, level)     |  ✓  |                    ✓                    |                            —                            |
+| Edit the full name                                                |  ✓  |                    ✓                    |                    — (nor their own)                    |
+| Edit the university email                                         |  ✓  | only while the person is not registered |                            —                            |
+| Change membership type                                            |  ✓  |                    ✓                    |           members of the committees they lead           |
+| CSV import                                                        |  ✓  |                    ✓                    |                            —                            |
+| Export members to Excel (the same members and fields as the list) |  ✓  |                    ✓                    |           members of the committees they lead           |
+| Add points, edit and cancel any transaction                       |  ✓  |                    ✓                    |                     their committee                     |
+| Bulk points for one committee                                     |  ✓  |                    ✓                    |                     their committee                     |
+| Bulk points across a club's committees                            |  ✓  |                    ✓                    |                            —                            |
+| Read a member's points history and balances                       | all |                  club                   |           members of the committees they lead           |
+| Membership types of a club                                        |  ✓  |                    ✓                    |                            —                            |
+| Clubs and committees: create, rename, archive                     |  ✓  |                    —                    |                            —                            |
+| Create / renew / turn off a committee's view link                 |  ✓  |                    ✓                    |                     their committee                     |
+| Appoint / revoke committee leads                                  |  ✓  |                    ✓                    |                            —                            |
+| Appoint / revoke club officers                                    |  ✓  |                    —                    |                            —                            |
+| Read who holds which role, and the role history                   | all |               their club                |                            —                            |
 
 **Roles are granted through the API** ([ADR 0018](adr/0018-granting-roles.md)): full admins appoint and revoke club officers, a club's officers appoint and revoke the leads of its committees, and the full-admin flag itself is not grantable at all. Every real change writes one append-only `RoleChange` row; setting a role to the value it already holds writes nothing and answers 200, and because the role write is conditional on the previous role, two simultaneous grants leave one row. A change takes effect on the requester's next request — the Actor is rebuilt from the database every time.
 
@@ -247,6 +252,8 @@ rather than a second set of points, and makes a concurrent duplicate wait for fr
 carrying a different request is 409 `batch_mismatch`.
 
 **The CSV import** ([ADR 0021](adr/0021-csv-member-import.md)) is the same action as adding one member — the club's officers and full admins, the club from the URL, `club_management_required`, archived clubs refused — done to a file. It is two steps over one body: a preview that classifies every row (`add`, `restore`, `existing`, `invalid`) and writes nothing, and an import that redoes the whole preview inside the transaction that writes and goes ahead only if the checksum the officer confirmed still matches (409 `import_changed`). `add` covers a new address and an account that already exists elsewhere, and the file's name never overwrites a name on record, both for the reasons in [ADR 0012](adr/0012-member-profiles-per-club.md). Writes are skipped for `existing` and `invalid` rows and applied in one transaction for the rest.
+
+**The members export** ([ADR 0025](adr/0025-members-export.md)) is the members list written to an `.xlsx` file, for one club (`POST /clubs/:clubId/members/export`). It reads through the list's own filter shape, filter resolution and `findListedMembers`, so a file never holds a member, a committee or a point the same actor could not see in the table, in the table's order. Anyone who can list the club's members can export them; the club goes through `clubsScope`, so anyone else gets the list's own 404. Ticked members must all be in the list the sent filters describe, or nothing is exported (422 `entries_rejected`, one `not_found` per id). At most 5000 rows (422 `too_many_rows`, counted first), 30 exports per person per hour. The file is right to left with the header alone in row 1 (so it re-imports as CSV UTF-8), text typed as text, Saudi phones as `05…`, every text cell starting with `= + - @`, tab or CR prefixed with `'`, and a second sheet saying which points the column counts. Every file produced writes one append-only `MemberExport` row (who, when, club, selection, filters without the search text, columns, row count) — never the data.
 
 **Archived clubs and committees** are read-only for anything new: no members, committee memberships, points, committees or membership types can be added to them, and they are left out of lists unless `?includeArchived=true` is passed. Each module refuses its own writes ([ADR 0015](adr/0015-archive-instead-of-delete.md)).
 
@@ -315,6 +322,7 @@ endpoints are rate-limited per IP and per token, separately from sign-in.
 - `Club` → `Committee`, `MembershipType` (ordered per club). Clubs and committees are **archived, never deleted** (`archivedAt`): hidden from lists by default and closed to anything new, while their members and points history stay readable ([ADR 0015](adr/0015-archive-instead-of-delete.md)). Membership types carry no history of their own and are deleted — a type in use only with a destination for its memberships, and never the club's last one ([ADR 0016](adr/0016-membership-type-deletes-and-order.md)).
 - `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
 - `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
+- `MemberExport` — append-only, one row per members export that produced a file: club, who, `ALL`/`IDS` and how many were ticked, the filters as JSON with the search text replaced by a boolean, the columns, the row count. CHECKs keep the counts consistent ([ADR 0025](adr/0025-members-export.md)).
 - `RoleChange` — append-only, one row per real grant or revoke of an officer or lead role: the club, the committee (null for a club role), whose membership, who changed it, both roles and when. Explicit changes only; a role cleared by a removal is recorded by `removedAt` instead ([ADR 0018](adr/0018-granting-roles.md)).
 - `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel). `batchId` is a composite foreign key onto `PointBatch` (`(batchId, clubId) → (id, clubId)`, MATCH SIMPLE, so a single add's null is unconstrained).
 - `PointBatch` — one bulk-points request: the client-generated id as its **primary key**, the club, the committee (null when the batch spans a club's committees), who ran it, and a SHA-256 `requestHash` of the request. The primary key is the double-submit guarantee; the hash is what tells a replay from a different request under the same key. Nullable for batches that were never an API request — the demo seed's ([ADR 0022](adr/0022-bulk-points.md)). Amounts are whole numbers in ±1000 and never zero; a balance is the sum of ACTIVE amounts, per committee, computed at read time ([ADR 0004](adr/0004-points-ledger.md), [ADR 0019](adr/0019-points-rules.md)).
@@ -426,4 +434,5 @@ Example: an `events` module that lists a club's events. Backend steps (1–7) an
 - **Sign-in screens** (frontend): the pages for the flow above, built against the mocks in `src/client/features/auth/mocks`, and redirects by sign-in state in `src/proxy.ts` — which now also builds the Content-Security-Policy, so the session check goes in the same function ([ADR 0024](adr/0024-content-security-policy.md)).
 - **Mobile app:** move `src/shared/contracts` into a shared package; it will need a token-based session (the cookie and the Origin check are for browsers) — a new ADR.
 - **The public committee view's pages:** the backend is done ([ADR 0023](adr/0023-committee-view-link.md)); `/v/<token>` and the dashboard's copy and renew controls are built against the MSW mocks in `src/client/features/clubs/mocks`. The page must repeat `noindex` and `no-referrer` in its own metadata, and `/v/` belongs in `robots.txt`.
-- **Audit log:** role grants and profile edits (points already have revisions).
+- **Audit log:** role grants and profile edits (points already have revisions), and a full-admin reader for the members export log ([ADR 0025](adr/0025-members-export.md)).
+- **The export's screens** (frontend): the column picker and the export button, built against the mock in `src/client/features/members/mocks/export.ts`.

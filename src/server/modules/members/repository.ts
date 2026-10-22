@@ -65,6 +65,8 @@ export interface MemberFilters {
   role?: ClubRole;
   registered?: boolean;
   status: MemberStatus;
+  /** The members export's ticked rows: only these, and still only where the rest matches. */
+  memberIds?: string[];
 }
 
 function memberWhere(
@@ -90,6 +92,7 @@ function memberWhere(
   if (filters.membershipTypeIds?.length) {
     conditions.push({ membershipTypeId: { in: filters.membershipTypeIds } });
   }
+  if (filters.memberIds) conditions.push({ id: { in: filters.memberIds } });
   if (filters.role) conditions.push({ role: filters.role });
   if (filters.registered !== undefined) {
     conditions.push({ user: { registeredAt: filters.registered ? { not: null } : null } });
@@ -167,6 +170,15 @@ export async function findMemberSortKeys(
     select: { id: true, user: { select: { searchName: true } } },
   });
   return rows.map((row) => ({ id: row.id, searchName: row.user.searchName }));
+}
+
+/** How many members match, without reading them — the export's row limit is checked on this. */
+export async function countMembers(
+  scope: MemberScope,
+  nested: CommitteeMembershipScope,
+  filters: MemberFilters,
+): Promise<number> {
+  return db.membership.count({ where: memberWhere(scope, nested, filters) });
 }
 
 /** The page's rows once the service has decided which ids are on it, in no particular order. */
@@ -903,4 +915,44 @@ async function joinCommittees(
       data: { removedAt: null, role: 'MEMBER' },
     });
   }
+}
+
+// ─── Export (docs/adr/0025-members-export.md) ────────────────
+
+/** The club a file is made from: its name and slug go into the file name and the about sheet. */
+export async function findClubForExport(
+  scope: ClubScope,
+  clubId: string,
+): Promise<{ id: string; name: string; slug: string } | null> {
+  return db.club.findFirst({
+    where: { AND: [scope, { id: clubId }] },
+    select: { id: true, name: true, slug: true },
+  });
+}
+
+export interface MemberExportRecord {
+  clubId: string;
+  exportedById: string;
+  selection: 'ALL' | 'IDS';
+  selectedCount: number | null;
+  /** The filters and sort, without the search text. */
+  filters: Prisma.InputJsonValue;
+  columns: string[];
+  rowCount: number;
+}
+
+/**
+ * One row of the export log, append-only. The club is checked through the scope in the same
+ * transaction, as every create checks its parent, so a service bug cannot log an export into a
+ * club the actor cannot reach.
+ */
+export async function saveMemberExport(
+  scope: ClubScope,
+  record: MemberExportRecord,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const club = await tx.club.count({ where: { AND: [scope, { id: record.clubId }] } });
+    if (club !== 1) throw new NotFoundError('Club');
+    await tx.memberExport.create({ data: record, select: { id: true } });
+  });
 }

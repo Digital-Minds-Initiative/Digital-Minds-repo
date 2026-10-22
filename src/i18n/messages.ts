@@ -7,6 +7,7 @@ import pointsAr from '@/client/features/points/messages/ar.json';
 import commonAr from './messages/ar/common.json';
 import dashboardAr from './messages/ar/dashboard.json';
 import landingAr from './messages/ar/landing.json';
+import membersExportAr from './messages/ar/membersExport.json';
 import shellAr from './messages/ar/shell.json';
 import uiAr from './messages/ar/ui.json';
 
@@ -24,6 +25,7 @@ export const messages = {
     dashboard: dashboardAr,
     auth: authAr,
     members: membersAr,
+    membersExport: membersExportAr,
     clubs: clubsAr,
     points: pointsAr,
     permissions: permissionsAr,

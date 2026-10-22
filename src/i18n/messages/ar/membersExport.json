@@ -1,0 +1,46 @@
+{
+  "columns": {
+    "fullName": "الاسم الكامل",
+    "uniEmail": "البريد الجامعي",
+    "phone": "الجوال",
+    "personalEmail": "البريد الشخصي",
+    "college": "الكلية",
+    "major": "التخصص",
+    "level": "المستوى",
+    "membershipType": "نوع العضوية",
+    "role": "الصلاحية",
+    "committees": "اللجان",
+    "points": "النقاط",
+    "joinedAt": "تاريخ الانضمام",
+    "registered": "التسجيل",
+    "status": "الحالة"
+  },
+  "values": {
+    "roleOfficer": "مدير شؤون",
+    "roleMember": "عضو",
+    "registered": "مسجّل",
+    "notRegistered": "لم يسجّل بعد",
+    "active": "حالي",
+    "removed": "مُزال"
+  },
+  "sheets": {
+    "members": "الأعضاء",
+    "about": "عن الملف"
+  },
+  "about": {
+    "club": "النادي",
+    "exportedOn": "تاريخ التصدير",
+    "rows": "عدد الأعضاء",
+    "selection": "الأعضاء",
+    "selectionAll": "كل من يطابق عوامل التصفية",
+    "selectionIds": "أعضاء محدّدون من الجدول",
+    "points": "النقاط",
+    "pointsBasis": "النقاط {period}، {committee}",
+    "periodAll": "لكل الفترات",
+    "periodBetween": "من {from} إلى {to}",
+    "periodFrom": "من {from}",
+    "periodTo": "حتى {to}",
+    "allCommittees": "كل اللجان"
+  },
+  "fileName": "أعضاء-{club}-{date}"
+}

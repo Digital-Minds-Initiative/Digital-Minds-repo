@@ -19,22 +19,59 @@ export function emptyResponse(requestId: string): Response {
   return new Response(null, { status: 204, headers: baseHeaders(requestId) });
 }
 
+/** How a file is sent: its type, and its name. */
+export interface FileDownload {
+  contentType: string;
+  /**
+   * The name to save it under. When it is not plain ASCII, `fallbackFilename` is required and goes
+   * in `filename`, while this one is sent as `filename*` (RFC 5987), which every current browser
+   * prefers.
+   */
+  filename: string;
+  fallbackFilename?: string;
+}
+
+/** Printable ASCII without the two characters a quoted `filename` cannot hold as they are. */
+const PLAIN_FILENAME = /^[\x20-\x21\x23-\x5b\x5d-\x7e]+$/;
+
 /**
- * A file to download rather than JSON to parse — today only the CSV import template. The text is
- * still the endpoint's response schema, so the contract describes what is sent.
+ * `Content-Disposition` for a download. Our names, never anything a caller sent — but the club's
+ * name goes into the export's, so a non-ASCII name is percent-encoded as RFC 5987 asks rather
+ * than trusted to be header-safe.
+ */
+export function contentDisposition(file: Omit<FileDownload, 'contentType'>): string {
+  if (PLAIN_FILENAME.test(file.filename) && file.fallbackFilename === undefined) {
+    return `attachment; filename="${file.filename}"`;
+  }
+  const fallback = file.fallbackFilename;
+  if (fallback === undefined || !PLAIN_FILENAME.test(fallback)) {
+    throw new Error('A non-ASCII file name needs a plain ASCII fallback.');
+  }
+  // encodeURIComponent leaves ' ( ) * alone, which RFC 5987's attr-char does not allow.
+  const encoded = encodeURIComponent(file.filename).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
+ * A file to download rather than JSON to parse: the CSV import template (text) and the members
+ * export (bytes). The data is still the endpoint's response schema, so the contract describes
+ * what is sent.
  */
 export function fileResponse(
-  text: string,
-  file: { contentType: string; filename: string },
+  data: string | Uint8Array,
+  file: FileDownload,
   requestId: string,
 ): Response {
-  return new Response(text, {
+  // Bytes are copied into an array of their own: what `BodyInit` accepts, whatever backs `data`.
+  return new Response(typeof data === 'string' ? data : new Uint8Array(data), {
     status: 200,
     headers: {
       ...baseHeaders(requestId),
       'content-type': file.contentType,
-      // The filename is ours, never anything a caller sent, so it needs no escaping.
-      'content-disposition': `attachment; filename="${file.filename}"`,
+      'content-disposition': contentDisposition(file),
     },
   });
 }
