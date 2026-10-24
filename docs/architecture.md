@@ -91,6 +91,10 @@ src/server/modules/clubs/
   public-view-service.ts the three endpoints that link opens — the only ones with no Actor
   view-rate-limits.ts    what the public view allows per IP and per token
 
+src/server/modules/deletions/
+  service.ts        a full admin's three deletes: empty club, committee, a person's data (ADR 0015, 0026)
+  repository.ts     runDeletion: one transaction, the owners' delete functions, one DeletionRecord
+
 src/server/modules/rate-limit/
   index.ts          consumeFixedWindow: counts one use of a named limit (owns RateLimitCounter)
 
@@ -131,6 +135,7 @@ Current modules:
 | `points`      | the ledger, revisions, balances, bulk batches                            | contracts, services and endpoints (single add, edit, cancel, bulk entry; reports: later)                          |
 | `clubs`       | clubs, committees, membership types, view links, public view             | contracts, services and endpoints (clubs, committees, types, view links, the public view)                         |
 | `permissions` | appointing officers and leads, and the history of it                     | contracts, services and endpoints                                                                                 |
+| `deletions`   | the deletion log; runs the full-admin deletes through the owning modules | contracts, services, endpoints, UI (no log reader yet)                                                            |
 | `auth`        | sign-in with an emailed code, sessions, the actor (`/me`)                | contracts, services, endpoints, mocks; user menu, overview                                                        |
 | `system`      | health                                                                   | full endpoint                                                                                                     |
 
@@ -201,41 +206,43 @@ Membership types (مستفيد، عضو فعال…) are descriptive and never g
 member rows are settled in [ADR 0017](adr/0017-member-permissions.md); an ordinary member sees no
 member at all, so every member action is a 404 for them:
 
-| Action                                                            |  ★  |                    O                    |                            L                            |
-| ----------------------------------------------------------------- | :-: | :-------------------------------------: | :-----------------------------------------------------: |
-| Read clubs, committees, membership types                          | all |               their club                | their club, the committees they lead, that club's types |
-| Read, search and view members (with their contact data)           | all |                  club                   |           members of the committees they lead           |
-| Add a person to the club, and to any committees of it             |  ✓  |                    ✓                    |                            —                            |
-| Add to / remove from a committee                                  |  ✓  |                    ✓                    |                            —                            |
-| Remove from the club / restore a removed member                   |  ✓  |                    ✓                    |                            —                            |
-| Edit this club's fields (phone, email, college, major, level)     |  ✓  |                    ✓                    |                            —                            |
-| Edit the full name                                                |  ✓  |                    ✓                    |                    — (nor their own)                    |
-| Edit the university email                                         |  ✓  | only while the person is not registered |                            —                            |
-| Change membership type                                            |  ✓  |                    ✓                    |           members of the committees they lead           |
-| CSV import                                                        |  ✓  |                    ✓                    |                            —                            |
-| Export members to Excel (the same members and fields as the list) |  ✓  |                    ✓                    |           members of the committees they lead           |
-| Add points, edit and cancel any transaction                       |  ✓  |                    ✓                    |                     their committee                     |
-| Bulk points for one committee                                     |  ✓  |                    ✓                    |                     their committee                     |
-| Bulk points across a club's committees                            |  ✓  |                    ✓                    |                            —                            |
-| Read a member's points history and balances                       | all |                  club                   |           members of the committees they lead           |
-| Membership types of a club                                        |  ✓  |                    ✓                    |                            —                            |
-| Clubs and committees: create, rename, archive                     |  ✓  |                    —                    |                            —                            |
-| Create / renew / turn off a committee's view link                 |  ✓  |                    ✓                    |                     their committee                     |
-| Appoint / revoke committee leads                                  |  ✓  |                    ✓                    |                            —                            |
-| Appoint / revoke club officers                                    |  ✓  |                    —                    |                            —                            |
-| Read who holds which role, and the role history                   | all |               their club                |                            —                            |
+| Action                                                             |  ★  |                    O                    |                            L                            |
+| ------------------------------------------------------------------ | :-: | :-------------------------------------: | :-----------------------------------------------------: |
+| Read clubs, committees, membership types                           | all |               their club                | their club, the committees they lead, that club's types |
+| Read, search and view members (with their contact data)            | all |                  club                   |           members of the committees they lead           |
+| Add a person to the club, and to any committees of it              |  ✓  |                    ✓                    |                            —                            |
+| Add to / remove from a committee                                   |  ✓  |                    ✓                    |                            —                            |
+| Remove from the club / restore a removed member                    |  ✓  |                    ✓                    |                            —                            |
+| Edit this club's fields (phone, email, college, major, level)      |  ✓  |                    ✓                    |                            —                            |
+| Edit the full name                                                 |  ✓  |                    ✓                    |                    — (nor their own)                    |
+| Edit the university email                                          |  ✓  | only while the person is not registered |                            —                            |
+| Change membership type                                             |  ✓  |                    ✓                    |           members of the committees they lead           |
+| CSV import                                                         |  ✓  |                    ✓                    |                            —                            |
+| Export members to Excel (the same members and fields as the list)  |  ✓  |                    ✓                    |           members of the committees they lead           |
+| Add points, edit and cancel any transaction                        |  ✓  |                    ✓                    |                     their committee                     |
+| Bulk points for one committee                                      |  ✓  |                    ✓                    |                     their committee                     |
+| Bulk points across a club's committees                             |  ✓  |                    ✓                    |                            —                            |
+| Read a member's points history and balances                        | all |                  club                   |           members of the committees they lead           |
+| Membership types of a club                                         |  ✓  |                    ✓                    |                            —                            |
+| Clubs and committees: create, rename, archive                      |  ✓  |                    —                    |                            —                            |
+| Create / renew / turn off a committee's view link                  |  ✓  |                    ✓                    |                     their committee                     |
+| Appoint / revoke committee leads                                   |  ✓  |                    ✓                    |                            —                            |
+| Appoint / revoke club officers                                     |  ✓  |                    —                    |                            —                            |
+| Read who holds which role, and the role history                    | all |               their club                |                            —                            |
+| Delete an empty club, or a committee with everything in it         |  ✓  |                    —                    |                            —                            |
+| Delete a person's data (never their own, nor another full admin's) |  ✓  |                    —                    |                            —                            |
 
 **Roles are granted through the API** ([ADR 0018](adr/0018-granting-roles.md)): full admins appoint and revoke club officers, a club's officers appoint and revoke the leads of its committees, and the full-admin flag itself is not grantable at all. Every real change writes one append-only `RoleChange` row; setting a role to the value it already holds writes nothing and answers 200, and because the role write is conditional on the previous role, two simultaneous grants leave one row. A change takes effect on the requester's next request — the Actor is rebuilt from the database every time.
 
 Every club-level refusal on a member carries the same reason, `club_management_required`; the one
 committee-level refusal, on a view link, carries `committee_management_required`.
-Removing is always a soft remove and points are never deleted: a person taken out of a committee
+Removing is always a soft remove and points are never deleted (the full-admin deletes below are the one exception): a person taken out of a committee
 drops out of its lists and can earn nothing more there, while what they already earned stays in
 their club total. Adding someone whose membership was removed **restores that membership**, with
 its committee memberships and their points, and resets every role on the way back in; someone
 already active in the club is a 409 `already_in_club` carrying their `memberId`.
 
-**Points** ([ADR 0004](adr/0004-points-ledger.md), [ADR 0019](adr/0019-points-rules.md)) are a ledger: a balance is the sum of a member's ACTIVE transactions in one committee, never a stored column. A lead runs the ledger of the committees they lead, including transactions somebody else recorded. Nothing is deleted — cancelling marks the row, stops it counting and is final — and every real edit or cancel writes a revision with the values from before. Refusals name what is wrong (409 `member_removed`, `not_in_committee`, `club_archived`, `committee_archived`, `transaction_cancelled`, `transaction_modified`) while 404 stays for what the actor cannot see. The members list carries each member's balance per committee as well as their total, in two queries for a whole page.
+**Points** ([ADR 0004](adr/0004-points-ledger.md), [ADR 0019](adr/0019-points-rules.md)) are a ledger: a balance is the sum of a member's ACTIVE transactions in one committee, never a stored column. A lead runs the ledger of the committees they lead, including transactions somebody else recorded. Nothing is deleted except by a full admin's committee or person delete — cancelling marks the row, stops it counting and is final — and every real edit or cancel writes a revision with the values from before. Refusals name what is wrong (409 `member_removed`, `not_in_committee`, `club_archived`, `committee_archived`, `transaction_cancelled`, `transaction_modified`) while 404 stays for what the actor cannot see. The members list carries each member's balance per committee as well as their total, in two queries for a whole page.
 
 **Bulk points** ([ADR 0022](adr/0022-bulk-points.md)) give several members the same amount, reason
 and work date in one request — attendance, mostly. Two endpoints share one service: a committee
@@ -257,7 +264,9 @@ carrying a different request is 409 `batch_mismatch`.
 
 **Archived clubs and committees** are read-only for anything new: no members, committee memberships, points, committees or membership types can be added to them, and they are left out of lists unless `?includeArchived=true` is passed. Each module refuses its own writes ([ADR 0015](adr/0015-archive-instead-of-delete.md)).
 
-**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `membershipTypesScope`, `roleChangesScope`, `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
+**Full-admin deletes** ([ADR 0015](adr/0015-archive-instead-of-delete.md)'s amendment, [ADR 0026](adr/0026-person-deletion.md)) are the irreversible exception to archiving and removing, and a full admin's alone (403 `full_admin_required` for anyone who can see the target). Each is a POST with a JSON body, runs as one transaction that locks what it removes and re-checks it, deletes through the module that owns each table, and appends one `DeletionRecord` with ids and counts only. **An empty club** (no membership ever, active or removed, and no transaction; otherwise 409 `club_not_empty`) goes with its committees, membership types and export log. **A committee** goes with its committee memberships, transactions and their revisions, lead history, view link and emptied batches, after the admin types its name (422 `confirmation_mismatch`) and confirms the counts they were shown (409 `deletion_counts_changed`); the people and their other committees are untouched. **A person's data** — their memberships in every club, committee memberships, the transactions on them, role history about them, sessions and sign-in code — goes after the admin types their university email; the `User` row is emptied in place (`deletedAt`, no name, no email, a new public id) so that what they recorded for others stays, shown as «عضو محذوف» (`fullName: null` in the API). Never the admin's own data (`cannot_delete_self`) or another full admin's (`cannot_delete_full_admin`).
+
+**Scopes** (`src/server/authz/scopes.ts`) turn an Actor into Prisma `where` clauses: `membersScope`, `committeeMembershipsScope`, `pointTransactionsScope`, `committeesScope`, `clubsScope`, `membershipTypesScope`, `roleChangesScope`, `peopleScope` (accounts behind the members an actor sees; everything for a full admin), `selfScope`. They are **branded types**: repository functions for scoped models require one, so leaving the scope out does not compile, and casting anything to a scope type is a lint error (only `scopes.ts` creates them). Always combine with `AND: [scope, filters]` — writes too: updates match through the scope and creates check their parent rows through it, which `tests/integration/repositories/` proves by calling each write with another club's scope. An actor without access gets `{ id: { in: [] } }` — fail closed.
 
 **Nested data is scoped too.** A member's committee list and points total only include committees the actor can see; filters go through the scope (a lead cannot discover who is in another committee by filtering on its id — refused with a 404 before the query runs, and the query applies the scope again anyway).
 
@@ -317,9 +326,9 @@ endpoints are rate-limited per IP and per token, separately from sign-in.
 
 `prisma/schema.prisma` covers the whole phase. Highlights ([ADR 0003](adr/0003-data-model.md), [ADR 0004](adr/0004-points-ledger.md)):
 
-- `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK), `registeredAt` null until they sign in and confirm their name, random `publicId` for public pages, `searchName` for Arabic-aware search.
+- `User` — one per person, holding only the identity every club shares: `fullName`, `uniEmail` (unique and lowercase, CHECK; null only on a deleted person, whose row is kept empty by `User_deleted_check` — [ADR 0026](adr/0026-person-deletion.md)), `registeredAt` null until they sign in and confirm their name, random `publicId` for public pages, `searchName` for Arabic-aware search.
 - Sign-in tables, short-lived and deleted when they expire: `OtpChallenge` (one pending code per address, keyed by an HMAC of it), `Session` (SHA-256 of the cookie token; `userId` null until a new person enters their name), `RateLimitCounter` ([ADR 0014](adr/0014-email-otp-sign-in.md)).
-- `Club` → `Committee`, `MembershipType` (ordered per club). Clubs and committees are **archived, never deleted** (`archivedAt`): hidden from lists by default and closed to anything new, while their members and points history stay readable ([ADR 0015](adr/0015-archive-instead-of-delete.md)). Membership types carry no history of their own and are deleted — a type in use only with a destination for its memberships, and never the club's last one ([ADR 0016](adr/0016-membership-type-deletes-and-order.md)).
+- `Club` → `Committee`, `MembershipType` (ordered per club). Clubs and committees are **archived** (`archivedAt`) — deleted only by a full admin, an empty club or a committee with its rows: hidden from lists by default and closed to anything new, while their members and points history stay readable ([ADR 0015](adr/0015-archive-instead-of-delete.md)). Membership types carry no history of their own and are deleted — a type in use only with a destination for its memberships, and never the club's last one ([ADR 0016](adr/0016-membership-type-deletes-and-order.md)).
 - `Membership` (user × club, type, `role`, soft-deleted with `removedAt`) also holds **this club's copy** of the person's contact and study details (phone, personal email, college, major, level). Each club reads and edits only its own copy; adding someone never reveals whether their account already existed ([ADR 0012](adr/0012-member-profiles-per-club.md)).
 - `Membership` → `CommitteeMembership` (membership × committee, `role`, soft-deleted).
 - `MemberExport` — append-only, one row per members export that produced a file: club, who, `ALL`/`IDS` and how many were ticked, the filters as JSON with the search text replaced by a boolean, the columns, the row count. CHECKs keep the counts consistent ([ADR 0025](adr/0025-members-export.md)).
@@ -327,7 +336,8 @@ endpoints are rate-limited per IP and per token, separately from sign-in.
 - `PointTransaction` (signed `amount`, `reason`, `workDate`, `status`, `batchId`) → `PointTransactionRevision` (previous values on every edit/cancel). `batchId` is a composite foreign key onto `PointBatch` (`(batchId, clubId) → (id, clubId)`, MATCH SIMPLE, so a single add's null is unconstrained).
 - `PointBatch` — one bulk-points request: the client-generated id as its **primary key**, the club, the committee (null when the batch spans a club's committees), who ran it, and a SHA-256 `requestHash` of the request. The primary key is the double-submit guarantee; the hash is what tells a replay from a different request under the same key. Nullable for batches that were never an API request — the demo seed's ([ADR 0022](adr/0022-bulk-points.md)). Amounts are whole numbers in ±1000 and never zero; a balance is the sum of ACTIVE amounts, per committee, computed at read time ([ADR 0004](adr/0004-points-ledger.md), [ADR 0019](adr/0019-points-rules.md)).
 - **Composite foreign keys** carry `clubId` down the chain, so a committee membership or a point can never point into another club — even if application code has a bug.
-- **Nothing with history is hard-deleted.** All foreign keys are `Restrict`.
+- `DeletionRecord` — append-only, one row per full-admin delete: `kind` (`CLUB`, `COMMITTEE`, `PERSON`), the target id, the committee's club, who and when, and the counts removed as a JSON object. No foreign key to the target and never personal data.
+- **Nothing with history is hard-deleted** except by those three deletes, each of which names every table it touches. All foreign keys are `Restrict`, so nothing is ever removed by a cascade.
 - Ids are UUIDv7.
 
 Change the schema with `pnpm db:migrate --name <change>`; review the generated SQL; never edit a migration that is on `main`.
