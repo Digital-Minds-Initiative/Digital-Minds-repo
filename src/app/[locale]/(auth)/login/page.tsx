@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { SignInFlow } from '@/client/features/auth';
 import { resolveLocale } from '@/i18n/locale';
+import { selfSignupEnabled } from '@/shared/lib/self-signup';
 
 export async function generateMetadata({
   params,
@@ -14,5 +15,5 @@ export async function generateMetadata({
 
 export default async function LoginPage({ params }: PageProps<'/[locale]/login'>) {
   await resolveLocale(params);
-  return <SignInFlow mode="login" />;
+  return <SignInFlow mode="login" selfSignup={selfSignupEnabled()} />;
 }

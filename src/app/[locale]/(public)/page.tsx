@@ -21,13 +21,26 @@ import { SpecLabel } from '@/components/ui/spec-label';
 import { TicTacToeNote } from '@/components/ui/tic-tac-toe-note';
 import { resolveLocale } from '@/i18n/locale';
 import { Link } from '@/i18n/navigation';
+import { selfSignupEnabled } from '@/shared/lib/self-signup';
 
 /** Lilac is the platform's primary action colour on the dark surfaces. */
 const PRIMARY_ACTION =
   'border-tuwaiq-lilac bg-tuwaiq-lilac text-deep hover:bg-tuwaiq-lilac/85 motion-safe:animate-[glow-pulse_3s_ease-in-out_infinite] motion-safe:transition-[translate,box-shadow] motion-safe:hover:translate-y-0.5 motion-safe:hover:animate-none motion-safe:hover:shadow-none motion-safe:active:translate-y-0.5';
 
-/** Create an account (primary) and sign in (secondary), side by side and stacked on small screens. */
-function AuthCtas({ signUp, signIn }: { signUp: string; signIn: string }) {
+/**
+ * Create an account (primary) and sign in (secondary), side by side and stacked on small screens.
+ * With sign-up off (`signUp` null, ADR 0027) sign-in is the only action, and the primary one.
+ */
+function AuthCtas({ signUp, signIn }: { signUp: string | null; signIn: string }) {
+  if (signUp === null) {
+    return (
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+        <Button asChild className={PRIMARY_ACTION}>
+          <Link href="/login">{signIn}</Link>
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
       <Button asChild className={PRIMARY_ACTION}>
@@ -416,7 +429,10 @@ export default async function LandingPage({ params }: PageProps<'/[locale]'>) {
             </p>
           </Reveal>
           <Reveal delay={5 * DELAYS.sectionStep} className="w-full sm:w-auto">
-            <AuthCtas signIn={t('cta.signIn')} signUp={t('cta.signUp')} />
+            <AuthCtas
+              signIn={t('cta.signIn')}
+              signUp={selfSignupEnabled() ? t('cta.signUp') : null}
+            />
           </Reveal>
         </div>
       </section>

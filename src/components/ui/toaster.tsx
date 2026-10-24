@@ -4,8 +4,10 @@ import { useTranslations } from 'next-intl';
 import { Direction } from 'radix-ui';
 import { useSyncExternalStore } from 'react';
 
+import { Button } from './button';
 import {
   Toast,
+  ToastAction,
   ToastClose,
   ToastDescription,
   ToastProvider,
@@ -29,12 +31,21 @@ interface ToastItem {
   variant: ToastVariant;
   open: boolean;
   duration?: number;
+  action?: ToastActionOptions;
+}
+
+interface ToastActionOptions {
+  /** The button's text, also read to screen readers as the alternative. */
+  label: string;
+  onClick: () => void;
 }
 
 interface ToastOptions {
   description?: string;
   /** Milliseconds before auto-dismiss (Radix default: 5000). */
   duration?: number;
+  /** One button that does something about the toast, such as «إعادة الإرسال». Closes it. */
+  action?: ToastActionOptions;
 }
 
 const MAX_VISIBLE = 3;
@@ -103,6 +114,18 @@ export function Toaster() {
           <div className="grid gap-1">
             <ToastTitle>{item.title}</ToastTitle>
             {item.description ? <ToastDescription>{item.description}</ToastDescription> : null}
+            {item.action ? (
+              <ToastAction altText={item.action.label} asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-1 justify-self-start"
+                  onClick={item.action.onClick}
+                >
+                  {item.action.label}
+                </Button>
+              </ToastAction>
+            ) : null}
           </div>
           <ToastClose />
         </Toast>

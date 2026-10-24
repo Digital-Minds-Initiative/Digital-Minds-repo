@@ -116,7 +116,7 @@ interface MockRoleChange {
 }
 
 /** One invitation email that was "sent" (docs/adr/0027-invite-only-sign-in.md). */
-export interface MockRoleInvitation {
+interface MockRoleInvitation {
   clubId: string;
   /** Null for a club-officer invitation. */
   committeeId: string | null;

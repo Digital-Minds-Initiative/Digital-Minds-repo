@@ -23,6 +23,11 @@ export interface CodeFormProps {
   email: string;
   /** Seconds until another code may be requested (from the request that just succeeded). */
   resendAfterSeconds: number;
+  /**
+   * Invite-only sign-in: the server sends a code only to people with access and answers everyone
+   * the same, so this screen must not claim a code was sent (ADR 0027).
+   */
+  inviteOnly: boolean;
   onVerified: (step: SignInStep) => void;
   onChangeEmail: () => void;
   onDialog: (dialog: AuthDialogState) => void;
@@ -31,6 +36,7 @@ export interface CodeFormProps {
 export function CodeForm({
   email,
   resendAfterSeconds,
+  inviteOnly,
   onVerified,
   onChangeEmail,
   onDialog,
@@ -101,9 +107,13 @@ export function CodeForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="grid gap-5">
-      <p className="text-center text-sm leading-6 text-on-paper-muted">
-        {t('sentTo')} <bdi dir="ltr">{email}</bdi>
-      </p>
+      {inviteOnly ? (
+        <p className="text-center text-sm leading-6 text-on-paper-muted">{t('ifYouHaveAccess')}</p>
+      ) : (
+        <p className="text-center text-sm leading-6 text-on-paper-muted">
+          {t('sentTo')} <bdi dir="ltr">{email}</bdi>
+        </p>
+      )}
       <FormField
         control={form.control}
         name="code"

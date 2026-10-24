@@ -3,6 +3,8 @@ import { getTranslations } from 'next-intl/server';
 
 import { SignInFlow } from '@/client/features/auth';
 import { resolveLocale } from '@/i18n/locale';
+import { redirect } from '@/i18n/navigation';
+import { selfSignupEnabled } from '@/shared/lib/self-signup';
 
 export async function generateMetadata({
   params,
@@ -12,7 +14,9 @@ export async function generateMetadata({
   return { title: t('title') };
 }
 
+/** With sign-up off (AUTH_SELF_SIGNUP=false, ADR 0027) there is nothing to register: go to sign-in. */
 export default async function RegisterPage({ params }: PageProps<'/[locale]/register'>) {
-  await resolveLocale(params);
-  return <SignInFlow mode="register" />;
+  const locale = await resolveLocale(params);
+  if (!selfSignupEnabled()) redirect({ href: '/login', locale });
+  return <SignInFlow mode="register" selfSignup />;
 }

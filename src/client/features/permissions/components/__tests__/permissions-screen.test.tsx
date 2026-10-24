@@ -7,21 +7,26 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type * as ApiClientModule from '@/client/lib/api-client';
 import { resetMockDb } from '@/client/mocks/db';
 import { server } from '@/client/mocks/node';
+import { Toaster } from '@/components/ui/toaster';
 import { renderWithProviders } from '@tests/utils/render';
 
 import { PermissionsScreen } from '../permissions-screen';
 
 const actor = vi.hoisted(() => ({ email: '' }));
+/** Lets a test change what the server answered, for a case the mocks never produce. */
+const answers = vi.hoisted(() => ({ rewrite: null as ((response: unknown) => unknown) | null }));
 // MSW does not read `document.cookie` in Node, so the persona goes out as a Cookie header instead.
 vi.mock('@/client/lib/api-client', async (importOriginal) => {
   const original = await importOriginal<typeof ApiClientModule>();
   return {
     ...original,
     apiClient: {
-      request: (...args: Parameters<typeof original.apiClient.request>) =>
-        original
+      request: async (...args: Parameters<typeof original.apiClient.request>) => {
+        const response = await original
           .createApiClient({ headers: { cookie: `dm-dev-actor=${actor.email}` } })
-          .request(...args),
+          .request(...args);
+        return answers.rewrite ? answers.rewrite(response) : response;
+      },
     },
   };
 });
@@ -51,7 +56,10 @@ beforeAll(() => {
   Element.prototype.hasPointerCapture ??= () => false;
   Element.prototype.scrollIntoView ??= () => {};
 });
-beforeEach(() => resetMockDb());
+beforeEach(() => {
+  resetMockDb();
+  answers.rewrite = null;
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -59,7 +67,10 @@ async function renderPage(email: string) {
   actor.email = email;
   const user = userEvent.setup();
   renderWithProviders(
-    <PermissionsScreen title="الصلاحيات" description="إدارة أدوار النادي ومسؤولي اللجان" />,
+    <>
+      <PermissionsScreen title="الصلاحيات" description="إدارة أدوار النادي ومسؤولي اللجان" />
+      <Toaster />
+    </>,
   );
   return user;
 }
@@ -208,5 +219,79 @@ describe('PermissionsScreen — the lighter layout', { timeout: 30_000 }, () => 
     await renderPage(OFFICER);
     const officers = await screen.findByRole('region', { name: 'مسؤولو النادي' });
     expect(await within(officers).findByText('أنت', undefined, { timeout: 15_000 })).toBeTruthy();
+  });
+});
+
+describe('PermissionsScreen — invitations', { timeout: 30_000 }, () => {
+  /** تركي has never signed in; he is in لجنة الفعاليات. */
+  async function appointTurki(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByRole(
+        'button',
+        { name: 'تعيين مسؤول لـ لجنة الفعاليات' },
+        { timeout: 15_000 },
+      ),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('searchbox'), 'تركي');
+    await user.click(
+      await within(dialog).findByRole('button', { name: /تركي/ }, { timeout: 5000 }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: /^تعيين تركي/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
+  }
+
+  function eventsCard() {
+    const card = screen.getByRole('heading', { name: 'لجنة الفعاليات' }).closest('li');
+    if (!card) throw new Error('no committee card');
+    return card;
+  }
+
+  it('says the invitation was sent, shows who has not signed in, and resends up to the limit', async () => {
+    const user = await renderPage(OFFICER);
+    await appointTurki(user);
+
+    expect(
+      await screen.findByText('أُرسلت إليه دعوة على بريده الجامعي لتسجيل الدخول.'),
+    ).toBeTruthy();
+    await waitFor(() => expect(within(eventsCard()).getByText(/لم يسجّل بعد · دُعي/)).toBeTruthy());
+
+    const resend = within(eventsCard()).getByRole('button', {
+      name: /^إعادة إرسال الدعوة إلى تركي/,
+    });
+    await user.click(resend);
+    expect(await screen.findByText('أُرسلت الدعوة مرة أخرى')).toBeTruthy();
+    await user.click(resend);
+    await waitFor(() => expect(screen.getAllByText('أُرسلت الدعوة مرة أخرى')).toHaveLength(2));
+    // The fourth today: refused, with when it can be sent again.
+    await user.click(resend);
+    expect(await screen.findByText('وصل إلى حد الدعوات اليومي')).toBeTruthy();
+    expect(screen.getByText(/^يمكن إعادة الإرسال /)).toBeTruthy();
+  });
+
+  it('offers to resend from the toast when the invitation could not be sent', async () => {
+    const user = await renderPage(OFFICER);
+    // The grant itself goes through; only its email is reported as failed.
+    answers.rewrite = (response) =>
+      response && typeof response === 'object' && 'invitation' in response
+        ? { ...response, invitation: { status: 'failed' } }
+        : response;
+    await appointTurki(user);
+    answers.rewrite = null;
+
+    expect(await screen.findByText('تعذّر إرسال الدعوة')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'إعادة إرسال الدعوة' }));
+    expect(await screen.findByText('أُرسلت الدعوة مرة أخرى')).toBeTruthy();
+  });
+
+  it('shows nothing about invitations on a holder who has signed in', async () => {
+    await renderPage(OFFICER);
+    const officers = await screen.findByRole('region', { name: 'مسؤولو النادي' });
+    const you = (await within(officers).findByText('أنت', undefined, { timeout: 15_000 })).closest(
+      'li',
+    );
+    if (!you) throw new Error('no card for the signed-in officer');
+    expect(within(you).queryByText(/لم يسجّل بعد/)).toBeNull();
+    expect(within(you).queryByRole('button', { name: /^إعادة إرسال الدعوة/ })).toBeNull();
   });
 });

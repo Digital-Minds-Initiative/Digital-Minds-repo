@@ -37,3 +37,21 @@ export const Variants: Story = {
     </div>
   ),
 };
+
+/** A toast with one action, for a failure the person can retry from where they are. */
+export const WithAction: Story = {
+  render: () => (
+    <Button
+      variant="outline"
+      onClick={() =>
+        toast.error('تعذّر إرسال الدعوة', {
+          description: 'عُيّن مسؤول اللجنة، لكن رسالة الدعوة لم تُرسل.',
+          action: { label: 'إعادة الإرسال', onClick: () => toast.success('أُرسلت الدعوة') },
+          duration: 10_000,
+        })
+      }
+    >
+      فشل مع إجراء
+    </Button>
+  ),
+};

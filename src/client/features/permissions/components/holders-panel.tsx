@@ -15,6 +15,7 @@ import { toast } from '@/components/ui/toaster';
 import type { Me } from '@/shared/contracts/auth';
 
 import { AppointDialog } from './appoint-dialog';
+import { InvitationStatus, useInvitationFeedback } from './invitation-status';
 import {
   useClubCommittees,
   useClubPermissions,
@@ -56,6 +57,7 @@ export function HoldersPanel({
   const committees = useClubCommittees(club.id);
   const setClubRole = useSetClubRole();
   const setCommitteeRole = useSetCommitteeRole();
+  const invitations = useInvitationFeedback();
   const [leadAppointing, setLeadAppointing] = useState<Extract<
     Appointing,
     { kind: 'lead' }
@@ -132,6 +134,14 @@ export function HoldersPanel({
                     ) : null}
                   </span>
                   <span className="text-xs text-fg-muted">{t('officers.roleLabel')}</span>
+                  {officer.registered ? null : (
+                    <InvitationStatus
+                      name={officer.fullName}
+                      invitedAt={officer.invitedAt}
+                      target={{ memberId: officer.memberId }}
+                      canResend={access.canSetOfficers}
+                    />
+                  )}
                 </span>
                 {access.canSetOfficers ? (
                   <Button
@@ -210,11 +220,21 @@ export function HoldersPanel({
                           className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-2"
                         >
                           <Avatar name={lead.fullName} size="sm" />
-                          <span className="flex min-w-0 flex-1 items-center gap-2">
-                            <span className="truncate text-sm font-medium">{lead.fullName}</span>
-                            {isMe(lead.fullName) ? (
-                              <Badge variant="primary">{t('leads.you')}</Badge>
-                            ) : null}
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm font-medium">{lead.fullName}</span>
+                              {isMe(lead.fullName) ? (
+                                <Badge variant="primary">{t('leads.you')}</Badge>
+                              ) : null}
+                            </span>
+                            {lead.registered ? null : (
+                              <InvitationStatus
+                                name={lead.fullName}
+                                invitedAt={lead.invitedAt}
+                                target={{ memberId: lead.memberId, committeeId: committee.id }}
+                                canResend={access.canSetLeads}
+                              />
+                            )}
                           </span>
                           {access.canSetLeads ? (
                             <Button
@@ -278,16 +298,25 @@ export function HoldersPanel({
             : member.role === 'CLUB_OFFICER'
         }
         onSubmit={async (member) => {
+          // Someone who has never signed in is emailed an invitation; the toast says how it went.
           if (appointing?.kind === 'lead') {
-            await setCommitteeRole.mutateAsync({
+            const { invitation } = await setCommitteeRole.mutateAsync({
               memberId: member.id,
               committeeId: appointing.committee.id,
               role: 'LEAD',
             });
-            toast.success(t('toasts.leadAppointed'));
+            invitations.afterGrant(t('toasts.leadAppointed'), invitation, {
+              memberId: member.id,
+              committeeId: appointing.committee.id,
+            });
           } else {
-            await setClubRole.mutateAsync({ memberId: member.id, role: 'CLUB_OFFICER' });
-            toast.success(t('toasts.officerAppointed'));
+            const { invitation } = await setClubRole.mutateAsync({
+              memberId: member.id,
+              role: 'CLUB_OFFICER',
+            });
+            invitations.afterGrant(t('toasts.officerAppointed'), invitation, {
+              memberId: member.id,
+            });
           }
         }}
       />

@@ -11,8 +11,18 @@ import { InteractiveLogo } from './interactive-logo';
 import { PublicHeader } from './public-header';
 import { ThemeToggle } from './theme-toggle';
 
-/** Plain layout for public pages (landing, later the public committee view). */
-export function PublicShell({ children }: { children: ReactNode }) {
+/**
+ * Plain layout for public pages (landing, later the public committee view). `selfSignup` is
+ * AUTH_SELF_SIGNUP, read by the layout on the server: with it off, only «تسجيل الدخول» is offered
+ * (docs/adr/0027-invite-only-sign-in.md).
+ */
+export function PublicShell({
+  children,
+  selfSignup,
+}: {
+  children: ReactNode;
+  selfSignup: boolean;
+}) {
   const t = useTranslations('shell');
   return (
     <div className="flex min-h-dvh flex-col">
@@ -33,12 +43,14 @@ export function PublicShell({ children }: { children: ReactNode }) {
             <Button asChild variant="outline" className="px-3 text-xs sm:px-5 sm:text-sm">
               <Link href="/login">{t('public.signIn')}</Link>
             </Button>
-            <Button
-              asChild
-              className="border-tuwaiq-lilac bg-tuwaiq-lilac px-3 text-xs text-deep hover:bg-tuwaiq-lilac/85 sm:px-5 sm:text-sm"
-            >
-              <Link href="/register">{t('public.signUp')}</Link>
-            </Button>
+            {selfSignup ? (
+              <Button
+                asChild
+                className="border-tuwaiq-lilac bg-tuwaiq-lilac px-3 text-xs text-deep hover:bg-tuwaiq-lilac/85 sm:px-5 sm:text-sm"
+              >
+                <Link href="/register">{t('public.signUp')}</Link>
+              </Button>
+            ) : null}
           </>
         }
       />

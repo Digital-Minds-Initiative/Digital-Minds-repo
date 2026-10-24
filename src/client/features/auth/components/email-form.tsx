@@ -23,12 +23,20 @@ type Output = z.output<typeof schema>;
 export interface EmailFormProps {
   /** Sign-in and sign-up are one flow; the mode only changes the wording and the link below. */
   mode: 'login' | 'register';
+  /** False when sign-up is off: the login screen then links to no sign-up page. */
+  offerSignUp: boolean;
   defaultEmail: string;
   onCodeSent: (email: string, resendAfterSeconds: number) => void;
   onDialog: (dialog: AuthDialogState) => void;
 }
 
-export function EmailForm({ mode, defaultEmail, onCodeSent, onDialog }: EmailFormProps) {
+export function EmailForm({
+  mode,
+  offerSignUp,
+  defaultEmail,
+  onCodeSent,
+  onDialog,
+}: EmailFormProps) {
   const t = useTranslations('auth');
   const tErrors = useTranslations('common.errors');
   const request = useRequestOtp();
@@ -97,16 +105,18 @@ export function EmailForm({ mode, defaultEmail, onCodeSent, onDialog }: EmailFor
       <Button type="submit" loading={request.isPending} className={paperButtonClass}>
         {t(`${mode}.submit`)}
       </Button>
-      <p className="flex flex-wrap items-center justify-center gap-2 text-sm text-on-paper-muted">
-        {t(`${mode}.switchPrompt`)}{' '}
-        <Link
-          href={mode === 'login' ? '/register' : '/login'}
-          replace
-          className={paperPillLinkClass}
-        >
-          {t(`${mode}.switchLink`)}
-        </Link>
-      </p>
+      {mode === 'register' || offerSignUp ? (
+        <p className="flex flex-wrap items-center justify-center gap-2 text-sm text-on-paper-muted">
+          {t(`${mode}.switchPrompt`)}{' '}
+          <Link
+            href={mode === 'login' ? '/register' : '/login'}
+            replace
+            className={paperPillLinkClass}
+          >
+            {t(`${mode}.switchLink`)}
+          </Link>
+        </p>
+      ) : null}
     </form>
   );
 }
