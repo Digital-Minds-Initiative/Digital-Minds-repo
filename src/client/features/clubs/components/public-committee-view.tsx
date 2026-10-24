@@ -236,7 +236,10 @@ function SearchPanel({
                 onClick={() => onOpen(member.publicId)}
                 className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-surface-1 px-4 py-3 text-start transition-colors outline-none hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-ring"
               >
-                <span className="min-w-0 truncate font-medium">{member.fullName}</span>
+                <span className="grid min-w-0 justify-items-start gap-1">
+                  <span className="max-w-full truncate font-medium">{member.fullName}</span>
+                  <MembershipTypeBadge name={member.membershipType.name} />
+                </span>
                 <Badge variant={member.balance < 0 ? 'danger' : 'outline'} className="shrink-0">
                   <span className="[direction:ltr]">
                     {format.number(member.balance, 'integer')}
@@ -248,6 +251,18 @@ function SearchPanel({
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * The title the club gives the member, in the members table's badge. The table colours a type by
+ * its place in the club's order, which the public page is not sent, so this is the plain rung.
+ */
+function MembershipTypeBadge({ name }: { name: string }) {
+  return (
+    <Badge variant="neutral" className="max-w-full">
+      <span className="truncate">{name}</span>
+    </Badge>
   );
 }
 
@@ -291,6 +306,7 @@ function MemberPanel({
         <>
           <Card className="items-center gap-2 text-center" padding="lg">
             <h2 className="text-lg font-semibold text-balance">{first.member.fullName}</h2>
+            <MembershipTypeBadge name={first.member.membershipType.name} />
             <p className="text-sm text-fg-muted">{t('balanceLabel')}</p>
             <p
               className={cn(

@@ -392,13 +392,17 @@ export const disableCommitteeViewLinkEndpoint = defineEndpoint({
 //
 // The response schemas below are a WHITELIST: every response is parsed through them before it is
 // sent, so a field that is not listed here cannot leave the server even if a mapper produces it.
-// NEVER add contact data (phone, university or personal email), study details, membership types,
-// other committees, other clubs, who recorded a transaction, cancelled transactions, revisions,
-// or any id that an authenticated endpoint accepts. `src/shared/contracts/__tests__/clubs.test.ts`
-// fails if these shapes grow.
+// NEVER add contact data (phone, university or personal email), study details, other committees,
+// other clubs, who recorded a transaction, cancelled transactions, revisions, or any id that an
+// authenticated endpoint accepts. The membership type's NAME is the one deliberate exception
+// (ADR 0023, amended 2026-10-24) — never its id or its place in the club's order.
+// `src/shared/contracts/__tests__/clubs.test.ts` fails if these shapes grow.
 
 /** `User.publicId` (cuid2): random, exposed on purpose, and accepted by no other endpoint. */
 export const publicIdSchema = z.string().regex(/^[a-z0-9]{20,40}$/);
+
+/** The title the club gives the member (`MembershipType.name`): the name alone, never the type's id. */
+const publicMembershipTypeSchema = z.object({ name: z.string() });
 
 const publicViewParamsSchema = z.object({ token: viewTokenSchema });
 
@@ -441,6 +445,7 @@ export const publicMemberSearchResultSchema = z.object({
       z.object({
         publicId: publicIdSchema,
         fullName: z.string(),
+        membershipType: publicMembershipTypeSchema,
         /** Sum of this member's ACTIVE transactions in this committee only. */
         balance: z.number().int(),
       }),
@@ -467,7 +472,11 @@ export const publicMemberPointsQuerySchema = z.object(paginationShape);
 export type PublicMemberPointsQuery = z.output<typeof publicMemberPointsQuerySchema>;
 
 export const publicMemberPointsSchema = z.object({
-  member: z.object({ publicId: publicIdSchema, fullName: z.string() }),
+  member: z.object({
+    publicId: publicIdSchema,
+    fullName: z.string(),
+    membershipType: publicMembershipTypeSchema,
+  }),
   /** Sum of the member's ACTIVE transactions in this committee only. */
   balance: z.number().int(),
   transactions: paginated(
