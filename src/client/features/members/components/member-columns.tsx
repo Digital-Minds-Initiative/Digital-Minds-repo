@@ -242,6 +242,19 @@ export function useMemberColumns({
           );
         },
       }),
+      column.accessor((member) => member.profile.personalEmail, {
+        id: 'personalEmail',
+        header: t('columns.personalEmail'),
+        meta: { label: t('columns.personalEmail') },
+        cell: ({ getValue }) => {
+          const email = getValue();
+          return email ? (
+            <bdi dir="ltr">{email}</bdi>
+          ) : (
+            <span className="text-fg-subtle">{t('none')}</span>
+          );
+        },
+      }),
       column.accessor((member) => member.profile.college, {
         id: 'college',
         header: t('columns.college'),

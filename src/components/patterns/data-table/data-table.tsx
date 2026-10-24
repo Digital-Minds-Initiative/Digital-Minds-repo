@@ -63,6 +63,8 @@ interface DataTableProps<TData extends RowData> {
   emptyState?: ReactNode;
   /** Filters and actions shown above the table. */
   toolbar?: ReactNode;
+  /** Actions at the end of the toolbar, beside the column-visibility menu. */
+  toolbarEnd?: ReactNode;
   /** Shown above the table while rows are selected. */
   bulkActions?: (selection: { ids: string[]; clear: () => void }) => ReactNode;
   /** Accessible name of the table. */
@@ -92,6 +94,7 @@ export function DataTable<TData extends RowData>({
   isFetching = false,
   emptyState,
   toolbar,
+  toolbarEnd,
   bulkActions,
   label,
   pageSizeOptions,
@@ -162,10 +165,13 @@ export function DataTable<TData extends RowData>({
 
   return (
     <div className="flex flex-col gap-3">
-      {toolbar || onColumnVisibilityChange ? (
+      {toolbar || toolbarEnd || onColumnVisibilityChange ? (
         <div className="flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-1 p-3">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{toolbar}</div>
-          {onColumnVisibilityChange ? <ColumnVisibilityMenu table={table} /> : null}
+          <div className="flex items-center gap-2">
+            {toolbarEnd}
+            {onColumnVisibilityChange ? <ColumnVisibilityMenu table={table} /> : null}
+          </div>
         </div>
       ) : null}
 
