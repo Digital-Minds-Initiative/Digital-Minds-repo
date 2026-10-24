@@ -70,3 +70,8 @@ CLAUDE.local.md
 .eslintcache
 .turbo/
 .vercel/
+
+# ─── Database backups (scripts/db-backup.sh): never commit one, even encrypted ──
+backups/
+*.dump
+*.dump.gpg

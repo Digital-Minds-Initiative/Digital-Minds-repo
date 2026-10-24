@@ -79,6 +79,7 @@ const serverModuleZones = (/** @type {string[]} */ extraEntries = []) =>
       './src/app/**/*',
       './tests/**/*',
       './prisma/**/*',
+      './scripts/**/*',
     ],
     from: `./src/server/modules/${name}`,
     except: ['./index.ts', ...extraEntries],
@@ -386,7 +387,13 @@ export default defineConfig([
 
   {
     name: 'digital-minds/scripts-and-tests',
-    files: ['prisma/**/*.ts', 'tests/**/*.ts', '**/*.test.{ts,tsx}', '*.config.{ts,mjs}'],
+    files: [
+      'prisma/**/*.ts',
+      'scripts/**/*.ts',
+      'tests/**/*.ts',
+      '**/*.test.{ts,tsx}',
+      '*.config.{ts,mjs}',
+    ],
     rules: {
       // Scripts and tests may log.
       'no-console': 'off',

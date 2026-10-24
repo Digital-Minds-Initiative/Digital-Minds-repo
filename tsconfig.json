@@ -35,6 +35,7 @@
     "tests",
     "e2e",
     "prisma",
+    "scripts",
     ".storybook/*.ts",
     ".storybook/*.tsx",
     "*.ts",
