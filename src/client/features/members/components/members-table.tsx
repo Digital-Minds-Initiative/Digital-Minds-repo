@@ -1,7 +1,7 @@
 'use client';
 
 import { functionalUpdate } from '@tanstack/react-table';
-import { RotateCw, UsersRound } from 'lucide-react';
+import { Download, RotateCw, UsersRound } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useState } from 'react';
 
@@ -25,8 +25,10 @@ import {
   type Member,
   type MemberSortField,
 } from '@/shared/contracts/members';
+import type { MemberExportSelection } from '@/shared/contracts/members-export';
 
 import { EditMemberDialog } from './edit-member-dialog';
+import { ExportMembersDialog } from './export-members-dialog';
 import { useMemberColumns } from './member-columns';
 import { MemberSheet } from './member-sheet';
 import { MemberStats } from './member-stats';
@@ -89,12 +91,35 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
   const [columnVisibility, setColumnVisibility] = useState(DEFAULT_COLUMN_VISIBILITY);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [selectingAll, setSelectingAll] = useState(false);
+  // True after "select all N": the export then asks for every match instead of a list of ids.
+  const [everyoneSelected, setEveryoneSelected] = useState(false);
+  const [exportSelection, setExportSelection] = useState<MemberExportSelection | null>(null);
   // Selection belongs to the visible page: clear it whenever the query changes.
   const queryKey = JSON.stringify(query);
   const [selectionQueryKey, setSelectionQueryKey] = useState(queryKey);
   if (selectionQueryKey !== queryKey) {
     setSelectionQueryKey(queryKey);
     setRowSelection({});
+    setEveryoneSelected(false);
+  }
+
+  const onRowSelectionChange: OnChangeFn<RowSelectionState> = (updater) => {
+    setEveryoneSelected(false);
+    setRowSelection(updater);
+  };
+
+  // A file is one club's: the one filtered on, or the only one the person can see.
+  const accessClubs = me?.access.clubs ?? [];
+  const exportClubId = query.clubId ?? (accessClubs.length === 1 ? accessClubs[0]?.id : undefined);
+  const { page: _page, pageSize: _pageSize, clubId: _clubId, ...exportFilters } = query;
+  const visibleColumnIds = columns.flatMap((column) => {
+    const id = column.id ?? ('accessorKey' in column ? column.accessorKey : undefined);
+    return typeof id === 'string' && columnVisibility[id] !== false ? [id] : [];
+  });
+
+  function openExport(selection: MemberExportSelection) {
+    if (exportClubId === undefined) toast(t('export.pickClub'));
+    else setExportSelection(selection);
   }
 
   const pagination: PaginationState = { pageIndex: query.page - 1, pageSize: query.pageSize };
@@ -133,6 +158,7 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
         pageCount = result.pageCount;
       }
       setRowSelection(picked);
+      setEveryoneSelected(true);
     } catch {
       toast.error(t('selection.failed'));
     } finally {
@@ -179,24 +205,50 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
         sorting={sorting}
         onSortingChange={onSortingChange}
         rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
+        onRowSelectionChange={onRowSelectionChange}
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={setColumnVisibility}
         isLoading={members.isPending}
         isFetching={members.isFetching}
-        toolbar={<MembersToolbar query={query} onChange={onFiltersChange} access={me?.access} />}
-        bulkActions={({ ids }) =>
-          ids.length < (members.data?.total ?? 0) ? (
+        toolbar={
+          <>
+            <MembersToolbar query={query} onChange={onFiltersChange} access={me?.access} />
+            {/* At the end of the row, so it sits beside the columns menu. */}
             <Button
               variant="outline"
               size="sm"
-              loading={selectingAll}
-              onClick={() => void selectEveryone()}
+              className="ms-auto"
+              onClick={() => openExport({ kind: 'all' })}
             >
-              {t('selection.selectAll', { count: members.data?.total ?? 0 })}
+              <Download aria-hidden />
+              {t('export.button')}
             </Button>
-          ) : null
+          </>
         }
+        bulkActions={({ ids }) => (
+          <>
+            {ids.length < (members.data?.total ?? 0) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                loading={selectingAll}
+                onClick={() => void selectEveryone()}
+              >
+                {t('selection.selectAll', { count: members.data?.total ?? 0 })}
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                openExport(everyoneSelected ? { kind: 'all' } : { kind: 'ids', memberIds: ids })
+              }
+            >
+              <Download aria-hidden />
+              {t('export.button')}
+            </Button>
+          </>
+        )}
         emptyState={
           <EmptyState
             variant="plain"
@@ -221,6 +273,26 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
         }
         onClose={() => setEditing(null)}
       />
+      {exportClubId !== undefined ? (
+        <ExportMembersDialog
+          open={exportSelection !== null}
+          onOpenChange={(open) => {
+            if (!open) setExportSelection(null);
+          }}
+          clubId={exportClubId}
+          filters={exportFilters}
+          selection={exportSelection ?? { kind: 'all' }}
+          visibleColumnIds={visibleColumnIds}
+          onRejected={(memberIds) => {
+            setEveryoneSelected(false);
+            setRowSelection((current) => {
+              const next = { ...current };
+              for (const id of memberIds) delete next[id];
+              return next;
+            });
+          }}
+        />
+      ) : null}
       <RemoveMemberDialog
         member={removing}
         onClose={() => setRemoving(null)}
