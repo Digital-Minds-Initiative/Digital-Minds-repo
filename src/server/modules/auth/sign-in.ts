@@ -1,14 +1,17 @@
 import 'server-only';
 
+import { afterResponse } from '@/server/after-response';
 import { findActorByUserId, type Actor } from '@/server/authz';
 import { emailSender } from '@/server/email';
 import { assertUniversityEmail } from '@/server/email-policy';
+import { env } from '@/server/env';
 import {
   ConflictError,
   RateLimitedError,
   UnauthenticatedError,
   ValidationError,
 } from '@/server/errors';
+import { logger } from '@/server/logger';
 import {
   OTP_RESEND_COOLDOWN_SECONDS,
   OTP_TTL_SECONDS,
@@ -39,6 +42,7 @@ import {
   findLiveSession,
   findOtpChallenge,
   findUserForSignIn,
+  hasDashboardAccess,
   registerOtpAttempt,
   saveOtpChallenge,
   type LiveSession,
@@ -48,6 +52,10 @@ import {
  * Email one-time-code sign-in (docs/adr/0014-email-otp-sign-in.md). Sign-up and sign-in are the
  * same flow: the email is proved first, for everyone, and nothing here reveals whether an address
  * has an account until its owner has entered the code sent to it.
+ *
+ * With AUTH_SELF_SIGNUP=false the flow is invite-only (docs/adr/0027-invite-only-sign-in.md):
+ * codes go only to people with dashboard access, and no step creates an account. The sign-up
+ * branches stay, behind the flag.
  */
 
 const MAX_CODE_ATTEMPTS = 5;
@@ -76,8 +84,16 @@ interface WithSessionCookie<T> {
 }
 
 /**
- * Emails a new code. The answer is the same for every allowed address, registered or not: this
- * function never looks at the User table.
+ * Emails a new code. The answer is the same for every allowed address, registered or not.
+ *
+ * With self sign-up on, this never looks at the User table. With it off (invite-only, ADR 0027),
+ * only someone with dashboard access is sent a code — and everyone else must not be able to tell:
+ *   - every address gets the same answer, the same limits and the same stored challenge (for
+ *     someone without access, the hash of a code nobody is sent), so verifying afterwards also
+ *     answers the same — `invalid_code`, then `too_many_attempts` — whoever the address is;
+ *   - the email goes out after the response (`afterResponse`), so how long sending takes is not
+ *     in the timing either. A failed send is logged and its code dropped, so the person can ask
+ *     again at once; they are not told, because telling them would tell everybody.
  */
 export async function requestOtp(
   body: { email: string },
@@ -97,6 +113,8 @@ export async function requestOtp(
   await consumeLimit('requestPerEmailHour', body.email, now);
   await consumeLimit('requestPerEmailDay', body.email, now);
 
+  const inviteOnly = !env.AUTH_SELF_SIGNUP;
+  const sendCode = !inviteOnly || (await hasDashboardAccess(body.email));
   const code = generateOtpCode();
   const codeHash = otpCodeHash(body.email, code);
   const saved = await saveOtpChallenge({
@@ -109,6 +127,25 @@ export async function requestOtp(
   // A simultaneous request for the same address won the race; its code is the live one.
   if (!saved) throw resendCooldown(now, now);
 
+  const answer = {
+    expiresInSeconds: OTP_TTL_SECONDS,
+    resendAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+  };
+  if (inviteOnly) {
+    if (sendCode) {
+      afterResponse(async () => {
+        try {
+          await emailSender.send(buildOtpEmail(body.email, code, OTP_TTL_SECONDS / 60));
+        } catch (error) {
+          await deleteOtpChallenge(key, codeHash);
+          // The error names the provider's status, never the address.
+          logger.error('The sign-in code email could not be sent.', { error });
+        }
+      });
+    }
+    return answer;
+  }
+
   try {
     await emailSender.send(buildOtpEmail(body.email, code, OTP_TTL_SECONDS / 60));
   } catch (error) {
@@ -118,7 +155,7 @@ export async function requestOtp(
     throw error;
   }
 
-  return { expiresInSeconds: OTP_TTL_SECONDS, resendAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS };
+  return answer;
 }
 
 /**
@@ -146,6 +183,12 @@ export async function verifyOtp(
     throw rejectCode(attempt.attempts >= MAX_CODE_ATTEMPTS ? 'too_many_attempts' : 'invalid_code');
   }
   if (!(await consumeOtpChallenge(key, attempt.codeHash))) throw rejectCode('code_expired');
+  // Invite-only: access was checked when the code was sent, and again here, because the role may
+  // have been revoked since. Only the owner of the mailbox can get this far, so this tells nobody
+  // else anything. With no account to sign in to, `enter_name` is never answered.
+  if (!env.AUTH_SELF_SIGNUP && !(await hasDashboardAccess(body.email))) {
+    throw rejectCode('code_expired');
+  }
 
   // Signing in again replaces whatever session this browser had.
   if (client.sessionToken) await deleteSessionByTokenHash(sessionTokenHash(client.sessionToken));
@@ -180,6 +223,11 @@ export async function completeName(
   if (session.user?.registeredAt) {
     throw new ConflictError('The account is already registered.', 'already_registered');
   }
+  // Invite-only sign-in never creates an account. Verify does not open such a session while the
+  // flag is off, so only one opened before it was turned off can get here.
+  if (!session.user && !env.AUTH_SELF_SIGNUP) {
+    throw new ConflictError('Accounts are created by invitation only.', 'self_signup_disabled');
+  }
   const stored = session.user?.fullName;
   if (stored !== undefined && normalizePersonName(body.fullName) !== stored) {
     throw new ValidationError(
@@ -203,6 +251,7 @@ export async function completeName(
     fullName: stored ?? normalizePersonName(body.fullName),
     now,
     newSession: { tokenHash: sessionTokenHash(token), expiresAt },
+    allowCreate: env.AUTH_SELF_SIGNUP,
   });
   if (!completed) throw new UnauthenticatedError();
   return { data: { step: 'signed_in' }, session: { token, expiresAt } };

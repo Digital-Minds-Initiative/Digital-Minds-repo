@@ -121,6 +121,38 @@ export async function findUserForSignIn(uniEmail: string) {
   });
 }
 
+/**
+ * Whether this address belongs to someone who may use the dashboard: a full admin, or a person
+ * with an active club-officer membership or an active committee-lead membership — the roles the
+ * Actor is built from. Invite-only sign-in sends codes to nobody else
+ * (docs/adr/0027-invite-only-sign-in.md).
+ *
+ * Registration is not required: an invited person signs in for the first time with this check.
+ */
+export async function hasDashboardAccess(uniEmail: string): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: {
+      uniEmail,
+      OR: [
+        { isFullAdmin: true },
+        {
+          memberships: {
+            some: {
+              removedAt: null,
+              OR: [
+                { role: 'CLUB_OFFICER' },
+                { committeeMemberships: { some: { removedAt: null, role: 'LEAD' } } },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  return user !== null;
+}
+
 // ─── Sessions ───────────────────────────────────────────────────────────────────────────────
 
 export async function createSession(input: {
@@ -192,8 +224,9 @@ export async function endPersonSignIn(
  * person) or stores the confirmed name on the admin-created one, marks it registered, and opens a
  * fresh session for it (a new token: the privilege change gets a new cookie).
  *
- * Returns null when the session is gone, or when the admin-created account no longer has the
- * email the code proved (an admin changed it in between).
+ * Returns null when the session is gone, when the admin-created account no longer has the email
+ * the code proved (an admin changed it in between), or when there is no account and `allowCreate`
+ * is false (invite-only sign-in never creates one).
  */
 export async function completeRegistration(input: {
   sessionId: string;
@@ -202,6 +235,7 @@ export async function completeRegistration(input: {
   fullName: string;
   now: Date;
   newSession: { tokenHash: string; expiresAt: Date };
+  allowCreate: boolean;
 }): Promise<{ userId: string } | null> {
   return db.$transaction(async (tx) => {
     const used = await tx.session.deleteMany({
@@ -215,6 +249,8 @@ export async function completeRegistration(input: {
       select: { id: true, uniEmail: true, registeredAt: true },
     });
     if (user && user.uniEmail !== input.email) return null;
+    // Like the line above, this spends the incomplete session: it cannot be retried.
+    if (!user && !input.allowCreate) return null;
 
     const names = { fullName: input.fullName, searchName: normalizeForSearch(input.fullName) };
     let userId: string;
