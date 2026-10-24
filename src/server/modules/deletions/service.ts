@@ -9,6 +9,7 @@ import {
   peopleScope,
   pointTransactionsScope,
   roleChangesScope,
+  roleInvitationsScope,
   type Actor,
 } from '@/server/authz';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
@@ -32,7 +33,7 @@ import {
   lockCommitteeMemberships,
   lockPerson,
 } from '@/server/modules/members';
-import { deleteRoleChanges } from '@/server/modules/permissions';
+import { deleteRoleChanges, deleteRoleInvitations } from '@/server/modules/permissions';
 import {
   countTransactions,
   deleteClubPointBatches,
@@ -194,13 +195,21 @@ export async function deleteCommittee(
       const roleChanges = await deleteRoleChanges(tx, roleChangesScope(actor), {
         committeeId: locked.id,
       });
+      const roleInvitations = await deleteRoleInvitations(tx, roleInvitationsScope(actor), {
+        committeeId: locked.id,
+      });
       const deletedMemberships = await deleteCommitteeMemberships(
         tx,
         committeeMembershipsScope(actor),
         locked.id,
       );
       await deleteCommitteeRow(tx, committeesScope(actor), locked.id);
-      return { committeeMemberships: deletedMemberships, ...points, roleChanges };
+      return {
+        committeeMemberships: deletedMemberships,
+        ...points,
+        roleChanges,
+        roleInvitations,
+      };
     },
   );
 }
@@ -241,6 +250,9 @@ export async function deletePerson(
       await lockTransactions(tx, target);
       const points = await deleteTransactions(tx, pointTransactionsScope(actor), target);
       const roleChanges = await deleteRoleChanges(tx, roleChangesScope(actor), { userId });
+      const roleInvitations = await deleteRoleInvitations(tx, roleInvitationsScope(actor), {
+        userId,
+      });
       const memberships = await deletePersonMemberships(
         tx,
         { members: membersScope(actor), committeeMemberships: committeeMembershipsScope(actor) },
@@ -248,7 +260,7 @@ export async function deletePerson(
       );
       const sessions = await endPersonSignIn(tx, { userId, uniEmail });
       await erasePerson(tx, peopleScope(actor), userId, new Date());
-      return { ...memberships, ...points, roleChanges, sessions };
+      return { ...memberships, ...points, roleChanges, roleInvitations, sessions };
     },
   );
 }

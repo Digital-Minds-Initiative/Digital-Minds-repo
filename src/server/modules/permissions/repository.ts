@@ -6,6 +6,7 @@ import type {
   CommitteeScope,
   MemberScope,
   RoleChangeScope,
+  RoleInvitationScope,
 } from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
@@ -238,5 +239,22 @@ export async function deleteRoleChanges(
       ? { committeeId: target.committeeId }
       : { membership: { userId: target.userId } };
   const { count } = await tx.roleChange.deleteMany({ where: { AND: [scope, where] } });
+  return count;
+}
+
+/**
+ * Invitations to a committee's lead role, or every invitation sent to a deleted person. Like
+ * role history, what the person sent to others (`sentById`) stays.
+ */
+export async function deleteRoleInvitations(
+  tx: TransactionClient,
+  scope: RoleInvitationScope,
+  target: { committeeId: string } | { userId: string },
+): Promise<number> {
+  const where: Prisma.RoleInvitationWhereInput =
+    'committeeId' in target
+      ? { committeeId: target.committeeId }
+      : { membership: { userId: target.userId } };
+  const { count } = await tx.roleInvitation.deleteMany({ where: { AND: [scope, where] } });
   return count;
 }

@@ -90,6 +90,7 @@ model User {
   createdPointBatches        PointBatch[]
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
+  roleInvitationsSent        RoleInvitation[]
   memberExports              MemberExport[]
   deletionsMade              DeletionRecord[]
   sessions                   Session[]
@@ -110,6 +111,7 @@ model Club {
   memberships     Membership[]
   pointBatches    PointBatch[]
   roleChanges     RoleChange[]
+  roleInvitations RoleInvitation[]
   memberExports   MemberExport[]
 }
 
@@ -133,6 +135,7 @@ model Committee {
   club                 Club                  @relation(fields: [clubId], references: [id], onDelete: Restrict)
   committeeMemberships CommitteeMembership[]
   roleChanges          RoleChange[]
+  roleInvitations      RoleInvitation[]
 
   @@unique([clubId, name])
   // Target of composite FKs that keep child rows inside the same club.
@@ -183,6 +186,7 @@ model Membership {
   removedBy            User?                 @relation("MembershipRemovedBy", fields: [removedById], references: [id], onDelete: Restrict)
   committeeMemberships CommitteeMembership[]
   roleChanges          RoleChange[]
+  roleInvitations      RoleInvitation[]
 
   @@unique([userId, clubId])
   @@unique([id, clubId])
@@ -321,6 +325,30 @@ model RoleChange {
 
   @@index([clubId, createdAt])
   @@index([membershipId, createdAt])
+}
+
+/// One invitation email that was sent: a person who had not signed in yet was given a role, or
+/// someone resent it (docs/adr/0027-invite-only-sign-in.md). Only successful sends are rows; the
+/// permissions page shows the latest as «دُعي قبل …». Append-only, like RoleChange. The role is
+/// implied: no committee means club officer, a committee means lead of it.
+model RoleInvitation {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  clubId       String   @db.Uuid
+  /// Null for a club-officer invitation; the committee for a committee-lead one.
+  committeeId  String?  @db.Uuid
+  /// Who was invited. Kept per club, so one club never sees another's invitations (ADR 0012).
+  membershipId String   @db.Uuid
+  /// Who granted the role or resent the invitation.
+  sentById     String   @db.Uuid
+  sentAt       DateTime
+
+  club       Club       @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  membership Membership @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
+  committee  Committee? @relation(fields: [committeeId, clubId], references: [id, clubId], onDelete: Restrict)
+  sentBy     User       @relation(fields: [sentById], references: [id], onDelete: Restrict)
+
+  @@index([membershipId, sentAt])
+  @@index([committeeId])
 }
 
 /// Append-only: one row per members export that produced a file (docs/adr/0025-members-export.md).

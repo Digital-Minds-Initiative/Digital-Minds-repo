@@ -9,6 +9,7 @@ import {
   peopleScope,
   pointTransactionsScope,
   roleChangesScope,
+  roleInvitationsScope,
   type Actor,
 } from '@/server/authz';
 import { db } from '@/server/db/client';
@@ -19,7 +20,7 @@ import {
   deletePersonMemberships,
   erasePerson,
 } from '@/server/modules/members/repository';
-import { deleteRoleChanges } from '@/server/modules/permissions/repository';
+import { deleteRoleChanges, deleteRoleInvitations } from '@/server/modules/permissions/repository';
 import { deleteClubPointBatches, deleteTransactions } from '@/server/modules/points/repository';
 import { actorFor, buildScenario, type Scenario } from '@tests/factories/scenario';
 import { rowCounts } from '@tests/utils/deletions';
@@ -58,6 +59,17 @@ describe('repository deletes apply the scope themselves', () => {
         clubId: s.clubA.id,
       },
     });
+    for (const committeeId of [s.committees.a1.id, null]) {
+      await db.roleInvitation.create({
+        data: {
+          clubId: s.clubA.id,
+          committeeId,
+          membershipId: s.memberships.unregistered,
+          sentById: s.users.officerA.id,
+          sentAt: new Date(),
+        },
+      });
+    }
     await db.memberExport.create({
       data: {
         clubId: s.clubA.id,
@@ -123,6 +135,16 @@ describe('repository deletes apply the scope themselves', () => {
       expect(
         await deleteRoleChanges(tx, roleChangesScope(officerB), {
           committeeId: s.committees.a1.id,
+        }),
+      ).toBe(0);
+      expect(
+        await deleteRoleInvitations(tx, roleInvitationsScope(officerB), {
+          committeeId: s.committees.a1.id,
+        }),
+      ).toBe(0);
+      expect(
+        await deleteRoleInvitations(tx, roleInvitationsScope(officerB), {
+          userId: s.users.unregistered.id,
         }),
       ).toBe(0);
       expect(

@@ -23,6 +23,7 @@ export type MemberScope = Scope<Prisma.MembershipWhereInput>;
 export type CommitteeMembershipScope = Scope<Prisma.CommitteeMembershipWhereInput>;
 export type PointTransactionScope = Scope<Prisma.PointTransactionWhereInput>;
 export type RoleChangeScope = Scope<Prisma.RoleChangeWhereInput>;
+export type RoleInvitationScope = Scope<Prisma.RoleInvitationWhereInput>;
 
 function scope<TWhere>(where: TWhere): Scope<TWhere> {
   return where as Scope<TWhere>;
@@ -121,6 +122,16 @@ export function committeeMembershipsScope(actor: Actor): CommitteeMembershipScop
  * (docs/adr/0018-granting-roles.md).
  */
 export function roleChangesScope(actor: Actor): RoleChangeScope {
+  if (actor.isFullAdmin) return scope({});
+  const clubIds = officerClubIds(actor);
+  return scope(clubIds.length > 0 ? { clubId: { in: clubIds } } : noRows());
+}
+
+/**
+ * Invitations the actor may read and send: the same people who see who holds which role — full
+ * admins everywhere, officers in their own clubs, never a lead (docs/adr/0027-invite-only-sign-in.md).
+ */
+export function roleInvitationsScope(actor: Actor): RoleInvitationScope {
   if (actor.isFullAdmin) return scope({});
   const clubIds = officerClubIds(actor);
   return scope(clubIds.length > 0 ? { clubId: { in: clubIds } } : noRows());

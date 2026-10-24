@@ -45,6 +45,7 @@ describe("deleting a person's data", () => {
     batchOfTheirs: crypto.randomUUID(),
     roleTheyGranted: '',
     exportTheyRan: '',
+    invitationTheySent: '',
   };
   let adminMembership: string;
   let otherAdminMembership: string;
@@ -118,6 +119,17 @@ describe("deleting a person's data", () => {
         },
       })
     ).id;
+    theirs.invitationTheySent = (
+      await db.roleInvitation.create({
+        data: {
+          clubId: s.clubA.id,
+          committeeId: a2.id,
+          membershipId: s.memberships.memberA2,
+          sentById: target.id,
+          sentAt: new Date(),
+        },
+      })
+    ).id;
     theirs.exportTheyRan = (
       await db.memberExport.create({
         data: {
@@ -159,6 +171,15 @@ describe("deleting a person's data", () => {
         changedById: s.users.officerA.id,
         previousRole: 'MEMBER',
         newRole: 'LEAD',
+      },
+    });
+    await db.roleInvitation.create({
+      data: {
+        clubId: s.clubA.id,
+        committeeId: a2.id,
+        membershipId: s.memberships.bothClubsA,
+        sentById: s.users.officerA.id,
+        sentAt: new Date(),
       },
     });
     const expiresAt = new Date(Date.now() + 86_400_000);
@@ -269,6 +290,7 @@ describe("deleting a person's data", () => {
         pointRevisions: 1,
         pointBatches: 1,
         roleChanges: 1,
+        roleInvitations: 1,
         sessions: 3,
       });
 
@@ -315,6 +337,7 @@ describe("deleting a person's data", () => {
       expect(await db.pointBatch.count({ where: { id: theirs.batchForOthers } })).toBe(1);
       expect(await db.pointBatch.count({ where: { id: theirs.batchOfTheirs } })).toBe(0);
       expect(await db.memberExport.count({ where: { id: theirs.exportTheyRan } })).toBe(1);
+      expect(await db.roleInvitation.count({ where: { id: theirs.invitationTheySent } })).toBe(1);
       expect(
         (await db.membership.findUniqueOrThrow({ where: { id: s.memberships.removedOfficer } }))
           .removedById,
@@ -337,6 +360,7 @@ describe("deleting a person's data", () => {
         pointRevisions: before.pointRevisions - 1,
         pointBatches: before.pointBatches - 1,
         roleChanges: before.roleChanges - 1,
+        roleInvitations: before.roleInvitations - 1,
         sessions: before.sessions - 3,
         otpChallenges: before.otpChallenges - 1,
         deletionRecords: before.deletionRecords + 1,

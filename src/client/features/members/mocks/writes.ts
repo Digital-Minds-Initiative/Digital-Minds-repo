@@ -335,6 +335,7 @@ export const memberWriteHandlers = [
       pointRevisions: transactions.reduce((sum, t) => sum + t.revisions.length, 0),
       pointBatches: 0,
       roleChanges: db.roleChanges.filter((c) => theirs.has(c.membershipId)).length,
+      roleInvitations: 0,
       sessions: 0,
     };
     db.transactions.splice(
