@@ -39,6 +39,7 @@ import { memberAccess } from '../lib/access';
 
 const DEFAULT_COLUMN_VISIBILITY: ColumnVisibilityState = {
   phone: false,
+  personalEmail: false,
   college: false,
   major: false,
   level: false,
