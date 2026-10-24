@@ -234,8 +234,18 @@ describe('the public endpoints', () => {
       items: Array<Record<string, unknown>>;
     };
     expect(body.items).toHaveLength(1);
-    expect(Object.keys(body.items[0] ?? {}).sort()).toEqual(['balance', 'fullName', 'publicId']);
-    expect(body.items[0]).toEqual({ publicId: sara, fullName: 'سارة القحطاني', balance: 12 });
+    expect(Object.keys(body.items[0] ?? {}).sort()).toEqual([
+      'balance',
+      'fullName',
+      'membershipType',
+      'publicId',
+    ]);
+    expect(body.items[0]).toEqual({
+      publicId: sara,
+      fullName: 'سارة القحطاني',
+      membershipType: { name: 'عضو' },
+      balance: 12,
+    });
   });
 
   it('answer exactly the fields the contract whitelists — the history', async () => {
@@ -244,7 +254,8 @@ describe('the public endpoints', () => {
       transactions: { items: Array<Record<string, unknown>> };
     };
     expect(Object.keys(body).sort()).toEqual(['balance', 'member', 'transactions']);
-    expect(Object.keys(body.member).sort()).toEqual(['fullName', 'publicId']);
+    expect(Object.keys(body.member).sort()).toEqual(['fullName', 'membershipType', 'publicId']);
+    expect(body.member.membershipType).toEqual({ name: 'عضو' });
     expect(Object.keys(body.transactions.items[0] ?? {}).sort()).toEqual([
       'amount',
       'reason',
@@ -267,11 +278,13 @@ describe('the public endpoints', () => {
         'هندسة برمجيات',
         s.clubA.id,
         s.committees.a1.id,
+        s.types.a,
         s.users.officerA.id,
       ]) {
         expect(body).not.toContain(secret);
       }
-      expect(body).not.toMatch(/"level"|"phone"|"email"|"membershipType"|"createdBy"/);
+      // The membership type's name is public (ADR 0023); its id and order are not.
+      expect(body).not.toMatch(/"level"|"phone"|"email"|"membershipTypeId"|"order"|"createdBy"/);
     }
   });
 

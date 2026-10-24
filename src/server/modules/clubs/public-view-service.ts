@@ -77,6 +77,7 @@ export async function searchPublicCommitteeMembers(
     items: members.map((member) => ({
       publicId: member.publicId,
       fullName: member.fullName,
+      membershipType: { name: member.membershipTypeName },
       balance: balances.get(member.id) ?? 0,
     })),
   };
@@ -102,7 +103,11 @@ export async function getPublicMemberPoints(
     sumCommitteeViewBalances(scope, [member.id]),
   ]);
   return {
-    member: { publicId: member.publicId, fullName: member.fullName },
+    member: {
+      publicId: member.publicId,
+      fullName: member.fullName,
+      membershipType: { name: member.membershipTypeName },
+    },
     balance: balances.get(member.id) ?? 0,
     transactions: {
       items: page.rows.map((row) => ({

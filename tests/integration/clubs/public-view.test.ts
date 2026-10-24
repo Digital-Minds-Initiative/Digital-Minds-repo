@@ -46,6 +46,8 @@ async function addMember(
     points?: Array<{ amount: number; workDate: string; cancelled?: boolean; reason?: string }>;
     removedFromCommittee?: boolean;
     removedFromClub?: boolean;
+    /** The membership type's id; club A's first type («عضو») by default. */
+    membershipTypeId?: string;
   } = {},
 ) {
   sequence += 1;
@@ -62,7 +64,7 @@ async function addMember(
     data: {
       userId: user.id,
       clubId: s.clubA.id,
-      membershipTypeId: s.types.a,
+      membershipTypeId: options.membershipTypeId ?? s.types.a,
       phone: '+966500000000',
       personalEmail: 'private@example.com',
       college: 'كلية الحاسب الآلي',
@@ -113,6 +115,7 @@ beforeAll(async () => {
       { amount: 25, workDate: WORK_DATES[1] },
       { amount: 99, workDate: WORK_DATES[2], cancelled: true },
     ],
+    membershipTypeId: s.types.a2,
   });
   await addMember('عبدالله الزهراني', s.committees.a1, {
     points: [{ amount: 5, workDate: WORK_DATES[2] }],
@@ -173,10 +176,15 @@ describe('searching for a name', () => {
   const search = (q: string, viewToken = token) =>
     searchPublicCommitteeMembers(viewToken, { q }, noClient);
 
-  it('finds a member and shows their balance in this committee', async () => {
+  it('finds a member and shows their membership type and balance in this committee', async () => {
     expect(await search('سارة')).toEqual({
       items: [
-        { publicId: people['سارة القحطاني']?.publicId, fullName: 'سارة القحطاني', balance: 40 },
+        {
+          publicId: people['سارة القحطاني']?.publicId,
+          fullName: 'سارة القحطاني',
+          membershipType: { name: 'عضو فعال' },
+          balance: 40,
+        },
       ],
     });
   });
@@ -190,7 +198,12 @@ describe('searching for a name', () => {
   it('shows zero for a member who has earned nothing yet', async () => {
     const { items } = await search('مصطفى');
     expect(items).toEqual([
-      { publicId: people['مصطفى آل عامر']?.publicId, fullName: 'مصطفى آل عامر', balance: 0 },
+      {
+        publicId: people['مصطفى آل عامر']?.publicId,
+        fullName: 'مصطفى آل عامر',
+        membershipType: { name: 'عضو' },
+        balance: 0,
+      },
     ]);
   });
 
@@ -250,7 +263,11 @@ describe('one member points', () => {
     const sara = people['سارة القحطاني'];
     const result = await points(String(sara?.publicId));
 
-    expect(result.member).toEqual({ publicId: sara?.publicId, fullName: 'سارة القحطاني' });
+    expect(result.member).toEqual({
+      publicId: sara?.publicId,
+      fullName: 'سارة القحطاني',
+      membershipType: { name: 'عضو فعال' },
+    });
     expect(result.balance).toBe(40);
     expect(result.transactions.items).toEqual([
       { amount: 25, reason: 'حضور ورشة', workDate: '2026-03-05' },

@@ -120,7 +120,14 @@ describe('the public handlers', () => {
     });
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) {
-      expect(Object.keys(item).sort()).toEqual(['balance', 'fullName', 'publicId']);
+      expect(Object.keys(item).sort()).toEqual([
+        'balance',
+        'fullName',
+        'membershipType',
+        'publicId',
+      ]);
+      expect(Object.keys(item.membershipType)).toEqual(['name']);
+      expect(item.membershipType.name).not.toBe('');
       expect(Number.isInteger(item.balance)).toBe(true);
     }
   });
@@ -137,7 +144,11 @@ describe('the public handlers', () => {
       params: { token, publicId: member.publicId },
       query: { pageSize: 5 },
     });
-    expect(points.member).toEqual({ publicId: member.publicId, fullName: member.fullName });
+    expect(points.member).toEqual({
+      publicId: member.publicId,
+      fullName: member.fullName,
+      membershipType: member.membershipType,
+    });
     expect(points.balance).toBe(member.balance);
     const dates = points.transactions.items.map((item) => item.workDate);
     expect(dates).toEqual([...dates].sort().reverse());

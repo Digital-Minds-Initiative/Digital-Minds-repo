@@ -4,6 +4,8 @@
 - Date: 2026-10-17
 - Amended 2026-10-19: the secret is `VIEW_LINK_SECRET`, which defaults to `AUTH_SECRET` (see
   [Consequences](#consequences))
+- Amended 2026-10-24: the member's membership type **name** is public (see
+  [The membership type's name](#the-membership-types-name))
 - Builds on: [ADR 0002](0002-authorization-model.md) (scopes), [ADR 0014](0014-email-otp-sign-in.md) (the Postgres limiter), [ADR 0015](0015-archive-instead-of-delete.md) (archived means closed)
 
 ## Context
@@ -134,15 +136,29 @@ public id.
 **The responses are a whitelist.** Every response is parsed through its contract before it is sent
 ([ADR 0005](0005-api-contracts-and-errors.md)), so the schema is the enforcement, not a convention:
 
-| Endpoint       | Every field it can contain                                                                                |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| committee view | `committee.name`, `club.name`                                                                             |
-| member search  | `items[].publicId`, `items[].fullName`, `items[].balance`                                                 |
-| member points  | `member.publicId`, `member.fullName`, `balance`, `transactions.items[].{amount,reason,workDate}` + paging |
+| Endpoint       | Every field it can contain                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| committee view | `committee.name`, `club.name`                                                                                                           |
+| member search  | `items[].publicId`, `items[].fullName`, `items[].membershipType.name`, `items[].balance`                                                |
+| member points  | `member.publicId`, `member.fullName`, `member.membershipType.name`, `balance`, `transactions.items[].{amount,reason,workDate}` + paging |
 
-No email, phone, college, major, level, membership type, other committee, other club, recorder,
-cancelled transaction or revision — and a unit test walks the three schemas and fails if a field
-appears that is not in that table.
+No email, phone, college, major, level, membership type id or order, other committee, other club,
+recorder, cancelled transaction or revision — and a unit test walks the three schemas and fails if
+a field appears that is not in that table.
+
+### The membership type's name
+
+_Added 2026-10-24._ The page shows the membership type's **name** under each member's name, in the
+search results and on the member's own view. A membership type is a title the club gives — «عضو
+فعال», «نائب الرئيس» — not personal data: it says nothing about how to reach the person or what
+they study, and the profile fields of [ADR 0012](0012-member-profiles-per-club.md) stay off the
+page. Next to the name it also helps a member pick themselves out when two people share a name.
+
+Only the name leaves. The type's id is accepted by authenticated endpoints, so it stays private
+like every other id, and its `order` (the club's ladder) stays private too — the page does not
+rank anyone. Removed members still never appear: the type comes through the same
+`committeeViewMembersScope` read as the name. The contract test now lists
+`membershipType.name` in both shapes and still fails on anything else about the type.
 
 The one identifier that leaves is `User.publicId`, the random cuid2 the data model has carried
 since [ADR 0003](0003-data-model.md) for exactly this. No authenticated endpoint accepts it (they
@@ -210,7 +226,8 @@ sweep hands the rate-limit module its transaction the way any cross-module write
   limit makes a link that is being hammered visible in the counters.
 - **The whitelist has to stay a whitelist.** The temptation will be to add "just the membership
   type" or "just the committee id" to the public response. The contract test is there to make that
-  a decision rather than a commit.
+  a decision rather than a commit — and the membership type's name was added exactly that way,
+  as an amendment to this ADR.
 - **One more thing to remember when adding a public endpoint:** `access: 'public'` now also means
   the headers above, and it means there is no actor to scope by — a capability scope has to come
   from somewhere.

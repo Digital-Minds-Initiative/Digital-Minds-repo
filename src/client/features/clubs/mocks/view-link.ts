@@ -125,6 +125,7 @@ function committeeMembers(db: MockDb, committee: MockCommittee) {
         membershipId: membership.id,
         publicId: user?.publicId ?? '',
         fullName: user?.fullName ?? '',
+        membershipType: { name: db.membershipTypesById.get(membership.typeId)?.name ?? '' },
         balance: db.transactions
           .filter(
             (transaction) =>
@@ -187,6 +188,7 @@ export const viewLinkHandlers = [
       items: items.map((member) => ({
         publicId: member.publicId,
         fullName: member.fullName,
+        membershipType: member.membershipType,
         balance: member.balance,
       })),
     };
@@ -215,7 +217,11 @@ export const viewLinkHandlers = [
 
     const { skip, take } = pageOffset(query.page, query.pageSize);
     return {
-      member: { publicId: member.publicId, fullName: member.fullName },
+      member: {
+        publicId: member.publicId,
+        fullName: member.fullName,
+        membershipType: member.membershipType,
+      },
       balance: member.balance,
       transactions: {
         items: transactions.slice(skip, skip + take).map((transaction) => ({

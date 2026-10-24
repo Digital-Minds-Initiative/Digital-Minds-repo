@@ -131,10 +131,11 @@ describe('the public committee view returns nothing but these fields', () => {
     expect(fieldsOf(publicCommitteeViewEndpoint)).toEqual(['club.name', 'committee.name']);
   });
 
-  it('the member search: a public id, a name and a balance', () => {
+  it('the member search: a public id, a name, the membership type name and a balance', () => {
     expect(fieldsOf(searchPublicCommitteeMembersEndpoint)).toEqual([
       'items[].balance',
       'items[].fullName',
+      'items[].membershipType.name',
       'items[].publicId',
     ]);
   });
@@ -143,6 +144,7 @@ describe('the public committee view returns nothing but these fields', () => {
     expect(fieldsOf(publicMemberPointsEndpoint)).toEqual([
       'balance',
       'member.fullName',
+      'member.membershipType.name',
       'member.publicId',
       'transactions.items[].amount',
       'transactions.items[].reason',
@@ -154,9 +156,11 @@ describe('the public committee view returns nothing but these fields', () => {
     ]);
   });
 
-  it('never mentions contact data, membership types or internal ids', () => {
+  // The membership type's name is public (ADR 0023, amended 2026-10-24); anything else about the
+  // type — its id, its order — is not.
+  it('never mentions contact data, internal ids, or more of the membership type than its name', () => {
     const banned =
-      /email|phone|college|major|level|membershipType|memberId|userId|committeeId|clubId|status|cancel|createdBy|revision|batch/i;
+      /email|phone|college|major|level|membershipType(?!\.name$)|memberId|userId|committeeId|clubId|status|cancel|createdBy|revision|batch/i;
     const fields = [
       publicCommitteeViewEndpoint,
       searchPublicCommitteeMembersEndpoint,

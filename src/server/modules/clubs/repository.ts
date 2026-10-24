@@ -574,10 +574,14 @@ export async function findCommitteeByViewTokenHash(
   });
 }
 
-/** What the public view may say about a person: the name they are listed under, nothing else. */
+/**
+ * What the public view may say about a person: the name they are listed under and the title the
+ * club gives them (the membership type's name, never its id), nothing else.
+ */
 const publicMemberSelect = {
   id: true,
   user: { select: { publicId: true, fullName: true } },
+  membershipType: { select: { name: true } },
 } satisfies Prisma.MembershipSelect;
 
 export interface PublicMemberRow {
@@ -585,10 +589,16 @@ export interface PublicMemberRow {
   id: string;
   publicId: string;
   fullName: string;
+  membershipTypeName: string;
 }
 
 function toPublicMember(row: Prisma.MembershipGetPayload<{ select: typeof publicMemberSelect }>) {
-  return { id: row.id, publicId: row.user.publicId, fullName: row.user.fullName };
+  return {
+    id: row.id,
+    publicId: row.user.publicId,
+    fullName: row.user.fullName,
+    membershipTypeName: row.membershipType.name,
+  };
 }
 
 /**
