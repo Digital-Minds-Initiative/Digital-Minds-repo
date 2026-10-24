@@ -4,6 +4,7 @@ import {
   canSeeMembership,
   findMockActor,
   getMockDb,
+  mockAuthorName,
   must,
   type MockActor,
   type MockCommittee,
@@ -63,11 +64,11 @@ function toFixture(db: MockDb, transaction: MockTransaction): PointTransaction {
     workDate: transaction.workDate,
     status: transaction.status,
     batchId: transaction.batchId,
-    createdBy: { id: createdBy.id, fullName: createdBy.fullName },
+    createdBy: { id: createdBy.id, fullName: mockAuthorName(createdBy) },
     createdAt: transaction.createdAt,
     updatedAt: transaction.updatedAt,
     cancelledAt: transaction.cancelledAt,
-    cancelledBy: cancelledBy ? { id: cancelledBy.id, fullName: cancelledBy.fullName } : null,
+    cancelledBy: cancelledBy ? { id: cancelledBy.id, fullName: mockAuthorName(cancelledBy) } : null,
     cancellationReason: transaction.cancellationReason,
     revisionCount: transaction.revisions.length,
   };
@@ -85,7 +86,7 @@ function toRevisionFixture(db: MockDb, transaction: MockTransaction): PointTrans
         workDate: revision.previousWorkDate,
         status: revision.previousStatus,
       },
-      changedBy: { id: changedBy.id, fullName: changedBy.fullName },
+      changedBy: { id: changedBy.id, fullName: mockAuthorName(changedBy) },
       changedAt: revision.changedAt,
     };
   });

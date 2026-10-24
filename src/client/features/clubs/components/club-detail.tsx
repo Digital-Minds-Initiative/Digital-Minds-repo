@@ -4,6 +4,7 @@ import { Building2, Layers, MoreVertical, Tags, Users, type LucideIcon } from 'l
 import { useFormatter, useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 
+import { useErrorText } from '@/client/lib/use-error-text';
 import { ConfirmDialog } from '@/components/patterns/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,13 +19,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toaster';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Club } from '@/shared/contracts/clubs';
 
 import { CommitteesPanel } from './committees-panel';
 import { EntityFormDialog } from './entity-form-dialog';
 import { MembershipTypesPanel } from './membership-types-panel';
 import {
+  useClubDeletionPreview,
   useCommittees,
+  useDeleteClub,
   useMemberTotal,
   useMembershipTypes,
   useSetClubArchived,
@@ -58,6 +62,9 @@ export function ClubDetail({
   const switchId = useId();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const remove = useDeleteClub(club.id);
   const archived = club.archivedAt !== null;
 
   return (
@@ -95,7 +102,7 @@ export function ClubDetail({
           <div className="flex items-start gap-3 lg:items-center">
             <ClubStats club={club} includeArchived={includeArchived} />
             {access.canManageStructure ? (
-              <DropdownMenu>
+              <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon-sm" aria-label={t('actions.label')}>
                     <MoreVertical aria-hidden />
@@ -108,6 +115,13 @@ export function ClubDetail({
                   <DropdownMenuItem onSelect={() => setConfirming(true)}>
                     {archived ? t('actions.restore') : t('actions.archive')}
                   </DropdownMenuItem>
+                  {access.canDelete ? (
+                    <DeleteClubItem
+                      clubId={club.id}
+                      menuOpen={menuOpen}
+                      onSelect={() => setDeleting(true)}
+                    />
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
@@ -174,7 +188,66 @@ export function ClubDetail({
           toast.success(t(archived ? 'toasts.restored' : 'toasts.archived'));
         }}
       />
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        variant="danger"
+        title={t('deleteConfirm.title', { name: club.name })}
+        description={t('deleteConfirm.body')}
+        confirmLabel={t('deleteConfirm.confirm')}
+        onConfirm={async () => {
+          await remove.mutateAsync();
+          toast.success(t('toasts.deleted'));
+        }}
+      />
     </Tabs>
+  );
+}
+
+/**
+ * The menu's delete item. Only an empty club can be deleted (ADR 0015), so the item asks the
+ * server when the menu opens and, for a club with members or points, stays disabled and says to
+ * archive it instead. The server refuses it again with 409 `club_not_empty` either way.
+ */
+function DeleteClubItem({
+  clubId,
+  menuOpen,
+  onSelect,
+}: {
+  clubId: string;
+  menuOpen: boolean;
+  onSelect: () => void;
+}) {
+  const t = useTranslations('clubs.club.actions');
+  const errorText = useErrorText();
+  const preview = useClubDeletionPreview(clubId, menuOpen);
+  if (preview.data?.deletable) {
+    return (
+      <DropdownMenuItem variant="danger" onSelect={onSelect}>
+        {t('delete')}
+      </DropdownMenuItem>
+    );
+  }
+  const blocked = preview.data !== undefined;
+  return (
+    <Tooltip>
+      {/* A disabled item takes no pointer events, so the tooltip hangs on a wrapper. */}
+      <TooltipTrigger asChild>
+        <span className="block">
+          <DropdownMenuItem variant="danger" disabled>
+            {t('delete')}
+            {blocked ? <span className="sr-only">{t('deleteBlocked')}</span> : null}
+          </DropdownMenuItem>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {preview.isError
+          ? errorText(preview.error)
+          : blocked
+            ? t('deleteBlocked')
+            : t('deleteChecking')}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

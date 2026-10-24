@@ -40,6 +40,7 @@ import { Link } from '@/i18n/navigation';
 import type { Club, Committee } from '@/shared/contracts/clubs';
 
 import { CommitteeViewLinkDialog } from './committee-view-link-dialog';
+import { DeleteCommitteeDialog } from './delete-committee-dialog';
 import { EntityFormDialog } from './entity-form-dialog';
 import {
   useCommittees,
@@ -137,6 +138,7 @@ export function CommitteesPanel({ club, access, includeArchived }: CommitteesPan
               icon={ICONS[index % ICONS.length] ?? Users}
               clubArchived={clubArchived}
               canManage={access.canManageStructure}
+              canDelete={access.canDelete}
             />
           ))}
         </ul>
@@ -179,11 +181,13 @@ function CommitteeCard({
   icon: Icon,
   clubArchived,
   canManage,
+  canDelete,
 }: {
   committee: Committee;
   icon: LucideIcon;
   clubArchived: boolean;
   canManage: boolean;
+  canDelete: boolean;
 }) {
   const t = useTranslations('clubs.committees');
   const tLink = useTranslations('clubs.viewLink');
@@ -194,6 +198,7 @@ function CommitteeCard({
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const archived = committee.archivedAt !== null;
 
   return (
@@ -238,6 +243,11 @@ function CommitteeCard({
                       : t('actions.restore')
                     : t('actions.archive')}
                 </DropdownMenuItem>
+                {canDelete ? (
+                  <DropdownMenuItem variant="danger" onSelect={() => setDeleting(true)}>
+                    {t('actions.delete')}
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
@@ -282,6 +292,9 @@ function CommitteeCard({
         </div>
       </div>
 
+      {canDelete ? (
+        <DeleteCommitteeDialog committee={committee} open={deleting} onOpenChange={setDeleting} />
+      ) : null}
       <CommitteeViewLinkDialog
         committee={committee}
         readOnly={archived || clubArchived}

@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 
-import { ApiError } from '@/client/lib/api-client';
+import { useErrorText } from '@/client/lib/use-error-text';
 import { cn } from '@/client/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -17,9 +17,12 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   /** `danger` for destructive actions (removing a member, cancelling points). */
   variant?: 'default' | 'danger';
+  /** Keeps the confirm button closed, e.g. while what it would act on is still loading. */
+  confirmDisabled?: boolean;
   /**
    * May return a promise: the button shows a spinner and the dialog stays open until it settles.
-   * If it rejects, the dialog stays open and shows the error (translated by its ApiError code).
+   * If it rejects, the dialog stays open and shows the error — by its `reason` when there is one
+   * (`club_not_empty`…), otherwise by its code.
    */
   onConfirm: () => void | Promise<void>;
 }
@@ -33,10 +36,11 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   variant = 'default',
+  confirmDisabled = false,
   onConfirm,
 }: ConfirmDialogProps) {
   const t = useTranslations('ui.confirmDialog');
-  const tErrors = useTranslations('common.errors');
+  const errorText = useErrorText();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -82,7 +86,7 @@ export function ConfirmDialog({
           </div>
           {error ? (
             <p role="alert" className="text-sm font-medium text-danger">
-              {tErrors(error instanceof ApiError ? error.code : 'INTERNAL')}
+              {errorText(error)}
             </p>
           ) : null}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -94,6 +98,7 @@ export function ConfirmDialog({
             <Button
               variant={variant === 'danger' ? 'danger' : 'primary'}
               loading={pending}
+              disabled={confirmDisabled}
               onClick={() => void confirm()}
             >
               {confirmLabel ?? t('confirm')}

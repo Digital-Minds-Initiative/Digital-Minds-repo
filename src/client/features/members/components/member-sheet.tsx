@@ -1,7 +1,8 @@
 'use client';
 
-import { Crown, Pencil, RotateCw, ShieldCheck, UserMinus } from 'lucide-react';
+import { Crown, Pencil, RotateCw, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
+import { useState } from 'react';
 
 import { useMe } from '@/client/features/auth';
 import { useErrorText } from '@/client/lib/use-error-text';
@@ -18,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Member } from '@/shared/contracts/members';
 
+import { DeletePersonDialog } from './delete-person-dialog';
 import { MemberCommittees } from './member-committees';
 import { useMember } from '../hooks/use-member-actions';
 import { memberAccess } from '../lib/access';
@@ -45,7 +47,7 @@ export function MemberSheet({ memberId, onClose, onEdit, onRemove }: MemberSheet
       }}
     >
       <SheetContent aria-describedby={undefined}>
-        <MemberFile memberId={memberId} onEdit={onEdit} onRemove={onRemove} />
+        <MemberFile memberId={memberId} onEdit={onEdit} onRemove={onRemove} onClose={onClose} />
       </SheetContent>
     </Sheet>
   );
@@ -55,10 +57,12 @@ function MemberFile({
   memberId,
   onEdit,
   onRemove,
+  onClose,
 }: {
   memberId: string | null;
   onEdit: (member: Member) => void;
   onRemove: (member: Member) => void;
+  onClose: () => void;
 }) {
   const t = useTranslations('members.sheet');
   const tRoles = useTranslations('common.roles');
@@ -68,6 +72,7 @@ function MemberFile({
   const errorText = useErrorText();
   const me = useMe();
   const member = useMember(memberId);
+  const [deleting, setDeleting] = useState(false);
 
   if (member.isPending || me.isPending) {
     return (
@@ -110,6 +115,9 @@ function MemberFile({
   const record = member.data;
   const access = memberAccess(me.data, record);
   const removed = record.removedAt !== null;
+  // A full admin may delete anyone else's data, removed members included (ADR 0026); the server
+  // also refuses another full admin's, which the member record does not say.
+  const canDeletePerson = me.data.user.isFullAdmin && record.user.id !== me.data.user.id;
   const rows: Array<{ label: string; value: React.ReactNode }> = [
     { label: t('fields.club'), value: record.club.name },
     {
@@ -222,6 +230,21 @@ function MemberFile({
         </h3>
         <MemberCommittees member={record} canManage={access.canManage} />
       </section>
+
+      {canDeletePerson ? (
+        <div className="border-t border-border pt-4">
+          <Button variant="danger" size="sm" onClick={() => setDeleting(true)}>
+            <Trash2 aria-hidden />
+            {t('deletePerson')}
+          </Button>
+          <DeletePersonDialog
+            member={record}
+            open={deleting}
+            onOpenChange={setDeleting}
+            onDeleted={onClose}
+          />
+        </div>
+      ) : null}
     </>
   );
 }

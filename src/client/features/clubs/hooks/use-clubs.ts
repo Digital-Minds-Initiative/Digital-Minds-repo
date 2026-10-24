@@ -30,6 +30,13 @@ import {
   type UpdateClubBody,
   type UpdateCommitteeBody,
 } from '@/shared/contracts/clubs';
+import {
+  deleteClubEndpoint,
+  deleteCommitteeEndpoint,
+  getClubDeletionPreviewEndpoint,
+  getCommitteeDeletionPreviewEndpoint,
+  type DeleteCommitteeBody,
+} from '@/shared/contracts/deletions';
 import { listMembersEndpoint } from '@/shared/contracts/members';
 
 /** Query keys for this module. Every server-side parameter is part of the key. */
@@ -267,5 +274,52 @@ export function useDisableCommitteeViewLink(committeeId: string) {
         token: null,
         createdAt: null,
       }),
+  });
+}
+
+// ─── Full-admin deletes (ADR 0015) ───────────────────────────
+
+/** What deleting the club would mean. Asked for only when the actions menu opens. */
+export function useClubDeletionPreview(clubId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...clubsKeys.all, 'deletion-preview', 'club', clubId] as const,
+    queryFn: ({ signal }) =>
+      apiClient.request(getClubDeletionPreviewEndpoint, { params: { clubId } }, { signal }),
+    enabled,
+  });
+}
+
+export function useCommitteeDeletionPreview(committeeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...clubsKeys.all, 'deletion-preview', 'committee', committeeId] as const,
+    queryFn: ({ signal }) =>
+      apiClient.request(
+        getCommitteeDeletionPreviewEndpoint,
+        { params: { committeeId } },
+        { signal },
+      ),
+    enabled,
+  });
+}
+
+/*
+ * A delete reaches into members, points, roles and `/me` at once, and nothing of what was read
+ * before it can be trusted, so everything is read again.
+ */
+
+export function useDeleteClub(clubId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.request(deleteClubEndpoint, { params: { clubId } }),
+    onSettled: () => queryClient.invalidateQueries(),
+  });
+}
+
+export function useDeleteCommittee(committeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DeleteCommitteeBody) =>
+      apiClient.request(deleteCommitteeEndpoint, { params: { committeeId }, body }),
+    onSettled: () => queryClient.invalidateQueries(),
   });
 }
