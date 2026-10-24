@@ -341,6 +341,25 @@ describe('resending', () => {
 });
 
 describe('who holds which role', () => {
+  it("never shows another club's invitations (ADR 0012)", async () => {
+    const person = await addedToA1();
+    const inB = await db.membership.create({
+      data: { userId: person.userId, clubId: s.clubB.id, membershipTypeId: s.types.b },
+    });
+    await db.committeeMembership.create({
+      data: { membershipId: inB.id, committeeId: s.committees.b1.id, clubId: s.clubB.id },
+    });
+    // Club B invites them; in club A they hold a role nobody invited them to.
+    await setMemberCommitteeRole(officerB, inB.id, s.committees.b1.id, 'LEAD');
+    await db.membership.update({ where: { id: person.memberId }, data: { role: 'CLUB_OFFICER' } });
+
+    const { officers } = await getClubPermissions(officerA, s.clubA.id);
+    expect(officers.find((holder) => holder.memberId === person.memberId)).toMatchObject({
+      registered: false,
+      invitedAt: null,
+    });
+  });
+
   it('says who has not signed in and when this club last invited them', async () => {
     const invited = await addedToA1();
     await setMemberClubRole(admin, invited.memberId, 'CLUB_OFFICER');
