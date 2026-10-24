@@ -15,8 +15,10 @@ const subscribe = (onChange: () => void) => {
 
 /**
  * Text typed one character at a time when it first comes into view. The whole string sits
- * invisibly underneath (and as the accessible name), so the line never changes size while it types.
- * On the server, and under reduced motion, the text is simply there.
+ * invisibly underneath, so the line never changes size while it types. Screen readers get the
+ * whole string from a visually hidden copy — not from `aria-label`, which a plain span may not
+ * carry (axe: aria-prohibited-attr). On the server, and under reduced motion, the text is simply
+ * there.
  */
 export function TypeText({ text }: { text: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -41,7 +43,8 @@ export function TypeText({ text }: { text: string }) {
 
   if (!animate) return <span ref={ref}>{text}</span>;
   return (
-    <span ref={ref} className="relative inline-block" aria-label={text}>
+    <span ref={ref} className="relative inline-block">
+      <span className="sr-only">{text}</span>
       <span aria-hidden className="invisible">
         {text}
       </span>

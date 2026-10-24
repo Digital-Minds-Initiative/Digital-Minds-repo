@@ -47,14 +47,20 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="gap-2 px-2" aria-label={t('userMenu.label')}>
+        {/*
+          No aria-label: the button is named by what it shows — the person's name (visually hidden
+          on small screens, where only the initials fit) and «الحساب» for screen readers — so the
+          spoken name always contains the visible one (axe: label-content-name-mismatch).
+        */}
+        <Button variant="ghost" className="gap-2 px-2">
           <span
             aria-hidden
             className="flex size-8 items-center justify-center rounded-full bg-primary-subtle text-xs font-semibold text-primary-subtle-fg"
           >
             {initials(me.user.fullName)}
           </span>
-          <span className="hidden max-w-40 truncate text-sm md:inline">{me.user.fullName}</span>
+          <span className="max-w-40 truncate text-sm max-md:sr-only">{me.user.fullName}</span>
+          <span className="sr-only">{t('userMenu.label')}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
