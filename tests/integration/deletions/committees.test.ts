@@ -49,6 +49,7 @@ describe('deleting a committee', () => {
     a1RevisedTransaction: '',
     a2InClubBatch: '',
     clubRoleChange: '',
+    clubInvitation: '',
   };
 
   async function addTransaction(
@@ -150,6 +151,27 @@ describe('deleting a committee', () => {
           changedById: s.users.admin.id,
           previousRole: 'MEMBER',
           newRole: 'CLUB_OFFICER',
+        },
+      })
+    ).id;
+
+    // An invitation to lead A1 goes with it; a club-officer invitation stays.
+    await db.roleInvitation.create({
+      data: {
+        clubId: s.clubA.id,
+        committeeId: a1.id,
+        membershipId: s.memberships.unregistered,
+        sentById: s.users.officerA.id,
+        sentAt: new Date(),
+      },
+    });
+    extra.clubInvitation = (
+      await db.roleInvitation.create({
+        data: {
+          clubId: s.clubA.id,
+          membershipId: s.memberships.unregistered,
+          sentById: s.users.admin.id,
+          sentAt: new Date(),
         },
       })
     ).id;
@@ -262,8 +284,10 @@ describe('deleting a committee', () => {
         pointRevisions: a1Revisions,
         pointBatches: 1,
         roleChanges: 1,
+        roleInvitations: 1,
       });
       expect(await db.committee.count({ where: { id: a1.id } })).toBe(0);
+      expect(await db.roleInvitation.count({ where: { id: extra.clubInvitation } })).toBe(1);
       expect(await db.pointBatch.count({ where: { id: extra.a1Batch } })).toBe(0);
       // The club-wide batch keeps its A2 transaction, and the revision on another committee is gone
       // only with its own transaction.
@@ -294,6 +318,7 @@ describe('deleting a committee', () => {
         pointRevisions: before.pointRevisions - a1Revisions,
         pointBatches: before.pointBatches - 1,
         roleChanges: before.roleChanges - 1,
+        roleInvitations: before.roleInvitations - 1,
         deletionRecords: before.deletionRecords + 1,
       });
 
@@ -326,6 +351,7 @@ describe('deleting a committee', () => {
         pointRevisions: 0,
         pointBatches: 0,
         roleChanges: 0,
+        roleInvitations: 0,
       });
       expect(await db.committee.count({ where: { id: committee.id } })).toBe(0);
     });

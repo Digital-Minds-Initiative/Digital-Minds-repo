@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-11
 - Builds on: [ADR 0007](0007-dev-actor-switcher.md) (the dev switcher stays, behind its guards); resolves review finding S7 (CSRF)
+- Amended by: [ADR 0027](0027-invite-only-sign-in.md) — with `AUTH_SELF_SIGNUP=false` only people with dashboard access get a code and no step creates an account; the request step then reads `User`, with the same answer, limits, stored challenge and timing for every address
 
 ## Context
 

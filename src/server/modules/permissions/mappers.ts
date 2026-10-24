@@ -1,9 +1,9 @@
 import 'server-only';
 
 import { authorName } from '@/server/people';
-import type { RoleChange } from '@/shared/contracts/permissions';
+import type { ClubPermissions, RoleChange } from '@/shared/contracts/permissions';
 
-import type { RoleChangeRow } from './repository';
+import type { RoleChangeRow, RoleHolderRow } from './repository';
 
 /** Database row → API contract. Only fields listed in the contract leave the server. */
 export function toRoleChange(row: RoleChangeRow): RoleChange {
@@ -16,5 +16,15 @@ export function toRoleChange(row: RoleChangeRow): RoleChange {
     previousRole: row.previousRole,
     newRole: row.newRole,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toRoleHolder(row: RoleHolderRow): ClubPermissions['officers'][number] {
+  return {
+    memberId: row.memberId,
+    userId: row.userId,
+    fullName: row.fullName,
+    registered: row.registered,
+    invitedAt: row.invitedAt?.toISOString() ?? null,
   };
 }

@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-16
+- Amended by: [ADR 0027](0027-invite-only-sign-in.md) — granting a role to someone who has never signed in emails them an invitation, and the grant endpoints answer `{ member, invitation }`
 
 ## Context
 

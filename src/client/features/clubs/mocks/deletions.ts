@@ -158,6 +158,6 @@ export const deletionHandlers = [
     }
     removeWhere(db.committees, (c) => c.id === committee.id);
     db.committeesById.delete(committee.id);
-    return { ...counts, pointRevisions, pointBatches, roleChanges };
+    return { ...counts, pointRevisions, pointBatches, roleChanges, roleInvitations: 0 };
   }),
 ];

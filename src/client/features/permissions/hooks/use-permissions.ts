@@ -9,6 +9,8 @@ import { listMembersEndpoint } from '@/shared/contracts/members';
 import {
   listClubPermissionsEndpoint,
   listRoleHistoryEndpoint,
+  resendClubInvitationEndpoint,
+  resendCommitteeInvitationEndpoint,
   setClubRoleEndpoint,
   setCommitteeRoleEndpoint,
 } from '@/shared/contracts/permissions';
@@ -131,5 +133,22 @@ export function useSetCommitteeRole() {
         body: { role },
       }),
     onSettled: refresh,
+  });
+}
+
+/**
+ * Sends the invitation again to a role holder who has not signed in: the club-officer one, or the
+ * lead one of `committeeId`. The holders list is read again for the new «دُعي قبل …».
+ */
+export function useResendInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, committeeId }: { memberId: string; committeeId?: string }) =>
+      committeeId
+        ? apiClient.request(resendCommitteeInvitationEndpoint, {
+            params: { memberId, committeeId },
+          })
+        : apiClient.request(resendClubInvitationEndpoint, { params: { memberId } }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: permissionsKeys.all }),
   });
 }

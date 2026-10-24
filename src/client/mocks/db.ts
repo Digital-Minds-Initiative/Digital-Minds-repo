@@ -115,6 +115,16 @@ interface MockRoleChange {
   createdAt: string;
 }
 
+/** One invitation email that was "sent" (docs/adr/0027-invite-only-sign-in.md). */
+interface MockRoleInvitation {
+  clubId: string;
+  /** Null for a club-officer invitation. */
+  committeeId: string | null;
+  membershipId: string;
+  userId: string;
+  sentAt: string;
+}
+
 /** One submitted bulk-points batch, so a resend replays instead of writing everything again. */
 interface MockPointBatch {
   id: string;
@@ -131,6 +141,8 @@ export interface MockDb {
   transactions: MockTransaction[];
   /** Grants and revokes of roles, oldest first. Starts empty, like a freshly seeded database. */
   roleChanges: MockRoleChange[];
+  /** Invitation emails, oldest first. Starts empty. */
+  roleInvitations: MockRoleInvitation[];
   /** Bulk-points batches a client has submitted, by the key it sent (docs/adr/0022-bulk-points.md). */
   pointBatches: Map<string, MockPointBatch>;
   usersById: Map<string, MockUser>;
@@ -270,6 +282,7 @@ export function buildMockDb(today: string): MockDb {
     memberships,
     transactions,
     roleChanges: [],
+    roleInvitations: [],
     pointBatches: new Map(),
     usersById: new Map(users.map((user) => [user.id, user])),
     clubsById: new Map(clubs.map((club) => [club.id, club])),

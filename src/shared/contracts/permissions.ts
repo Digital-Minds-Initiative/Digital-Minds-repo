@@ -31,8 +31,38 @@ import {
  * ([ADR 0017](0017-member-permissions.md)). No history row is written for it.
  */
 
+// ─── Invitations ─────────────────────────────────────────────
+
+/**
+ * At most this many invitation emails per person per day — the automatic one sent with a grant
+ * counts — in fixed UTC days. Only emails that were actually sent count
+ * (docs/adr/0027-invite-only-sign-in.md).
+ */
+export const INVITATIONS_PER_PERSON_PER_DAY = 3;
+
+/**
+ * What happened to the invitation a grant sends when the person has not signed in yet:
+ *   - `sent`: the email went out;
+ *   - `failed`: the email provider refused it — the role is granted anyway, and it can be resent;
+ *   - `limited`: the person already got today's invitations; `retryAfterSeconds` until the next.
+ */
+export const invitationOutcomeSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('sent'), sentAt: isoDateTimeSchema }),
+  z.object({ status: z.literal('failed') }),
+  z.object({ status: z.literal('limited'), retryAfterSeconds: z.number().int().positive() }),
+]);
+export type InvitationOutcome = z.infer<typeof invitationOutcomeSchema>;
+
 // ─── Granting and revoking ───────────────────────────────────
-// Both answer with the member, so one call refreshes the row the UI is showing.
+// Both answer with the member, so one call refreshes the row the UI is showing, and with what
+// became of the invitation: null when none was due — a revoke, a role they already held, or a
+// person who has already signed in.
+
+export const setRoleResponseSchema = z.object({
+  member: memberSchema,
+  invitation: invitationOutcomeSchema.nullable(),
+});
+export type SetRoleResponse = z.infer<typeof setRoleResponseSchema>;
 
 /**
  * Appoint (`CLUB_OFFICER`) or revoke (`MEMBER`) a club officer. Full admins only — an officer
@@ -47,7 +77,7 @@ export const setClubRoleEndpoint = defineEndpoint({
   access: 'actor',
   params: memberParamsSchema,
   body: z.strictObject({ role: clubRoleSchema }),
-  response: memberSchema,
+  response: setRoleResponseSchema,
 });
 
 /**
@@ -65,7 +95,38 @@ export const setCommitteeRoleEndpoint = defineEndpoint({
   access: 'actor',
   params: memberCommitteeParamsSchema,
   body: z.strictObject({ role: committeeRoleSchema }),
-  response: memberSchema,
+  response: setRoleResponseSchema,
+});
+
+// ─── Resending an invitation ─────────────────────────────────
+
+/**
+ * Sends the club-officer invitation again to someone who holds the role and has not signed in.
+ * Whoever may grant the role may resend it: full admins only (403 `full_admin_required`).
+ *
+ * 409 `already_registered` once they have signed in, `no_role` when they are not an officer of
+ * the club, `member_removed`, `club_archived`. 429 `too_many_invitations` with `Retry-After` past
+ * `INVITATIONS_PER_PERSON_PER_DAY`. A send the email provider refuses is a 500 and is not counted.
+ */
+export const resendClubInvitationEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/members/:memberId/role/invitation',
+  access: 'actor',
+  params: memberParamsSchema,
+  response: z.object({ sentAt: isoDateTimeSchema }),
+});
+
+/**
+ * The same for a committee lead: the club's officers and full admins
+ * (403 `club_management_required`). `no_role` when they do not lead this committee; also
+ * `committee_archived`.
+ */
+export const resendCommitteeInvitationEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/members/:memberId/committees/:committeeId/role/invitation',
+  access: 'actor',
+  params: memberCommitteeParamsSchema,
+  response: z.object({ sentAt: isoDateTimeSchema }),
 });
 
 // ─── Who holds which role now ────────────────────────────────
@@ -75,6 +136,13 @@ const roleHolderSchema = z.object({
   memberId: idSchema,
   userId: idSchema,
   fullName: z.string(),
+  /** False until the person signs in for the first time. */
+  registered: z.boolean(),
+  /**
+   * When this club last sent them an invitation, or null. Only for people who have not
+   * registered; another club's invitations are not counted (ADR 0012).
+   */
+  invitedAt: isoDateTimeSchema.nullable(),
 });
 
 /** Who holds officer and lead roles in a club. The club's officers and full admins. */

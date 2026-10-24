@@ -26,8 +26,18 @@ type Step =
  * server decides after the code whether the person is signed in, must confirm the name an admin
  * stored, or must enter one — so `mode` only changes the wording of the first screen.
  * A reload during the name step resumes there, because the session knows where it is.
+ *
+ * `selfSignup` is AUTH_SELF_SIGNUP, read by the page on the server. When it is off, sign-in is
+ * invite-only (ADR 0027): nothing offers to create an account, and after asking for a code the
+ * screen says the same for every address, since the server sends one only to people with access.
  */
-export function SignInFlow({ mode }: { mode: 'login' | 'register' }) {
+export function SignInFlow({
+  mode,
+  selfSignup,
+}: {
+  mode: 'login' | 'register';
+  selfSignup: boolean;
+}) {
   const t = useTranslations('auth');
   const router = useRouter();
   const refreshSession = useRefreshSession();
@@ -87,6 +97,7 @@ export function SignInFlow({ mode }: { mode: 'login' | 'register' }) {
         <AuthCard title={t(`${mode}.title`)}>
           <EmailForm
             mode={mode}
+            offerSignUp={selfSignup}
             defaultEmail={email}
             onDialog={setDialog}
             onCodeSent={(sentTo, resendAfterSeconds) => {
@@ -100,6 +111,7 @@ export function SignInFlow({ mode }: { mode: 'login' | 'register' }) {
         <AuthCard title={t('code.title')}>
           <CodeForm
             email={email}
+            inviteOnly={!selfSignup}
             resendAfterSeconds={current.resendAfterSeconds}
             onVerified={handleVerified}
             onChangeEmail={restart}

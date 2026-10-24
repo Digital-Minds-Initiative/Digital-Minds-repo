@@ -37,7 +37,7 @@ const UNREGISTERED = 's446001356@st.uqu.edu.sa';
 
 async function requestCode(email: string) {
   const user = userEvent.setup();
-  renderWithProviders(<SignInFlow mode="login" />);
+  renderWithProviders(<SignInFlow mode="login" selfSignup />);
   await user.type(await screen.findByLabelText(/البريد الجامعي/), email);
   await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
   return user;
@@ -95,7 +95,7 @@ describe('SignInFlow (against the MSW mocks)', () => {
     // A real visit that came from inside the app has more than one history entry.
     window.history.pushState({}, '', '/login');
     const user = userEvent.setup();
-    renderWithProviders(<SignInFlow mode="login" />);
+    renderWithProviders(<SignInFlow mode="login" selfSignup />);
     await user.click(await screen.findByRole('button', { name: 'العودة إلى الصفحة السابقة' }));
     expect(back).toHaveBeenCalledOnce();
     expect(replace).not.toHaveBeenCalled();
@@ -104,15 +104,42 @@ describe('SignInFlow (against the MSW mocks)', () => {
   it('goes to the landing page when the page was opened directly', async () => {
     recordNavigation('/login');
     const user = userEvent.setup();
-    renderWithProviders(<SignInFlow mode="login" />);
+    renderWithProviders(<SignInFlow mode="login" selfSignup />);
     await user.click(await screen.findByRole('button', { name: 'العودة إلى الصفحة السابقة' }));
     expect(replace).toHaveBeenCalledWith('/');
     expect(back).not.toHaveBeenCalled();
   });
 
   it('links to the other sign-in page without adding a history entry', async () => {
-    renderWithProviders(<SignInFlow mode="register" />);
+    renderWithProviders(<SignInFlow mode="register" selfSignup />);
     const link = await screen.findByRole('link', { name: 'تسجيل الدخول' });
     expect(link.getAttribute('href')).toBe('/login');
+  });
+});
+
+describe('SignInFlow with sign-up off (invite-only, ADR 0027)', () => {
+  it('offers no account creation on the login screen', async () => {
+    renderWithProviders(<SignInFlow mode="login" selfSignup={false} />);
+    await screen.findByLabelText(/البريد الجامعي/);
+    expect(screen.queryByRole('link', { name: 'إنشاء حساب' })).toBeNull();
+    expect(screen.queryByText('ليس لديك حساب؟')).toBeNull();
+  });
+
+  it('says the same after asking for a code, whoever the address is', async () => {
+    const texts: string[] = [];
+    for (const email of ['s444001205@st.uqu.edu.sa', 's449999999@st.uqu.edu.sa']) {
+      const user = userEvent.setup();
+      const view = renderWithProviders(<SignInFlow mode="login" selfSignup={false} />);
+      await user.type(await screen.findByLabelText(/البريد الجامعي/), email);
+      await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
+      const notice = await screen.findByText(
+        'إذا كان لديك وصول إلى المنصة، سيصلك رمز على بريدك الجامعي. تحقّق من مجلد Junk.',
+      );
+      // Nothing claims a code was sent.
+      expect(screen.queryByText(/أرسلنا رمزاً/)).toBeNull();
+      texts.push(notice.closest('form')?.textContent ?? '');
+      view.unmount();
+    }
+    expect(texts[0]?.replace(/d+/g, '')).toBe(texts[1]?.replace(/d+/g, ''));
   });
 });

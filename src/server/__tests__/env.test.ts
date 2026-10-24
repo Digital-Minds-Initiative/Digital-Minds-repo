@@ -16,6 +16,7 @@ const production = {
   RESEND_API_KEY: 're_test',
   EMAIL_FROM: 'Digital Minds <no-reply@auth.example.org>',
   CLIENT_IP_HEADER: 'x-forwarded-for',
+  AUTH_SELF_SIGNUP: 'false',
 };
 
 describe('server environment', () => {
@@ -106,6 +107,31 @@ describe('auth and email settings', () => {
     // `next build` is not a running server: unset still means none there.
     expect(parseServerEnv({ ...unset, NEXT_PHASE: 'phase-production-build' })).toMatchObject({
       CLIENT_IP_HEADER: null,
+    });
+  });
+
+  it('makes a production server choose invite-only or self sign-up explicitly', () => {
+    const { AUTH_SELF_SIGNUP: _, ...unset } = production;
+    expect(() => parseServerEnv(unset)).toThrow(/AUTH_SELF_SIGNUP is required in production/);
+    expect(parseServerEnv(production)).toMatchObject({ AUTH_SELF_SIGNUP: false });
+    expect(parseServerEnv({ ...production, AUTH_SELF_SIGNUP: 'true' })).toMatchObject({
+      AUTH_SELF_SIGNUP: true,
+    });
+    expect(() => parseServerEnv({ ...production, AUTH_SELF_SIGNUP: 'no' })).toThrow(
+      /AUTH_SELF_SIGNUP/,
+    );
+    // `next build` is not a running server.
+    expect(parseServerEnv({ ...unset, NEXT_PHASE: 'phase-production-build' })).toMatchObject({
+      AUTH_SELF_SIGNUP: true,
+    });
+  });
+
+  it('keeps self sign-up on in development and tests unless it is turned off', () => {
+    for (const NODE_ENV of ['development', 'test']) {
+      expect(parseServerEnv({ ...valid, NODE_ENV })).toMatchObject({ AUTH_SELF_SIGNUP: true });
+    }
+    expect(parseServerEnv({ ...valid, AUTH_SELF_SIGNUP: 'false' })).toMatchObject({
+      AUTH_SELF_SIGNUP: false,
     });
   });
 

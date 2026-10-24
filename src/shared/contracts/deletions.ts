@@ -85,6 +85,8 @@ export const committeeDeletionCountsSchema = committeeDeletionPreviewSchema.exte
   pointRevisions: count,
   pointBatches: count,
   roleChanges: count,
+  /** Invitations to lead this committee (docs/adr/0027-invite-only-sign-in.md). */
+  roleInvitations: count,
 });
 export type CommitteeDeletionCounts = z.infer<typeof committeeDeletionCountsSchema>;
 
@@ -132,6 +134,7 @@ export const personDeletionCountsSchema = z.object({
   pointRevisions: count,
   pointBatches: count,
   roleChanges: count,
+  roleInvitations: count,
   sessions: count,
 });
 export type PersonDeletionCounts = z.infer<typeof personDeletionCountsSchema>;
