@@ -14,10 +14,14 @@ import { mockEndpoint, mockError, type MockError } from '@/client/mocks/endpoint
 import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
 import { pageMeta } from '@/shared/contracts/core';
 import {
+  INVITATIONS_PER_PERSON_PER_DAY,
   listClubPermissionsEndpoint,
   listRoleHistoryEndpoint,
+  resendClubInvitationEndpoint,
+  resendCommitteeInvitationEndpoint,
   setClubRoleEndpoint,
   setCommitteeRoleEndpoint,
+  type InvitationOutcome,
 } from '@/shared/contracts/permissions';
 
 /*
@@ -26,6 +30,10 @@ import {
  * leads in their club, a role already held is a no-op that records nothing — and every refusal has
  * the status and `reason` the server gives. The mock actor is rebuilt from the memberships on each
  * request, so a change takes effect on the very next one, like the real thing.
+ *
+ * Invitations (docs/adr/0027-invite-only-sign-in.md): granting a role to someone who has not
+ * signed in "sends" one, at most INVITATIONS_PER_PERSON_PER_DAY per person per UTC day. Nothing is
+ * emailed; a test that needs a failed send overrides the handler.
  */
 
 const conflict = (reason: string) => mockError('CONFLICT', reason, { reason });
@@ -63,7 +71,45 @@ function visibleMembership(db: MockDb, actor: MockActor, memberId: string) {
 
 function holder(db: MockDb, membership: MockMembership) {
   const user = must(db.usersById.get(membership.userId), 'user');
-  return { memberId: membership.id, userId: user.id, fullName: user.fullName };
+  const latest = db.roleInvitations.findLast((sent) => sent.membershipId === membership.id);
+  return {
+    memberId: membership.id,
+    userId: user.id,
+    fullName: user.fullName,
+    registered: user.registered,
+    invitedAt: user.registered ? null : (latest?.sentAt ?? null),
+  };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Counts and "sends" one invitation, like the server's `sendInvitation`. */
+function invite(
+  db: MockDb,
+  membership: MockMembership,
+  committeeId: string | null,
+): Extract<InvitationOutcome, { status: 'sent' | 'limited' }> {
+  const now = Date.now();
+  const dayStart = Math.floor(now / DAY_MS) * DAY_MS;
+  const today = db.roleInvitations.filter(
+    (sent) => sent.userId === membership.userId && Date.parse(sent.sentAt) >= dayStart,
+  );
+  if (today.length >= INVITATIONS_PER_PERSON_PER_DAY) {
+    return { status: 'limited', retryAfterSeconds: Math.ceil((dayStart + DAY_MS - now) / 1000) };
+  }
+  const sentAt = new Date(now).toISOString();
+  db.roleInvitations.push({
+    clubId: membership.clubId,
+    committeeId,
+    membershipId: membership.id,
+    userId: membership.userId,
+    sentAt,
+  });
+  return { status: 'sent', sentAt };
+}
+
+function needsInvitation(db: MockDb, membership: MockMembership): boolean {
+  return !must(db.usersById.get(membership.userId), 'user').registered;
 }
 
 function record(
@@ -85,6 +131,15 @@ function record(
   });
 }
 
+/** A resend's answer: the time it went out, or the 429 the server gives past the daily limit. */
+function resent(outcome: ReturnType<typeof invite>): { sentAt: string } | MockError {
+  if (outcome.status === 'sent') return { sentAt: outcome.sentAt };
+  return mockError('RATE_LIMITED', 'too_many_invitations', {
+    reason: 'too_many_invitations',
+    retryAfterSeconds: outcome.retryAfterSeconds,
+  });
+}
+
 export const permissionsHandlers = [
   mockEndpoint(setClubRoleEndpoint, ({ cookies, params, body }) => {
     const ctx = context(cookies);
@@ -97,6 +152,7 @@ export const permissionsHandlers = [
     if (db.clubsById.get(membership.clubId)?.archivedAt) return conflict('club_archived');
 
     // Setting the role someone already holds changes nothing and records nothing.
+    let invitation: InvitationOutcome | null = null;
     if (membership.role !== body.role) {
       record(db, actor, {
         clubId: membership.clubId,
@@ -106,8 +162,11 @@ export const permissionsHandlers = [
         newRole: body.role,
       });
       membership.role = body.role;
+      if (body.role === 'CLUB_OFFICER' && needsInvitation(db, membership)) {
+        invitation = invite(db, membership, null);
+      }
     }
-    return toMemberFixture(db, actor, membership);
+    return { member: toMemberFixture(db, actor, membership), invitation };
   }),
 
   mockEndpoint(setCommitteeRoleEndpoint, ({ cookies, params, body }) => {
@@ -139,6 +198,7 @@ export const permissionsHandlers = [
     const link = membership.committees.find((c) => c.committeeId === committee.id && !c.removed);
     if (!link) return conflict('not_in_committee');
 
+    let invitation: InvitationOutcome | null = null;
     if (link.role !== body.role) {
       record(db, actor, {
         clubId: committee.clubId,
@@ -148,8 +208,44 @@ export const permissionsHandlers = [
         newRole: body.role,
       });
       link.role = body.role;
+      if (body.role === 'LEAD' && needsInvitation(db, membership)) {
+        invitation = invite(db, membership, committee.id);
+      }
     }
-    return toMemberFixture(db, actor, membership);
+    return { member: toMemberFixture(db, actor, membership), invitation };
+  }),
+
+  mockEndpoint(resendClubInvitationEndpoint, ({ cookies, params }) => {
+    const ctx = context(cookies);
+    if (isError(ctx)) return ctx;
+    const { db, actor } = ctx;
+    const membership = visibleMembership(db, actor, params.memberId);
+    if (!membership) return mockError('NOT_FOUND');
+    if (!actor.user.isFullAdmin) return forbidden('full_admin_required');
+    if (membership.removedAt !== null) return conflict('member_removed');
+    if (db.clubsById.get(membership.clubId)?.archivedAt) return conflict('club_archived');
+    if (membership.role !== 'CLUB_OFFICER') return conflict('no_role');
+    if (!needsInvitation(db, membership)) return conflict('already_registered');
+    return resent(invite(db, membership, null));
+  }),
+
+  mockEndpoint(resendCommitteeInvitationEndpoint, ({ cookies, params }) => {
+    const ctx = context(cookies);
+    if (isError(ctx)) return ctx;
+    const { db, actor } = ctx;
+    const membership = visibleMembership(db, actor, params.memberId);
+    if (!membership) return mockError('NOT_FOUND');
+    const committee = db.committeesById.get(params.committeeId);
+    if (!committee || committee.clubId !== membership.clubId) return mockError('NOT_FOUND');
+    if (!canManageClub(actor, committee.clubId)) return forbidden('club_management_required');
+    if (membership.removedAt !== null) return conflict('member_removed');
+    if (db.clubsById.get(committee.clubId)?.archivedAt) return conflict('club_archived');
+    if (committee.archivedAt) return conflict('committee_archived');
+    const link = membership.committees.find((c) => c.committeeId === committee.id && !c.removed);
+    if (!link) return conflict('not_in_committee');
+    if (link.role !== 'LEAD') return conflict('no_role');
+    if (!needsInvitation(db, membership)) return conflict('already_registered');
+    return resent(invite(db, membership, committee.id));
   }),
 
   mockEndpoint(listClubPermissionsEndpoint, ({ cookies, params }) => {

@@ -3,6 +3,8 @@ import 'server-only';
 export {
   getClubPermissions,
   listRoleHistory,
+  resendClubInvitation,
+  resendCommitteeInvitation,
   setMemberClubRole,
   setMemberCommitteeRole,
 } from './service';

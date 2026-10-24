@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 
 import { env } from '@/server/env';
 
-import { incrementCounter } from './repository';
+import { decrementCounter, incrementCounter } from './repository';
 
 /*
  * Fixed-window rate limiting counted in Postgres (no Redis — ADR 0014). Every surface that needs
@@ -12,6 +12,7 @@ import { incrementCounter } from './repository';
  *
  *   sign-in ............ src/server/modules/auth/rate-limits.ts
  *   public view links .. src/server/modules/clubs/view-rate-limits.ts
+ *   role invitations ... src/server/modules/permissions/invitations.ts
  *
  * The limit's name goes into the key, so one surface can never spend another's budget, however
  * similar their subjects are (ADR 0023).
@@ -54,18 +55,31 @@ export async function consumeFixedWindow(
 ): Promise<FixedWindowResult> {
   if (subject === null) return { count: 0, exceeded: false, retryAfterSeconds: 0 };
 
-  const windowMs = limit.windowSeconds * 1000;
-  const windowStart = Math.floor(now.getTime() / windowMs) * windowMs;
-  const windowEnd = new Date(windowStart + windowMs);
-
-  const count = await incrementCounter(
-    counterKey(limit.name, subject),
-    new Date(windowStart),
-    windowEnd,
-  );
+  const { windowStart, windowEnd } = windowAt(limit, now);
+  const count = await incrementCounter(counterKey(limit.name, subject), windowStart, windowEnd);
   return {
     count,
     exceeded: count > limit.max,
     retryAfterSeconds: (windowEnd.getTime() - now.getTime()) / 1000,
   };
+}
+
+/**
+ * Gives back a use counted by `consumeFixedWindow` with the same `now`, when what it was counted
+ * for did not happen — an invitation email the provider refused. Counting first and refunding a
+ * failure keeps the limit exact under concurrent requests, which checking first and counting a
+ * success afterwards would not.
+ */
+export async function refundFixedWindow(
+  limit: FixedWindowLimit,
+  subject: string,
+  now: Date,
+): Promise<void> {
+  await decrementCounter(counterKey(limit.name, subject), windowAt(limit, now).windowStart);
+}
+
+function windowAt(limit: FixedWindowLimit, now: Date): { windowStart: Date; windowEnd: Date } {
+  const windowMs = limit.windowSeconds * 1000;
+  const start = Math.floor(now.getTime() / windowMs) * windowMs;
+  return { windowStart: new Date(start), windowEnd: new Date(start + windowMs) };
 }

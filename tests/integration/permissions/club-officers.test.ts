@@ -36,10 +36,12 @@ describe('the club officer role', () => {
     it('appoints and revokes, writing one history row for each', async () => {
       const member = s.memberships.memberA1;
       const appointed = await setMemberClubRole(admin, member, 'CLUB_OFFICER');
-      expect(appointed).toMatchObject({ id: member, role: 'CLUB_OFFICER' });
+      expect(appointed.member).toMatchObject({ id: member, role: 'CLUB_OFFICER' });
+      // They have signed in before: no invitation is due.
+      expect(appointed.invitation).toBeNull();
 
       const revoked = await setMemberClubRole(admin, member, 'MEMBER');
-      expect(revoked.role).toBe('MEMBER');
+      expect(revoked.member.role).toBe('MEMBER');
 
       expect(await historyFor(member)).toMatchObject([
         {
@@ -66,14 +68,14 @@ describe('the club officer role', () => {
       expect(officers).toBe(1);
       await expect(
         setMemberClubRole(admin, s.memberships.officerB, 'MEMBER'),
-      ).resolves.toMatchObject({ role: 'MEMBER' });
+      ).resolves.toMatchObject({ member: { role: 'MEMBER' } });
       // Put it back for the rest of the file.
       await setMemberClubRole(admin, s.memberships.officerB, 'CLUB_OFFICER');
     });
 
     it('may revoke their own officer role in a club — the full-admin flag is not an API matter', async () => {
       const selfOfficer = await setMemberClubRole(admin, s.memberships.mixedA, 'MEMBER');
-      expect(selfOfficer.role).toBe('MEMBER');
+      expect(selfOfficer.member.role).toBe('MEMBER');
       await setMemberClubRole(admin, s.memberships.mixedA, 'CLUB_OFFICER');
       expect(await db.user.findUniqueOrThrow({ where: { id: s.users.admin.id } })).toMatchObject({
         isFullAdmin: true,
@@ -88,8 +90,8 @@ describe('the club officer role', () => {
       const before = await db.membership.findUniqueOrThrow({ where: { id: member } });
 
       await expect(setMemberClubRole(admin, member, 'CLUB_OFFICER')).resolves.toMatchObject({
-        id: member,
-        role: 'CLUB_OFFICER',
+        member: { id: member, role: 'CLUB_OFFICER' },
+        invitation: null,
       });
       // Not even updatedAt moved, and no row was written.
       expect(await db.membership.findUniqueOrThrow({ where: { id: member } })).toEqual(before);
@@ -100,7 +102,7 @@ describe('the club officer role', () => {
       const member = s.memberships.memberA2;
       expect(await roleOf(member)).toBe('MEMBER');
       await expect(setMemberClubRole(admin, member, 'MEMBER')).resolves.toMatchObject({
-        role: 'MEMBER',
+        member: { role: 'MEMBER' },
       });
       expect(await historyFor(member)).toHaveLength(0);
     });
@@ -185,7 +187,7 @@ describe('the club officer role', () => {
       ]);
       expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
       for (const result of results) {
-        expect(result.status === 'fulfilled' && result.value.role).toBe('CLUB_OFFICER');
+        expect(result.status === 'fulfilled' && result.value.member.role).toBe('CLUB_OFFICER');
       }
 
       expect(await roleOf(member)).toBe('CLUB_OFFICER');

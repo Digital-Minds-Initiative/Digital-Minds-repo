@@ -27,6 +27,26 @@ export async function incrementCounter(
 }
 
 /**
+ * Takes one back from a counter, for a use that turned out not to happen. A counter holds at
+ * least one (CHECK), so taking back the last use deletes the row. Each statement is conditional
+ * on the count it expects; if a concurrent increment moves it from 1 to 2 between the two, the
+ * next round decrements instead.
+ */
+export async function decrementCounter(key: string, windowStart: Date): Promise<void> {
+  for (let round = 0; round < 3; round += 1) {
+    const decremented = await db.rateLimitCounter.updateMany({
+      where: { key, windowStart, count: { gt: 1 } },
+      data: { count: { decrement: 1 } },
+    });
+    if (decremented.count > 0) return;
+    const deleted = await db.rateLimitCounter.deleteMany({ where: { key, windowStart, count: 1 } });
+    if (deleted.count > 0) return;
+    const exists = await db.rateLimitCounter.count({ where: { key, windowStart } });
+    if (exists === 0) return;
+  }
+}
+
+/**
  * Counters whose window has passed. Another module's cleanup sweeps them with its own rows, so
  * this takes that transaction's client (this module owns the table — ADR 0017's pattern).
  */

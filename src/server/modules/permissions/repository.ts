@@ -10,6 +10,7 @@ import type {
 } from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
+import { liveUniEmail } from '@/server/people';
 import type { ClubRole, CommitteeRole } from '@/shared/contracts/members';
 import type { GrantableRole } from '@/shared/contracts/permissions';
 
@@ -27,9 +28,12 @@ import type { GrantableRole } from '@/shared/contracts/permissions';
 export interface ClubRoleTarget {
   memberId: string;
   clubId: string;
+  clubName: string;
   clubArchived: boolean;
   removed: boolean;
   currentRole: ClubRole;
+  /** Who the membership belongs to — whom an invitation goes to. */
+  person: { userId: string; uniEmail: string; registered: boolean };
 }
 
 export async function findClubRoleTarget(
@@ -43,21 +47,29 @@ export async function findClubRoleTarget(
       clubId: true,
       role: true,
       removedAt: true,
-      club: { select: { archivedAt: true } },
+      club: { select: { name: true, archivedAt: true } },
+      user: { select: { id: true, uniEmail: true, registeredAt: true } },
     },
   });
   if (!row) return null;
   return {
     memberId: row.id,
     clubId: row.clubId,
+    clubName: row.club.name,
     clubArchived: row.club.archivedAt !== null,
     removed: row.removedAt !== null,
     currentRole: row.role,
+    person: {
+      userId: row.user.id,
+      uniEmail: liveUniEmail(row.user.uniEmail),
+      registered: row.user.registeredAt !== null,
+    },
   };
 }
 
 export interface CommitteeRoleTarget {
   committeeId: string;
+  name: string;
   clubId: string;
   archived: boolean;
   clubArchived: boolean;
@@ -79,6 +91,7 @@ export async function findCommitteeRoleTarget(
     select: {
       id: true,
       clubId: true,
+      name: true,
       archivedAt: true,
       club: { select: { archivedAt: true } },
       committeeMemberships: {
@@ -92,6 +105,7 @@ export async function findCommitteeRoleTarget(
   if (!row) return null;
   return {
     committeeId: row.id,
+    name: row.name,
     clubId: row.clubId,
     archived: row.archivedAt !== null,
     clubArchived: row.club.archivedAt !== null,
@@ -125,6 +139,35 @@ export async function recordRoleChange(
   return db.$transaction(async (tx) => {
     if (!(await applyRole(tx))) return false;
     await tx.roleChange.create({ data: change, select: { id: true } });
+    return true;
+  });
+}
+
+/**
+ * Records an invitation email that was sent. The membership is read through the actor's scope in
+ * the same transaction first, so a membership outside it gets no row, and the club comes from
+ * that row, never from the caller. The composite foreign key keeps the committee in that club.
+ */
+export async function insertRoleInvitation(
+  scope: MemberScope,
+  input: { memberId: string; committeeId: string | null; sentById: string; sentAt: Date },
+): Promise<boolean> {
+  return db.$transaction(async (tx) => {
+    const membership = await tx.membership.findFirst({
+      where: { AND: [scope, { id: input.memberId }] },
+      select: { id: true, clubId: true },
+    });
+    if (!membership) return false;
+    await tx.roleInvitation.create({
+      data: {
+        clubId: membership.clubId,
+        membershipId: membership.id,
+        committeeId: input.committeeId,
+        sentById: input.sentById,
+        sentAt: input.sentAt,
+      },
+      select: { id: true },
+    });
     return true;
   });
 }
@@ -167,37 +210,64 @@ export interface RoleHolderRow {
   memberId: string;
   userId: string;
   fullName: string;
+  registered: boolean;
+  /** This club's latest invitation to them; null once they have registered. */
+  invitedAt: Date | null;
+}
+
+/** The person behind a role, with this club's latest invitation, read through the given scope. */
+function holderSelect(invitations: RoleInvitationScope) {
+  return {
+    id: true,
+    userId: true,
+    user: { select: { fullName: true, registeredAt: true } },
+    roleInvitations: {
+      where: invitations,
+      orderBy: { sentAt: 'desc' },
+      take: 1,
+      select: { sentAt: true },
+    },
+  } satisfies Prisma.MembershipSelect;
+}
+
+function toHolder(
+  row: Prisma.MembershipGetPayload<{ select: ReturnType<typeof holderSelect> }>,
+): RoleHolderRow {
+  const registered = row.user.registeredAt !== null;
+  return {
+    memberId: row.id,
+    userId: row.userId,
+    fullName: row.user.fullName,
+    registered,
+    invitedAt: registered ? null : (row.roleInvitations[0]?.sentAt ?? null),
+  };
 }
 
 /** Active officers of the club, inside the actor's member scope. */
 export async function findClubOfficers(
-  scope: MemberScope,
+  scopes: { members: MemberScope; invitations: RoleInvitationScope },
   clubId: string,
 ): Promise<RoleHolderRow[]> {
   const rows = await db.membership.findMany({
-    where: { AND: [scope, { clubId, role: 'CLUB_OFFICER', removedAt: null }] },
-    select: { id: true, userId: true, user: { select: { fullName: true } } },
+    where: { AND: [scopes.members, { clubId, role: 'CLUB_OFFICER', removedAt: null }] },
+    select: holderSelect(scopes.invitations),
     // The Arabic-folded copy, like every other name ordering (ADR 0020): أ/إ/آ and ة/ه
     // variants of one name sort together instead of pages apart.
     orderBy: [{ user: { searchName: 'asc' } }, { id: 'asc' }],
   });
-  return rows.map((row) => ({
-    memberId: row.id,
-    userId: row.userId,
-    fullName: row.user.fullName,
-  }));
+  return rows.map(toHolder);
 }
 
 /** Active leads of the club's committees, inside the actor's committee-membership scope. */
 export async function findClubLeads(
-  scope: CommitteeMembershipScope,
+  scopes: { committeeMemberships: CommitteeMembershipScope; invitations: RoleInvitationScope },
   clubId: string,
 ): Promise<Array<RoleHolderRow & { committee: { id: string; name: string } }>> {
   const rows = await db.committeeMembership.findMany({
-    where: { AND: [scope, { clubId, role: 'LEAD', removedAt: null }] },
+    where: { AND: [scopes.committeeMemberships, { clubId, role: 'LEAD', removedAt: null }] },
     select: {
       committee: { select: { id: true, name: true } },
-      membership: { select: { id: true, userId: true, user: { select: { fullName: true } } } },
+      membership: { select: holderSelect(scopes.invitations) },
     },
     orderBy: [
       { committee: { name: 'asc' } },
@@ -205,12 +275,7 @@ export async function findClubLeads(
       { membership: { id: 'asc' } },
     ],
   });
-  return rows.map((row) => ({
-    memberId: row.membership.id,
-    userId: row.membership.userId,
-    fullName: row.membership.user.fullName,
-    committee: row.committee,
-  }));
+  return rows.map((row) => ({ ...toHolder(row.membership), committee: row.committee }));
 }
 
 /** The club the roles belong to, so an unreachable one is a 404 before any role rule runs. */

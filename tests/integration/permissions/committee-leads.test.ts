@@ -59,7 +59,7 @@ describe('the committee lead role', () => {
     it('appoints and revokes, writing one history row for each', async () => {
       const member = s.memberships.memberA1;
       const appointed = await setMemberCommitteeRole(officerA, member, s.committees.a1.id, 'LEAD');
-      expect(appointed.committees).toEqual(
+      expect(appointed.member.committees).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: s.committees.a1.id, role: 'LEAD' })]),
       );
 
@@ -105,7 +105,7 @@ describe('the committee lead role', () => {
       await addMemberToCommittee(officerA, s.memberships.officerA, s.committees.a2.id);
       await expect(
         setMemberCommitteeRole(officerA, s.memberships.officerA, s.committees.a2.id, 'LEAD'),
-      ).resolves.toMatchObject({ id: s.memberships.officerA });
+      ).resolves.toMatchObject({ member: { id: s.memberships.officerA } });
       expect(await committeeRoleOf(s.memberships.officerA, s.committees.a2.id)).toBe('LEAD');
       await setMemberCommitteeRole(officerA, s.memberships.officerA, s.committees.a2.id, 'MEMBER');
       await removeMemberFromCommittee(officerA, s.memberships.officerA, s.committees.a2.id);
@@ -227,7 +227,7 @@ describe('the committee lead role', () => {
       ]);
       expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
       for (const result of results) {
-        expect(result.status === 'fulfilled' && result.value.id).toBe(member);
+        expect(result.status === 'fulfilled' && result.value.member.id).toBe(member);
       }
       expect(await committeeRoleOf(member, committeeId)).toBe('LEAD');
       // The loser's update matched nothing, so it recorded nothing: one grant, one row.

@@ -6,7 +6,11 @@ import { PUT as setCommitteeRoleRoute } from '@/app/api/v1/members/[memberId]/co
 import { PUT as setClubRoleRoute } from '@/app/api/v1/members/[memberId]/role/route';
 import { db } from '@/server/db/client';
 import { memberSchema } from '@/shared/contracts/members';
-import { clubPermissionsSchema, roleHistoryResponseSchema } from '@/shared/contracts/permissions';
+import {
+  clubPermissionsSchema,
+  roleHistoryResponseSchema,
+  setRoleResponseSchema,
+} from '@/shared/contracts/permissions';
 import { actorFor, buildScenario, type Scenario } from '@tests/factories/scenario';
 import { callRoute as call, errorOf } from '@tests/utils/route';
 
@@ -132,13 +136,15 @@ describe('the role endpoints', () => {
   });
 
   describe('bodies and errors', () => {
-    it('answer a grant with the member, exactly as the contract describes', async () => {
+    it('answer a grant with the member and the invitation, exactly as the contract describes', async () => {
       const response = await endpoints.setClubRole(s.users.admin.uniEmail);
       expect(response.status).toBe(200);
-      const body = (await response.json()) as Record<string, unknown>;
-      const member = memberSchema.parse(body);
-      expect(Object.keys(body).sort()).toEqual(Object.keys(memberSchema.shape).sort());
+      const body = (await response.json()) as { member: Record<string, unknown> };
+      const { member, invitation } = setRoleResponseSchema.parse(body);
+      expect(Object.keys(body).sort()).toEqual(['invitation', 'member']);
+      expect(Object.keys(body.member).sort()).toEqual(Object.keys(memberSchema.shape).sort());
       expect(member).toMatchObject({ id: s.memberships.memberA1, role: 'CLUB_OFFICER' });
+      expect(invitation).toBeNull();
       await endpoints.setClubRole(s.users.admin.uniEmail, 'MEMBER');
     });
 
