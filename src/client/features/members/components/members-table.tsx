@@ -210,20 +210,12 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
         onColumnVisibilityChange={setColumnVisibility}
         isLoading={members.isPending}
         isFetching={members.isFetching}
-        toolbar={
-          <>
-            <MembersToolbar query={query} onChange={onFiltersChange} access={me?.access} />
-            {/* At the end of the row, so it sits beside the columns menu. */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="ms-auto"
-              onClick={() => openExport({ kind: 'all' })}
-            >
-              <Download aria-hidden />
-              {t('export.button')}
-            </Button>
-          </>
+        toolbar={<MembersToolbar query={query} onChange={onFiltersChange} access={me?.access} />}
+        toolbarEnd={
+          <Button variant="outline" size="sm" onClick={() => openExport({ kind: 'all' })}>
+            <Download aria-hidden />
+            {t('export.button')}
+          </Button>
         }
         bulkActions={({ ids }) => (
           <>
