@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { PrismaPg } from '@prisma/adapter-pg';
+import { attachDatabasePool } from '@vercel/functions';
+import { Pool } from 'pg';
 
 import { env } from '../env';
 import { ConflictError } from '../errors';
@@ -12,11 +14,18 @@ import { Prisma, PrismaClient } from './generated/client';
  */
 
 function createClient() {
-  const adapter = new PrismaPg({
+  // On Vercel, DATABASE_URL is Neon's pooled (PgBouncer, transaction mode) address. Everything
+  // that must share a connection — the `FOR UPDATE` locks, the conditional updates — runs inside
+  // one `$transaction`, which the pooler keeps on one server connection until it commits.
+  const pool = new Pool({
     connectionString: env.DATABASE_URL,
     // Fail fast instead of hanging when the database is unreachable.
     connectionTimeoutMillis: 5_000,
   });
+  // On Vercel's Fluid compute, keeps a suspended instance alive just long enough to close its idle
+  // connections instead of leaking them. Does nothing anywhere else (locally, in tests, builds).
+  attachDatabasePool(pool);
+  const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,
     log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
