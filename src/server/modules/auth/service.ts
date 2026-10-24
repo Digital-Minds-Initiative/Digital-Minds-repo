@@ -3,6 +3,7 @@ import 'server-only';
 import { canManageClub, hasDashboardAccess, selfScope, type Actor } from '@/server/authz';
 import { UnauthenticatedError } from '@/server/errors';
 import { listAccessibleClubs, listAccessibleCommittees } from '@/server/modules/clubs';
+import { liveUniEmail } from '@/server/people';
 import type { Me } from '@/shared/contracts/auth';
 
 import { findOwnProfile } from './repository';
@@ -19,7 +20,7 @@ export async function getMe(actor: Actor): Promise<Me> {
     user: {
       id: profile.id,
       fullName: profile.fullName,
-      uniEmail: profile.uniEmail,
+      uniEmail: liveUniEmail(profile.uniEmail),
       isFullAdmin: profile.isFullAdmin,
     },
     memberships: profile.memberships.map((membership) => ({

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { MemberBalances } from '@/server/modules/points';
+import { liveUniEmail } from '@/server/people';
 import type { Member } from '@/shared/contracts/members';
 
 import type { MemberRow } from './repository';
@@ -24,7 +25,7 @@ export function toMember(
     user: {
       id: row.user.id,
       fullName: row.user.fullName,
-      uniEmail: row.user.uniEmail,
+      uniEmail: liveUniEmail(row.user.uniEmail),
       isRegistered: row.user.registeredAt !== null,
     },
     profile: {

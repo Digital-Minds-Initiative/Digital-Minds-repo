@@ -10,6 +10,7 @@ import {
 } from '@/client/mocks/db';
 import { mockEndpoint, mockError, type MockError } from '@/client/mocks/endpoint';
 import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
+import { deletePersonEndpoint } from '@/shared/contracts/deletions';
 import {
   addMemberToCommitteeEndpoint,
   createMemberEndpoint,
@@ -305,5 +306,53 @@ export const memberWriteHandlers = [
       link.role = 'MEMBER';
     }
     return undefined;
+  }),
+
+  // A full admin deleting a person's data (ADR 0026): gone from every club, the account emptied,
+  // what they recorded for others kept under a deleted author.
+  mockEndpoint(deletePersonEndpoint, ({ cookies, params, body }) => {
+    const ctx = context(cookies);
+    if (isError(ctx)) return ctx;
+    const { db, actor } = ctx;
+    const membership = loadMember(ctx, params.memberId);
+    if (failed(membership)) return membership;
+    if (!actor.user.isFullAdmin) return forbidden('full_admin_required');
+    const user = must(db.usersById.get(membership.userId), 'user');
+    if (user.id === actor.user.id) return forbidden('cannot_delete_self');
+    if (user.isFullAdmin) return forbidden('cannot_delete_full_admin');
+    if (body.uniEmail.trim().toLowerCase() !== user.uniEmail) {
+      return invalid(['body', 'uniEmail'], 'confirmation_mismatch');
+    }
+
+    const theirs = new Set(db.memberships.filter((m) => m.userId === user.id).map((m) => m.id));
+    const transactions = db.transactions.filter((t) => theirs.has(t.membershipId));
+    const counts = {
+      memberships: theirs.size,
+      committeeMemberships: db.memberships
+        .filter((m) => theirs.has(m.id))
+        .reduce((sum, m) => sum + m.committees.length, 0),
+      pointTransactions: transactions.length,
+      pointRevisions: transactions.reduce((sum, t) => sum + t.revisions.length, 0),
+      pointBatches: 0,
+      roleChanges: db.roleChanges.filter((c) => theirs.has(c.membershipId)).length,
+      sessions: 0,
+    };
+    db.transactions.splice(
+      0,
+      db.transactions.length,
+      ...db.transactions.filter((t) => !theirs.has(t.membershipId)),
+    );
+    db.roleChanges.splice(
+      0,
+      db.roleChanges.length,
+      ...db.roleChanges.filter((c) => !theirs.has(c.membershipId)),
+    );
+    db.memberships.splice(
+      0,
+      db.memberships.length,
+      ...db.memberships.filter((m) => !theirs.has(m.id)),
+    );
+    Object.assign(user, { fullName: '', uniEmail: '', registered: false, deleted: true });
+    return counts;
   }),
 ];

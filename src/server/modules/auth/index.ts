@@ -14,4 +14,4 @@ export {
  * as part of its own write calls this with its transaction client — it never writes the table
  * itself (docs/adr/0017-member-permissions.md).
  */
-export { endUserSessions } from './repository';
+export { endPersonSignIn, endUserSessions } from './repository';

@@ -1,15 +1,19 @@
 import 'server-only';
 
+import { randomBytes } from 'node:crypto';
+
 import type {
   ClubScope,
   CommitteeMembershipScope,
   CommitteeScope,
   MemberScope,
   MembershipTypeScope,
+  UserScope,
 } from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
+import { liveUniEmail } from '@/server/people';
 import type {
   ClubRole,
   CommitteeRole,
@@ -651,7 +655,7 @@ export async function findAccountsByUniEmails(
     users.map((user) => {
       const membership = user.memberships[0];
       return [
-        user.uniEmail,
+        liveUniEmail(user.uniEmail),
         {
           userId: user.id,
           membership: membership
@@ -825,7 +829,7 @@ async function createAccounts(
     where: { uniEmail: { in: fresh.map((add) => add.uniEmail) } },
     select: { id: true, uniEmail: true },
   });
-  return new Map(created.map((user) => [user.uniEmail, user.id]));
+  return new Map(created.map((user) => [liveUniEmail(user.uniEmail), user.id]));
 }
 
 async function createMemberships(
@@ -955,4 +959,174 @@ export async function saveMemberExport(
     if (club !== 1) throw new NotFoundError('Club');
     await tx.memberExport.create({ data: record, select: { id: true } });
   });
+}
+
+// ─── Deletes (written for the deletions module) ──────────────
+// A full admin's irreversible deletes (docs/adr/0015-archive-instead-of-delete.md,
+// docs/adr/0026-person-deletion.md). The deletions module runs the transaction; these write only
+// this module's tables, with its transaction client.
+
+/**
+ * Every membership the club has ever had, removed ones included: any of them keeps it. Read on the
+ * pool for the preview, and again on the transaction that holds the club's lock.
+ */
+export async function countClubMemberships(
+  scope: MemberScope,
+  clubId: string,
+  client: TransactionClient = db,
+): Promise<number> {
+  return client.membership.count({ where: { AND: [scope, { clubId }] } });
+}
+
+/**
+ * The club's members-export log goes with the club: its foreign key leaves no other way, and the
+ * deletion record keeps how many rows there were.
+ */
+export async function deleteClubMemberExports(
+  tx: TransactionClient,
+  scope: ClubScope,
+  clubId: string,
+): Promise<number> {
+  const { count } = await tx.memberExport.deleteMany({
+    where: { AND: [{ club: scope }, { clubId }] },
+  });
+  return count;
+}
+
+/** The committee's memberships, active and removed, for the delete preview. */
+export async function countCommitteeMemberships(
+  scope: CommitteeMembershipScope,
+  committeeId: string,
+): Promise<number> {
+  return db.committeeMembership.count({ where: { AND: [scope, { committeeId }] } });
+}
+
+/**
+ * Locks the committee's memberships until the transaction ends, so no point can be recorded on
+ * one of them while the committee is being deleted (the insert's foreign-key check needs a share
+ * lock on the row). Ordered by id, so two of these cannot deadlock. Returns how many there are.
+ */
+export async function lockCommitteeMemberships(
+  tx: TransactionClient,
+  committeeId: string,
+): Promise<number> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "CommitteeMembership"
+    WHERE "committeeId" = ${committeeId}::uuid ORDER BY "id" FOR UPDATE
+  `;
+  return rows.length;
+}
+
+export async function deleteCommitteeMemberships(
+  tx: TransactionClient,
+  scope: CommitteeMembershipScope,
+  committeeId: string,
+): Promise<number> {
+  const { count } = await tx.committeeMembership.deleteMany({
+    where: { AND: [scope, { committeeId }] },
+  });
+  return count;
+}
+
+export interface PersonForDeletion {
+  userId: string;
+  uniEmail: string;
+  isFullAdmin: boolean;
+}
+
+/** The person behind a member the actor can see. */
+export async function findPersonForDeletion(
+  scope: MemberScope,
+  memberId: string,
+): Promise<PersonForDeletion | null> {
+  const row = await db.membership.findFirst({
+    where: { AND: [scope, { id: memberId }] },
+    select: { user: { select: { id: true, uniEmail: true, isFullAdmin: true } } },
+  });
+  if (!row) return null;
+  return {
+    userId: row.user.id,
+    uniEmail: liveUniEmail(row.user.uniEmail),
+    isFullAdmin: row.user.isFullAdmin,
+  };
+}
+
+/**
+ * Locks the account, then its memberships, then their committee memberships, until the
+ * transaction ends: nobody can sign in as the person, add them to a club or a committee, or record
+ * a point on them meanwhile. Returns the account as it is now (null once deleted or out of
+ * reach) and the committee memberships whose points go with them.
+ */
+export async function lockPerson(
+  tx: TransactionClient,
+  scope: UserScope,
+  userId: string,
+): Promise<{ person: PersonForDeletion; committeeMembershipIds: string[] } | null> {
+  const reachable = await tx.user.count({
+    where: { AND: [scope, { id: userId, deletedAt: null }] },
+  });
+  if (reachable !== 1) return null;
+  const users = await tx.$queryRaw<Array<{ uniEmail: string | null; isFullAdmin: boolean }>>`
+    SELECT "uniEmail", "isFullAdmin" FROM "User" WHERE "id" = ${userId}::uuid FOR UPDATE
+  `;
+  const user = users[0];
+  if (!user) return null;
+  await tx.$queryRaw`
+    SELECT "id" FROM "Membership" WHERE "userId" = ${userId}::uuid ORDER BY "id" FOR UPDATE
+  `;
+  const committeeMemberships = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT cm."id" FROM "CommitteeMembership" cm
+    JOIN "Membership" m ON m."id" = cm."membershipId"
+    WHERE m."userId" = ${userId}::uuid ORDER BY cm."id" FOR UPDATE OF cm
+  `;
+  return {
+    person: { userId, uniEmail: liveUniEmail(user.uniEmail), isFullAdmin: user.isFullAdmin },
+    committeeMembershipIds: committeeMemberships.map((row) => row.id),
+  };
+}
+
+/** Every membership of the person, in every club, with their committee memberships. */
+export async function deletePersonMemberships(
+  tx: TransactionClient,
+  scopes: { members: MemberScope; committeeMemberships: CommitteeMembershipScope },
+  userId: string,
+): Promise<{ memberships: number; committeeMemberships: number }> {
+  const committeeMemberships = await tx.committeeMembership.deleteMany({
+    where: { AND: [scopes.committeeMemberships, { membership: { userId } }] },
+  });
+  const memberships = await tx.membership.deleteMany({
+    where: { AND: [scopes.members, { userId }] },
+  });
+  return {
+    memberships: memberships.count,
+    committeeMemberships: committeeMemberships.count,
+  };
+}
+
+/**
+ * Empties the account in place (docs/adr/0026-person-deletion.md). The row stays so that what the
+ * person recorded for others still points at someone; nothing on it identifies them any more —
+ * the name, the university email (freed for a fresh account) and the public id are replaced, and
+ * the CHECK constraint `User_deleted_check` refuses a deleted row that keeps any of them.
+ */
+export async function erasePerson(
+  tx: TransactionClient,
+  scope: UserScope,
+  userId: string,
+  now: Date,
+): Promise<void> {
+  const { count } = await tx.user.updateMany({
+    where: { AND: [scope, { id: userId, deletedAt: null }] },
+    data: {
+      fullName: '',
+      searchName: '',
+      uniEmail: null,
+      // A fresh random id, so the old one leads nowhere even if a link with it survives.
+      publicId: randomBytes(16).toString('hex'),
+      isFullAdmin: false,
+      registeredAt: null,
+      deletedAt: now,
+    },
+  });
+  if (count !== 1) throw new NotFoundError('Member');
 }

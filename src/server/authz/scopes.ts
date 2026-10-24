@@ -38,6 +38,16 @@ export function selfScope(actor: Actor): UserScope {
   return scope({ id: actor.userId });
 }
 
+/**
+ * Accounts the actor can reach through a member they can see. Only full admins act on an account
+ * as a whole (deleting a person's data, docs/adr/0026-person-deletion.md), and they reach every
+ * one; for anyone else this is the accounts behind their `membersScope`.
+ */
+export function peopleScope(actor: Actor): UserScope {
+  if (actor.isFullAdmin) return scope({});
+  return scope({ memberships: { some: membersScope(actor) } });
+}
+
 /** The clubs an actor can see at all: clubs they manage, and clubs of committees they lead. */
 function visibleClubIds(actor: Actor): string[] {
   return [...new Set([...officerClubIds(actor), ...clubIdsWithLedCommittees(actor)])];

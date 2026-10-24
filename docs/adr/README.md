@@ -6,7 +6,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | ------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------- |
 | [0001](0001-feature-modules-and-boundaries.md)    | Feature modules with four public entry points, enforced by ESLint                   | Accepted (layout: see 0013)     |
 | [0002](0002-authorization-model.md)               | Actor + branded scopes; 404 outside scope, 403 for roles                            | Accepted (role rules: see 0011) |
-| [0003](0003-data-model.md)                        | UUIDv7, composite foreign keys per club, no hard deletes                            | Accepted (profiles: see 0012)   |
+| [0003](0003-data-model.md)                        | UUIDv7, composite foreign keys per club, no hard deletes                            | Accepted (0012, 0026)           |
 | [0004](0004-points-ledger.md)                     | Append-only points ledger with revisions; balances computed                         | Accepted                        |
 | [0005](0005-api-contracts-and-errors.md)          | Endpoint definitions as contracts; one error envelope                               | Accepted                        |
 | [0006](0006-data-through-the-api.md)              | All UI data goes through `/api/v1`                                                  | Accepted                        |
@@ -18,7 +18,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0012](0012-member-profiles-per-club.md)          | Contact and study details per club; only the identity is shared                     | Accepted                        |
 | [0013](0013-server-client-shared-layout.md)       | Separate server, client and shared code at the top of `src`                         | Accepted                        |
 | [0014](0014-email-otp-sign-in.md)                 | Sign in with a one-time code emailed to the university address                      | Accepted (name step: see 0017)  |
-| [0015](0015-archive-instead-of-delete.md)         | Archive clubs and committees instead of deleting them                               | Accepted                        |
+| [0015](0015-archive-instead-of-delete.md)         | Archive clubs and committees instead of deleting them                               | Accepted (amended: deletes)     |
 | [0016](0016-membership-type-deletes-and-order.md) | Membership types: delete with a destination, order in one request                   | Accepted                        |
 | [0017](0017-member-permissions.md)                | Officers run the membership; a removed member is restored                           | Accepted                        |
 | [0018](0018-granting-roles.md)                    | Full admins appoint officers, officers appoint leads; every grant is recorded       | Accepted                        |
@@ -29,6 +29,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0023](0023-committee-view-link.md)               | A committee view link: a capability token, stored twice, opening a whitelisted page | Accepted (amends 0002)          |
 | [0024](0024-content-security-policy.md)           | A nonce-based Content-Security-Policy, built per request in the proxy               | Accepted                        |
 | [0025](0025-members-export.md)                    | Members export: the list written to a file, refused rather than trimmed, and logged | Accepted                        |
+| [0026](0026-person-deletion.md)                   | Deleting a person's data: the account is emptied in place                           | Accepted (amends 0003, 0019)    |
 
 ## Writing a new ADR
 

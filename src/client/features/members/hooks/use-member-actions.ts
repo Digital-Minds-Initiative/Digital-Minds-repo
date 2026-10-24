@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { meQueryKey } from '@/client/features/auth';
 import { apiClient } from '@/client/lib/api-client';
 import { listCommitteesEndpoint, listMembershipTypesEndpoint } from '@/shared/contracts/clubs';
+import { deletePersonEndpoint, type DeletePersonBody } from '@/shared/contracts/deletions';
 import {
   addMemberToCommitteeEndpoint,
   createMemberEndpoint,
@@ -96,6 +97,16 @@ export function useRemoveMember(memberId: string) {
   return useMutation({
     mutationFn: () => apiClient.request(removeMemberEndpoint, { params: { memberId } }),
     onSettled: () => refreshAfterChange(queryClient),
+  });
+}
+
+/** Deletes the person behind the member, in every club (ADR 0026). Everything is read again. */
+export function useDeletePerson(memberId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DeletePersonBody) =>
+      apiClient.request(deletePersonEndpoint, { params: { memberId }, body }),
+    onSettled: () => queryClient.invalidateQueries(),
   });
 }
 

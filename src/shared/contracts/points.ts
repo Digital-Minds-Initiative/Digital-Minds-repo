@@ -65,6 +65,13 @@ export const workDateSchema = pastOrTodayDateSchema;
 
 const personRefSchema = z.object({ id: idSchema, fullName: z.string() });
 
+/**
+ * Who recorded, cancelled or edited a transaction. `fullName` is null when a full admin has since
+ * deleted that person's data (docs/adr/0026-person-deletion.md): the row they wrote stays, the
+ * name does not, and the UI shows «عضو محذوف».
+ */
+const actorRefSchema = z.object({ id: idSchema, fullName: z.string().nullable() });
+
 export const pointTransactionSchema = z.object({
   id: idSchema,
   /** The member (membership id) and their name. */
@@ -76,11 +83,11 @@ export const pointTransactionSchema = z.object({
   status: pointTransactionStatusSchema,
   batchId: idSchema.nullable(),
   /** User who created it. */
-  createdBy: personRefSchema,
+  createdBy: actorRefSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
   cancelledAt: isoDateTimeSchema.nullable(),
-  cancelledBy: personRefSchema.nullable(),
+  cancelledBy: actorRefSchema.nullable(),
   cancellationReason: z.string().nullable(),
   revisionCount: z.number().int().min(0),
 });
@@ -220,7 +227,7 @@ export const pointTransactionRevisionSchema = z.object({
     workDate: isoDateSchema,
     status: pointTransactionStatusSchema,
   }),
-  changedBy: personRefSchema,
+  changedBy: actorRefSchema,
   changedAt: isoDateTimeSchema,
 });
 export type PointTransactionRevision = z.infer<typeof pointTransactionRevisionSchema>;

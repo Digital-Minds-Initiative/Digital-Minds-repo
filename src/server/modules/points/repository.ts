@@ -39,8 +39,8 @@ const transactionSelect = {
       committee: { select: { id: true, name: true } },
     },
   },
-  createdBy: { select: { id: true, fullName: true } },
-  cancelledBy: { select: { id: true, fullName: true } },
+  createdBy: { select: { id: true, fullName: true, deletedAt: true } },
+  cancelledBy: { select: { id: true, fullName: true, deletedAt: true } },
   _count: { select: { revisions: true } },
 } satisfies Prisma.PointTransactionSelect;
 
@@ -714,7 +714,7 @@ const revisionSelect = {
   previousWorkDate: true,
   previousStatus: true,
   createdAt: true,
-  changedBy: { select: { id: true, fullName: true } },
+  changedBy: { select: { id: true, fullName: true, deletedAt: true } },
 } satisfies Prisma.PointTransactionRevisionSelect;
 
 export type RevisionRow = Prisma.PointTransactionRevisionGetPayload<{
@@ -734,4 +734,103 @@ export async function findRevisions(
     select: revisionSelect,
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
+}
+
+// ─── Deletes (written for the deletions module) ──────────────
+// The ledger's one exception to "nothing is deleted" (docs/adr/0019-points-rules.md): a full admin
+// deleting a committee or a person's data takes their transactions with them, revisions included.
+// The deletions module runs the transaction; these write only this module's tables.
+
+/** Which transactions a delete takes: a whole committee's, or those on some committee memberships. */
+export type TransactionsToDelete = { committeeId: string } | { committeeMembershipIds: string[] };
+
+function transactionsToDeleteWhere(
+  target: TransactionsToDelete,
+): Prisma.PointTransactionWhereInput {
+  return 'committeeId' in target
+    ? { committeeId: target.committeeId }
+    : { committeeMembershipId: { in: target.committeeMembershipIds } };
+}
+
+/** Every transaction, cancelled ones included. On the pool for a preview, or on a transaction. */
+export async function countTransactions(
+  scope: PointTransactionScope,
+  target: TransactionsToDelete | { clubId: string },
+  client: TransactionClient = db,
+): Promise<number> {
+  const where = 'clubId' in target ? { clubId: target.clubId } : transactionsToDeleteWhere(target);
+  return client.pointTransaction.count({ where: { AND: [scope, where] } });
+}
+
+/**
+ * Locks the transactions about to be deleted, so an edit or a cancel cannot add a revision to one
+ * of them halfway through (a revision's foreign key needs a share lock on its transaction). The
+ * caller has already locked the committee memberships, so no new transaction can join the set.
+ */
+export async function lockTransactions(
+  tx: TransactionClient,
+  target: TransactionsToDelete,
+): Promise<number> {
+  const rows =
+    'committeeId' in target
+      ? await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "PointTransaction"
+          WHERE "committeeId" = ${target.committeeId}::uuid ORDER BY "id" FOR UPDATE
+        `
+      : await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "PointTransaction"
+          WHERE "committeeMembershipId" = ANY(${target.committeeMembershipIds}::uuid[])
+          ORDER BY "id" FOR UPDATE
+        `;
+  return rows.length;
+}
+
+/**
+ * Deletes the transactions with their revisions, then every batch they leave empty. A batch that
+ * still holds other transactions stays: it is their "added together" label (ADR 0022), and a
+ * resend of its request now replays with the transactions that are left.
+ */
+export async function deleteTransactions(
+  tx: TransactionClient,
+  scope: PointTransactionScope,
+  target: TransactionsToDelete,
+): Promise<{ pointTransactions: number; pointRevisions: number; pointBatches: number }> {
+  const where = { AND: [scope, transactionsToDeleteWhere(target)] };
+  const batches = await tx.pointTransaction.findMany({
+    where: { AND: [where, { batchId: { not: null } }] },
+    select: { batchId: true },
+    distinct: ['batchId'],
+  });
+  const revisions = await tx.pointTransactionRevision.deleteMany({
+    where: { transaction: where },
+  });
+  const transactions = await tx.pointTransaction.deleteMany({ where });
+  const batchIds = batches.flatMap((row) => (row.batchId ? [row.batchId] : []));
+  const emptied =
+    batchIds.length === 0
+      ? { count: 0 }
+      : await tx.pointBatch.deleteMany({
+          where: { id: { in: batchIds }, transactions: { none: {} } },
+        });
+  return {
+    pointTransactions: transactions.count,
+    pointRevisions: revisions.count,
+    pointBatches: emptied.count,
+  };
+}
+
+/**
+ * A club about to be deleted has no transactions, so any batch of it is already empty — none
+ * should exist, since a batch is only ever written with its transactions, but one left over must
+ * not turn the delete into a foreign-key error.
+ */
+export async function deleteClubPointBatches(
+  tx: TransactionClient,
+  scope: ClubScope,
+  clubId: string,
+): Promise<number> {
+  const { count } = await tx.pointBatch.deleteMany({
+    where: { AND: [{ club: scope }, { clubId, transactions: { none: {} } }] },
+  });
+  return count;
 }

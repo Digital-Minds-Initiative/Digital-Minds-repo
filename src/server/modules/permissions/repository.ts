@@ -138,7 +138,7 @@ const roleChangeSelect = {
   createdAt: true,
   committee: { select: { id: true, name: true } },
   membership: { select: { id: true, user: { select: { fullName: true } } } },
-  changedBy: { select: { id: true, fullName: true } },
+  changedBy: { select: { id: true, fullName: true, deletedAt: true } },
 } satisfies Prisma.RoleChangeSelect;
 
 export type RoleChangeRow = Prisma.RoleChangeGetPayload<{ select: typeof roleChangeSelect }>;
@@ -218,4 +218,25 @@ export async function findClubForRoles(
   clubId: string,
 ): Promise<{ id: string } | null> {
   return db.club.findFirst({ where: { AND: [scope, { id: clubId }] }, select: { id: true } });
+}
+
+// ─── Deletes (written for the deletions module) ──────────────
+
+/**
+ * Role history about rows a full admin is deleting: a committee's lead appointments, or every
+ * change to a deleted person's memberships. History is otherwise never deleted (ADR 0018); these
+ * rows point at memberships and committees that will no longer exist, so they cannot stay. What
+ * the person changed for others is a different set of rows (`changedById`) and stays.
+ */
+export async function deleteRoleChanges(
+  tx: TransactionClient,
+  scope: RoleChangeScope,
+  target: { committeeId: string } | { userId: string },
+): Promise<number> {
+  const where: Prisma.RoleChangeWhereInput =
+    'committeeId' in target
+      ? { committeeId: target.committeeId }
+      : { membership: { userId: target.userId } };
+  const { count } = await tx.roleChange.deleteMany({ where: { AND: [scope, where] } });
+  return count;
 }

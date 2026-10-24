@@ -6,6 +6,8 @@ import type { Prisma } from '@/server/db/generated/client';
 import { deleteExpiredCounters } from '@/server/modules/rate-limit';
 import { normalizeForSearch } from '@/shared/lib/arabic';
 
+import { emailKey } from './crypto';
+
 const ownProfileSelect = {
   id: true,
   fullName: true,
@@ -163,6 +165,25 @@ export async function deleteSessionByTokenHash(tokenHash: string): Promise<void>
  */
 export async function endUserSessions(tx: TransactionClient, userId: string): Promise<number> {
   const { count } = await tx.session.deleteMany({ where: { userId } });
+  return count;
+}
+
+/**
+ * Everything the auth tables hold for a person whose data a full admin is deleting
+ * (docs/adr/0026-person-deletion.md): their sessions — signed in, or half-way through signing in
+ * with the address and no account yet — and a pending sign-in code. Called with the deletions
+ * module's transaction client, like `endUserSessions`. Returns how many sessions ended.
+ *
+ * Rate-limit counters are left to expire: they are keyed by an HMAC and last a day at most.
+ */
+export async function endPersonSignIn(
+  tx: TransactionClient,
+  person: { userId: string; uniEmail: string },
+): Promise<number> {
+  const { count } = await tx.session.deleteMany({
+    where: { OR: [{ userId: person.userId }, { email: person.uniEmail }] },
+  });
+  await tx.otpChallenge.deleteMany({ where: { emailHash: emailKey(person.uniEmail) } });
   return count;
 }
 

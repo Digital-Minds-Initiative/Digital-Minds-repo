@@ -21,6 +21,7 @@ import {
 } from '@/server/errors';
 import { endUserSessions } from '@/server/modules/auth';
 import { getActivePointsByMember, type MemberBalances } from '@/server/modules/points';
+import { liveUniEmail } from '@/server/people';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import type {
   CreateMemberBody,
@@ -345,7 +346,7 @@ export async function updateMember(
   const changes = {
     uniEmail: changed(
       body.uniEmail === undefined ? undefined : normalizeEmail(body.uniEmail),
-      row.user.uniEmail,
+      liveUniEmail(row.user.uniEmail),
     ),
     fullName: changed(
       body.fullName === undefined ? undefined : normalizePersonName(body.fullName),

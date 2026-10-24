@@ -37,7 +37,7 @@ describe('editing a member', () => {
   /** Signs the person in as far as the database is concerned: registered, with two sessions. */
   const register = async (userId: string) => {
     await db.user.update({ where: { id: userId }, data: { registeredAt: new Date() } });
-    const email = (await db.user.findUniqueOrThrow({ where: { id: userId } })).uniEmail;
+    const email = (await db.user.findUniqueOrThrow({ where: { id: userId } })).uniEmail ?? '';
     for (const suffix of ['a', 'b']) {
       await db.session.create({
         data: {

@@ -23,6 +23,13 @@ interface MockUser {
   isFullAdmin: boolean;
   registered: boolean;
   persona: DemoPersona;
+  /** A full admin deleted this person's data: the row stays, emptied (ADR 0026). */
+  deleted?: boolean;
+}
+
+/** The name the API gives whoever wrote a history row: null once that person was deleted. */
+export function mockAuthorName(user: MockUser): string | null {
+  return user.deleted ? null : user.fullName;
 }
 
 export interface MockClub {

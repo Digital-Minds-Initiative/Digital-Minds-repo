@@ -4,6 +4,7 @@ import { History, RotateCw } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
+import { useAuthorName } from '@/client/lib/use-author-name';
 import { useErrorText } from '@/client/lib/use-error-text';
 import { EmptyState } from '@/components/patterns/empty-state';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ export function HistoryPanel({ clubId }: { clubId: string }) {
   const t = useTranslations('permissions.history');
   const format = useFormatter();
   const errorText = useErrorText();
+  const authorName = useAuthorName();
   const [page, setPage] = useState(1);
   const history = useRoleHistory(clubId, page);
 
@@ -83,7 +85,7 @@ export function HistoryPanel({ clubId }: { clubId: string }) {
                     ) : null}
                   </span>
                 </TableCell>
-                <TableCell>{change.changedBy.fullName}</TableCell>
+                <TableCell>{authorName(change.changedBy.fullName)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

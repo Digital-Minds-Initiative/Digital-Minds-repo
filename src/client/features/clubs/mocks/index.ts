@@ -34,6 +34,7 @@ import {
 import { demoId } from '@/shared/demo/ids';
 import { normalizeEntityName } from '@/shared/lib/names';
 
+import { deletionHandlers } from './deletions';
 import { viewLinkHandlers } from './view-link';
 
 /*
@@ -431,4 +432,6 @@ export const clubsHandlers = [
 
   // The view link and the public page it opens (ADR 0023).
   ...viewLinkHandlers,
+  // A full admin's club and committee deletes (ADR 0015).
+  ...deletionHandlers,
 ];

@@ -33,18 +33,19 @@ async function createPerson(
   options: { admin?: boolean; registered?: boolean } = {},
 ) {
   sequence += 1;
+  const uniEmail = `s9${String(sequence).padStart(8, '0')}@st.uqu.edu.sa`;
   const user = await db.user.create({
     data: {
       fullName,
       searchName: normalizeForSearch(fullName),
-      uniEmail: `s9${String(sequence).padStart(8, '0')}@st.uqu.edu.sa`,
+      uniEmail,
       isFullAdmin: options.admin ?? false,
       registeredAt: options.registered === false ? null : new Date(),
     },
-    select: { id: true, uniEmail: true, fullName: true },
+    select: { id: true, fullName: true },
   });
   // Contact details are per club (ADR 0012); join() copies this phone into each membership.
-  return { ...user, phone: `+9665000${String(sequence).padStart(5, '0')}` };
+  return { ...user, uniEmail, phone: `+9665000${String(sequence).padStart(5, '0')}` };
 }
 
 const REMOVED_AT = new Date(Date.now() - 7 * 86_400_000);
