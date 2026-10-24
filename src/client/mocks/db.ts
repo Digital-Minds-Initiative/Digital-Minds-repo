@@ -253,6 +253,7 @@ export function buildMockDb(today: string): MockDb {
       revisions,
     } satisfies MockTransaction;
   });
+  transactions.push(...mockOnlyTransactions(today));
 
   return {
     users,
@@ -325,4 +326,45 @@ export function canSeeMembership(actor: MockActor, membership: MockMembership): 
     canManageClub(actor, membership.clubId) ||
     membership.committees.some((c) => !c.removed && actor.ledCommitteeIds.includes(c.committeeId))
   );
+}
+
+/**
+ * Browser mocks only, never the seed: enough history in لجنة التصميم to page through the public
+ * committee view («عرض المزيد») with deductions in it, and one member below zero there.
+ */
+function mockOnlyTransactions(today: string): MockTransaction[] {
+  const rows: Array<{ personKey: string; amount: number; reason: string; daysAgo: number }> = [
+    ...Array.from({ length: 20 }, (_, index) => ({
+      personKey: 'lama',
+      amount: index % 4 === 3 ? -5 : 5 + (index % 3) * 5,
+      reason:
+        index % 4 === 3
+          ? 'تأخر في تسليم مهمة التصميم'
+          : `تصميم منشور للفعالية رقم ${String(index + 1)}`,
+      daysAgo: 200 + index * 3,
+    })),
+    { personKey: 'mohammed', amount: -80, reason: 'خصم: غياب عن ثلاث مهام دون اعتذار', daysAgo: 3 },
+  ];
+  return rows.map((row, index) => {
+    const workDate = addDays(today, -row.daysAgo);
+    const recordedAt = `${workDate}T09:00:00.000Z`;
+    return {
+      id: demoId(`mock-only:transaction:${String(index)}`),
+      membershipId: demoId(demoKeys.membership(row.personKey, 'computing')),
+      clubId: demoId(demoKeys.club('computing')),
+      committeeId: demoId(demoKeys.committee('computing', 'design')),
+      amount: row.amount,
+      reason: row.reason,
+      workDate,
+      status: 'ACTIVE',
+      batchId: null,
+      createdById: demoId(demoKeys.user('reem')),
+      createdAt: recordedAt,
+      updatedAt: recordedAt,
+      cancelledAt: null,
+      cancelledById: null,
+      cancellationReason: null,
+      revisions: [],
+    } satisfies MockTransaction;
+  });
 }
