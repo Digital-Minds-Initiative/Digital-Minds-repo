@@ -151,7 +151,7 @@ test.describe('the permissions page', () => {
     await actAs(page, persona.officerComputing);
     await page.goto('/dashboard/permissions');
     const committee = 'لجنة الإعلام';
-    await page.getByRole('button', { name: `تعيين قائد لـ ${committee}` }).click();
+    await page.getByRole('button', { name: `تعيين مسؤول لـ ${committee}` }).click();
     const dialog = page.getByRole('dialog');
     const results = dialog.getByRole('group', { name: 'نتائج البحث' });
     await expect(results.getByRole('button').first()).toBeVisible();
@@ -178,7 +178,7 @@ test.describe('the permissions page', () => {
     await expect(card).toContainText(appointed?.fullName ?? '');
 
     await card
-      .getByRole('button', { name: `إزالة قيادة ${appointed?.fullName} من ${committee}` })
+      .getByRole('button', { name: `إزالة صلاحية ${appointed?.fullName} في ${committee}` })
       .click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'إزالة الصلاحية' }).click();
     await expect(card).not.toContainText(appointed?.fullName ?? '');
@@ -188,7 +188,7 @@ test.describe('the permissions page', () => {
     await expect(
       history.getByRole('row').filter({ hasText: appointed?.fullName ?? '' }),
     ).toHaveCount(2);
-    await expect(history).toContainText('بدون صلاحية ← قائد لجنة');
-    await expect(history).toContainText('قائد لجنة ← بدون صلاحية');
+    await expect(history).toContainText('بدون صلاحية ← مسؤول لجنة');
+    await expect(history).toContainText('مسؤول لجنة ← بدون صلاحية');
   });
 });

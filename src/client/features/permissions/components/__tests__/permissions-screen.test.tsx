@@ -59,7 +59,7 @@ async function renderPage(email: string) {
   actor.email = email;
   const user = userEvent.setup();
   renderWithProviders(
-    <PermissionsScreen title="الصلاحيات" description="إدارة أدوار النادي وقادة اللجان" />,
+    <PermissionsScreen title="الصلاحيات" description="إدارة أدوار النادي ومسؤولي اللجان" />,
   );
   return user;
 }
@@ -87,13 +87,15 @@ describe('PermissionsScreen — who is offered what', { timeout: 20_000 }, () =>
   it('lets a full admin pick any club and appoint officers and leads', async () => {
     await renderPage(ADMIN);
     expect(
-      await screen.findByRole('button', { name: 'تعيين مدير شؤون' }, { timeout: 15_000 }),
+      await screen.findByRole('button', { name: 'تعيين مسؤول نادي' }, { timeout: 15_000 }),
     ).toBeTruthy();
     // Everything below renders from separate requests, so each is waited for on a busy machine.
     await waitFor(
       () => {
         expect(screen.getByRole('combobox', { name: 'النادي' })).toBeTruthy();
-        expect(screen.getAllByRole('button', { name: /^تعيين قائد لـ/ }).length).toBeGreaterThan(1);
+        expect(screen.getAllByRole('button', { name: /^تعيين مسؤول لـ/ }).length).toBeGreaterThan(
+          1,
+        );
       },
       { timeout: 15_000 },
     );
@@ -102,13 +104,13 @@ describe('PermissionsScreen — who is offered what', { timeout: 20_000 }, () =>
   it('lets a club officer appoint leads in their club but not officers, and shows only their club', async () => {
     await renderPage(OFFICER);
     expect(
-      await screen.findAllByRole('button', { name: /^تعيين قائد لـ/ }, { timeout: 15_000 }),
+      await screen.findAllByRole('button', { name: /^تعيين مسؤول لـ/ }, { timeout: 15_000 }),
     ).not.toHaveLength(0);
-    expect(screen.queryByRole('button', { name: 'تعيين مدير شؤون' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'تعيين مسؤول نادي' })).toBeNull();
     expect(screen.getByText('يُعيّنون بواسطة المسؤول العام')).toBeTruthy();
     // One club only: nothing to choose from.
     expect(screen.queryByRole('combobox', { name: 'النادي' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^إزالة صلاحية مدير الشؤون/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^إزالة صلاحية مسؤول النادي/ })).toBeNull();
   });
 
   it('tells a committee lead the page is for club management, without an error', async () => {
@@ -121,7 +123,7 @@ describe('PermissionsScreen — who is offered what', { timeout: 20_000 }, () =>
 describe('PermissionsScreen — appointing and removing', { timeout: 30_000 }, () => {
   it('lets an officer appoint a lead, and records it in the history', async () => {
     const user = await renderPage(OFFICER);
-    await user.click(await screen.findByRole('button', { name: 'تعيين قائد لـ لجنة التصميم' }));
+    await user.click(await screen.findByRole('button', { name: 'تعيين مسؤول لـ لجنة التصميم' }));
     const { dialog, name } = await pickFirstCandidate(user);
     await user.click(within(dialog).getByRole('button', { name: new RegExp(`^تعيين ${name}`) }));
 
@@ -143,7 +145,7 @@ describe('PermissionsScreen — appointing and removing', { timeout: 30_000 }, (
       { timeout: 5000 },
     );
     expect(within(table).getByText(name)).toBeTruthy();
-    expect(within(table).getByText(/بدون صلاحية ← قائد لجنة/)).toBeTruthy();
+    expect(within(table).getByText(/بدون صلاحية ← مسؤول لجنة/)).toBeTruthy();
     expect(within(table).getByText('في لجنة التصميم')).toBeTruthy();
   });
 
@@ -151,11 +153,11 @@ describe('PermissionsScreen — appointing and removing', { timeout: 30_000 }, (
     const user = await renderPage(OFFICER);
     // لجنة البرمجة has محمد as its lead in the demo data.
     const [remove] = await screen.findAllByRole('button', {
-      name: /^إزالة قيادة .* من لجنة البرمجة$/,
+      name: /^إزالة صلاحية .* في لجنة البرمجة$/,
     });
     if (!remove) throw new Error('no lead to remove');
     const before = screen.getAllByRole('button', {
-      name: /^إزالة قيادة .* من لجنة البرمجة$/,
+      name: /^إزالة صلاحية .* في لجنة البرمجة$/,
     }).length;
     await user.click(remove);
     const confirm = await screen.findByRole('alertdialog');
@@ -163,24 +165,24 @@ describe('PermissionsScreen — appointing and removing', { timeout: 30_000 }, (
     await waitFor(
       () =>
         expect(
-          screen.queryAllByRole('button', { name: /^إزالة قيادة .* من لجنة البرمجة$/ }),
+          screen.queryAllByRole('button', { name: /^إزالة صلاحية .* في لجنة البرمجة$/ }),
         ).toHaveLength(before - 1),
       { timeout: 5000 },
     );
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 });
     await user.click(screen.getByRole('tab', { name: 'سجل التغييرات' }));
     expect(
-      await screen.findByText(/قائد لجنة ← بدون صلاحية/, undefined, { timeout: 5000 }),
+      await screen.findByText(/مسؤول لجنة ← بدون صلاحية/, undefined, { timeout: 5000 }),
     ).toBeTruthy();
   });
 
   it('lets a full admin appoint an officer, who is then listed', async () => {
     const user = await renderPage(ADMIN);
-    await user.click(await screen.findByRole('button', { name: 'تعيين مدير شؤون' }));
+    await user.click(await screen.findByRole('button', { name: 'تعيين مسؤول نادي' }));
     const { dialog, name } = await pickFirstCandidate(user);
     await user.click(within(dialog).getByRole('button', { name: new RegExp(`^تعيين ${name}`) }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
-    const officers = await screen.findByRole('region', { name: 'مدراء شؤون النادي' });
+    const officers = await screen.findByRole('region', { name: 'مسؤولو النادي' });
     expect(await within(officers).findByText(name, undefined, { timeout: 5000 })).toBeTruthy();
   });
 });
@@ -192,17 +194,19 @@ describe('PermissionsScreen — the lighter layout', { timeout: 30_000 }, () => 
       await screen.findByRole('heading', { name: 'لجنة التصميم' }, { timeout: 15_000 })
     ).closest('li');
     if (!design) throw new Error('no committee card');
-    expect(within(design).getByText(/^(بدون قائد|قائد|قائدان|\d+ قادة?)/)).toBeTruthy();
+    expect(
+      within(design).getByText(/^(بدون مسؤول|مسؤول واحد|مسؤولان|\d+ مسؤول(ين|اً)?)/),
+    ).toBeTruthy();
     const title = screen.getByRole('heading', { level: 1, name: 'الصلاحيات' });
     const tabs = screen.getByRole('tab', { name: 'أصحاب الصلاحيات' });
     expect(title.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const officers = screen.getByRole('region', { name: 'مدراء شؤون النادي' });
+    const officers = screen.getByRole('region', { name: 'مسؤولو النادي' });
     expect(officers.querySelector('[data-slot="avatar"]')).not.toBeNull();
   });
 
   it('marks the signed-in officer with a badge', async () => {
     await renderPage(OFFICER);
-    const officers = await screen.findByRole('region', { name: 'مدراء شؤون النادي' });
+    const officers = await screen.findByRole('region', { name: 'مسؤولو النادي' });
     expect(await within(officers).findByText('أنت', undefined, { timeout: 15_000 })).toBeTruthy();
   });
 });

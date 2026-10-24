@@ -205,7 +205,7 @@ test.describe('the member file', () => {
     await expect(sheet.getByRole('button', { name: 'إضافة إلى لجنة' })).toHaveCount(0);
     await sheet.getByRole('button', { name: 'تعديل البيانات' }).click();
     const form = page.getByRole('dialog', { name: `تعديل بيانات ${member.user.fullName}` });
-    await expect(form.getByText('بصفتك قائد لجنة يمكنك تغيير نوع العضوية فقط.')).toBeVisible();
+    await expect(form.getByText('بصفتك مسؤول لجنة يمكنك تغيير نوع العضوية فقط.')).toBeVisible();
     // The type and nothing else: no profile field is offered to a lead.
     for (const field of ['الجوال', 'الاسم الكامل', 'البريد الجامعي', 'الكلية']) {
       await expect(form.getByLabel(field)).toHaveCount(0);

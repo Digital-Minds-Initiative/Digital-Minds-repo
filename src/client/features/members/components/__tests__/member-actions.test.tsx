@@ -300,7 +300,7 @@ describe('members page — numbers and table', { timeout: 30_000 }, () => {
     expect(within(row).getByText('بع')).toBeTruthy();
     expect(screen.queryByRole('columnheader', { name: 'الصلاحية' })).toBeNull();
     // The management role sits beside the type for those who hold it.
-    expect(screen.getAllByText('مدير شؤون').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('مسؤول نادي').length).toBeGreaterThan(0);
   });
 
   it('colours the membership type by its place on the ladder', async () => {

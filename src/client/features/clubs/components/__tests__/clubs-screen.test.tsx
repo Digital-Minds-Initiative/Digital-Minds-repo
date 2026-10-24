@@ -92,7 +92,7 @@ describe('ClubsScreen — what each role is offered', { timeout: 20_000 }, () =>
     expect(screen.queryByRole('button', { name: 'إضافة نادٍ' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'إجراءات النادي' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'إضافة لجنة' })).toBeNull();
-    expect(screen.getByText('مدير شؤون النادي')).toBeTruthy();
+    expect(screen.getByText('مسؤول نادي')).toBeTruthy();
     // An officer reads every committee of the club…
     expect(await screen.findByText('لجنة التصميم')).toBeTruthy();
     expect(screen.getByText('لجنة البرمجة')).toBeTruthy();
@@ -105,7 +105,7 @@ describe('ClubsScreen — what each role is offered', { timeout: 20_000 }, () =>
   it('shows a committee lead only their own committee, and membership types read-only', async () => {
     const user = await renderScreen(LEAD);
     await screen.findByRole('heading', { name: 'نادي الحاسبات' });
-    expect(screen.getByText('قائد لجنة')).toBeTruthy();
+    expect(screen.getByText('مسؤول لجنة')).toBeTruthy();
     expect(await screen.findByText('لجنة البرمجة')).toBeTruthy();
     expect(screen.queryByText('لجنة التصميم')).toBeNull();
     expect(screen.getByText('تظهر لك اللجان التي تقودها فقط.')).toBeTruthy();
@@ -225,7 +225,7 @@ describe('ClubsScreen — the richer club view', { timeout: 30_000 }, () => {
     );
     // The club's code and the person's role sit in the card as badges.
     expect(screen.getByText('computing').tagName).toBe('CODE');
-    expect(screen.getByText('مدير شؤون النادي')).toBeTruthy();
+    expect(screen.getByText('مسؤول نادي')).toBeTruthy();
   });
 
   it('puts the tabs and the archived switch in one bar under the card', async () => {
