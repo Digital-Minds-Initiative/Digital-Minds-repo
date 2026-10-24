@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Code,
   Info,
+  Link2,
   Lightbulb,
   Lock,
   Megaphone,
@@ -38,6 +39,7 @@ import { toast } from '@/components/ui/toaster';
 import { Link } from '@/i18n/navigation';
 import type { Club, Committee } from '@/shared/contracts/clubs';
 
+import { CommitteeViewLinkDialog } from './committee-view-link-dialog';
 import { EntityFormDialog } from './entity-form-dialog';
 import {
   useCommittees,
@@ -184,12 +186,14 @@ function CommitteeCard({
   canManage: boolean;
 }) {
   const t = useTranslations('clubs.committees');
+  const tLink = useTranslations('clubs.viewLink');
   const format = useFormatter();
   const update = useUpdateCommittee(committee.id);
   const setArchived = useSetCommitteeArchived(committee.id);
   const members = useMemberTotal({ clubId: committee.clubId, committeeId: committee.id });
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const archived = committee.archivedAt !== null;
 
   return (
@@ -255,7 +259,17 @@ function CommitteeCard({
         ) : (
           <Badge variant="success">{t('statusActive')}</Badge>
         )}
-        <Button asChild variant="ghost" size="sm" className="ms-auto">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ms-auto"
+          aria-label={tLink('openLabel', { name: committee.name })}
+          onClick={() => setSharing(true)}
+        >
+          <Link2 aria-hidden />
+          {tLink('open')}
+        </Button>
+        <Button asChild variant="ghost" size="sm">
           <Link
             href={`/dashboard/members?committeeId=${committee.id}`}
             aria-label={t('viewMembersLabel', { name: committee.name })}
@@ -266,6 +280,12 @@ function CommitteeCard({
         </Button>
       </div>
 
+      <CommitteeViewLinkDialog
+        committee={committee}
+        readOnly={archived || clubArchived}
+        open={sharing}
+        onOpenChange={setSharing}
+      />
       <EntityFormDialog
         open={editing}
         onOpenChange={setEditing}

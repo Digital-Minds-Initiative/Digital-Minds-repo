@@ -11,16 +11,20 @@ import {
   createCommitteeEndpoint,
   createMembershipTypeEndpoint,
   deleteMembershipTypeEndpoint,
+  disableCommitteeViewLinkEndpoint,
+  getCommitteeViewLinkEndpoint,
   listClubsEndpoint,
   listCommitteesEndpoint,
   listMembershipTypesEndpoint,
   reorderMembershipTypesEndpoint,
   restoreClubEndpoint,
   restoreCommitteeEndpoint,
+  rotateCommitteeViewLinkEndpoint,
   updateClubEndpoint,
   updateCommitteeEndpoint,
   updateMembershipTypeEndpoint,
   type CreateClubBody,
+  type CommitteeViewLink,
   type CreateCommitteeBody,
   type MembershipType,
   type UpdateClubBody,
@@ -35,6 +39,7 @@ const clubsKeys = {
   committees: (clubId: string, includeArchived: boolean) =>
     [...clubsKeys.all, 'committees', clubId, { includeArchived }] as const,
   types: (clubId: string) => [...clubsKeys.all, 'types', clubId] as const,
+  viewLink: (committeeId: string) => [...clubsKeys.all, 'view-link', committeeId] as const,
 };
 
 export function useClubs(includeArchived: boolean) {
@@ -228,5 +233,39 @@ export function useMemberTotal(filter: { clubId: string; committeeId?: string })
       );
       return result.total;
     },
+  });
+}
+
+/** The committee's view-only link (docs/adr/0023-committee-view-link.md). */
+export function useCommitteeViewLink(committeeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: clubsKeys.viewLink(committeeId),
+    queryFn: ({ signal }) =>
+      apiClient.request(getCommitteeViewLinkEndpoint, { params: { committeeId } }, { signal }),
+    enabled,
+  });
+}
+
+/** Creates the link, or renews it: the answer is the new link, so the cache takes it as is. */
+export function useRotateCommitteeViewLink(committeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.request(rotateCommitteeViewLinkEndpoint, { params: { committeeId } }),
+    onSuccess: (link) => queryClient.setQueryData(clubsKeys.viewLink(committeeId), link),
+  });
+}
+
+export function useDisableCommitteeViewLink(committeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.request(disableCommitteeViewLinkEndpoint, { params: { committeeId } }),
+    onSuccess: () =>
+      queryClient.setQueryData<CommitteeViewLink>(clubsKeys.viewLink(committeeId), {
+        url: null,
+        token: null,
+        createdAt: null,
+      }),
   });
 }
