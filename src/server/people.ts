@@ -12,3 +12,13 @@ export function liveUniEmail(uniEmail: string | null): string {
   if (uniEmail === null) throw new Error('Reached a deleted person through a live row.');
   return uniEmail;
 }
+
+/**
+ * The name to show for whoever wrote a history row (recorded or cancelled a transaction, edited
+ * one, granted a role): null once a full admin deleted that person's data, which the UI shows as
+ * «عضو محذوف». The emptied row still holds `fullName: ''`; this keeps that from reaching a screen
+ * as a blank.
+ */
+export function authorName(user: { fullName: string; deletedAt: Date | null }): string | null {
+  return user.deletedAt === null ? user.fullName : null;
+}

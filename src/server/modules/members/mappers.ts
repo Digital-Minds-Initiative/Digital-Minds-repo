@@ -1,7 +1,7 @@
 import 'server-only';
 
-import { liveUniEmail } from '@/server/live-user';
 import type { MemberBalances } from '@/server/modules/points';
+import { liveUniEmail } from '@/server/people';
 import type { Member } from '@/shared/contracts/members';
 
 import type { MemberRow } from './repository';

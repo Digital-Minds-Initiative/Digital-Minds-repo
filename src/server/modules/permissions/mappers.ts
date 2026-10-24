@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { authorName } from '@/server/people';
 import type { RoleChange } from '@/shared/contracts/permissions';
 
 import type { RoleChangeRow } from './repository';
@@ -11,7 +12,7 @@ export function toRoleChange(row: RoleChangeRow): RoleChange {
     clubId: row.clubId,
     committee: row.committee ? { id: row.committee.id, name: row.committee.name } : null,
     member: { memberId: row.membership.id, fullName: row.membership.user.fullName },
-    changedBy: { userId: row.changedBy.id, fullName: row.changedBy.fullName },
+    changedBy: { userId: row.changedBy.id, fullName: authorName(row.changedBy) },
     previousRole: row.previousRole,
     newRole: row.newRole,
     createdAt: row.createdAt.toISOString(),

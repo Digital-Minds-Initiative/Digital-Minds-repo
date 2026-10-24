@@ -108,8 +108,11 @@ export const roleChangeSchema = z.object({
   committee: committeeRefSchema.nullable(),
   /** Whose role changed. Removed members keep their history. */
   member: z.object({ memberId: idSchema, fullName: z.string() }),
-  /** Who changed it. A full admin need not be a member of the club, so this is an account. */
-  changedBy: z.object({ userId: idSchema, fullName: z.string() }),
+  /**
+   * Who changed it. A full admin need not be a member of the club, so this is an account.
+   * `fullName` is null once that person's data was deleted (ADR 0026); the UI shows «عضو محذوف».
+   */
+  changedBy: z.object({ userId: idSchema, fullName: z.string().nullable() }),
   previousRole: grantableRoleSchema,
   newRole: grantableRoleSchema,
   createdAt: isoDateTimeSchema,

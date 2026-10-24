@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Pencil, Undo2 } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
+import { useAuthorName } from '@/client/lib/use-author-name';
 import { cn } from '@/client/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ export function TransactionRow({
 }: TransactionRowProps) {
   const t = useTranslations('points.transaction');
   const format = useFormatter();
+  const authorName = useAuthorName();
   const [showHistory, setShowHistory] = useState(false);
   const cancelled = transaction.status === 'CANCELLED';
   const day = (isoDate: string) => format.dateTime(new Date(`${isoDate}T12:00:00Z`), 'dateShort');
@@ -79,14 +81,14 @@ export function TransactionRow({
 
       <p className="text-xs text-fg-subtle">
         {t('recorded', {
-          name: transaction.createdBy.fullName,
+          name: authorName(transaction.createdBy.fullName),
           date: moment(transaction.createdAt),
         })}
       </p>
       {cancelled && transaction.cancelledBy && transaction.cancelledAt ? (
         <p className="text-xs text-fg-muted">
           {t('cancelled', {
-            name: transaction.cancelledBy.fullName,
+            name: authorName(transaction.cancelledBy.fullName),
             date: moment(transaction.cancelledAt),
           })}
           {transaction.cancellationReason
@@ -139,6 +141,7 @@ export function TransactionRow({
 
 function Revisions({ transactionId }: { transactionId: string }) {
   const t = useTranslations('points.transaction.revisions');
+  const authorName = useAuthorName();
   const format = useFormatter();
   const revisions = useRevisions(transactionId, true);
 
@@ -164,7 +167,7 @@ function Revisions({ transactionId }: { transactionId: string }) {
           </span>
           <span className="text-fg-subtle">
             {t('by', {
-              name: revision.changedBy.fullName,
+              name: authorName(revision.changedBy.fullName),
               date: format.dateTime(new Date(revision.changedAt), 'dateTime'),
             })}
           </span>

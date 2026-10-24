@@ -22,3 +22,19 @@ export {
  * (docs/adr/0018-granting-roles.md).
  */
 export { setClubRole, setCommitteeRole } from './repository';
+/*
+ * The same for a full admin's deletes (docs/adr/0026-person-deletion.md): memberships, committee
+ * memberships, the export log and the account are this module's, so the deletions module removes
+ * them through these, with its transaction client.
+ */
+export {
+  countClubMemberships,
+  countCommitteeMemberships,
+  deleteClubMemberExports,
+  deleteCommitteeMemberships,
+  deletePersonMemberships,
+  erasePerson,
+  findPersonForDeletion,
+  lockCommitteeMemberships,
+  lockPerson,
+} from './repository';

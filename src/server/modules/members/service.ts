@@ -19,9 +19,9 @@ import {
   membershipTypeNotInClub,
   NotFoundError,
 } from '@/server/errors';
-import { liveUniEmail } from '@/server/live-user';
 import { endUserSessions } from '@/server/modules/auth';
 import { getActivePointsByMember, type MemberBalances } from '@/server/modules/points';
+import { liveUniEmail } from '@/server/people';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import type {
   CreateMemberBody,

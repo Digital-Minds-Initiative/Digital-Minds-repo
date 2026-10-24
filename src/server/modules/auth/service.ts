@@ -2,8 +2,8 @@ import 'server-only';
 
 import { canManageClub, hasDashboardAccess, selfScope, type Actor } from '@/server/authz';
 import { UnauthenticatedError } from '@/server/errors';
-import { liveUniEmail } from '@/server/live-user';
 import { listAccessibleClubs, listAccessibleCommittees } from '@/server/modules/clubs';
+import { liveUniEmail } from '@/server/people';
 import type { Me } from '@/shared/contracts/auth';
 
 import { findOwnProfile } from './repository';

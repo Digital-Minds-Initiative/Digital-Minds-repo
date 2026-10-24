@@ -493,6 +493,105 @@ async function renumber(
   }
 }
 
+// ─── Deletes (written for the deletions module) ──────────────
+// A full admin may delete an empty club, and any committee (docs/adr/0015-archive-instead-of-delete.md).
+// The deletions module runs the transaction and the rows below the committee belong to other
+// modules, so these take its transaction client, as `setClubRole` does for the permissions module.
+
+/** What a club holds that is this module's, for the delete preview. */
+export async function findClubForDeletion(
+  scope: ClubScope,
+  clubId: string,
+): Promise<{ id: string; committees: number; membershipTypes: number } | null> {
+  const club = await db.club.findFirst({
+    where: { AND: [scope, { id: clubId }] },
+    select: { id: true, _count: { select: { committees: true, membershipTypes: true } } },
+  });
+  return club ? { id: club.id, ...club._count } : null;
+}
+
+/**
+ * Locks the club row until the transaction ends. Every row created under a club checks its
+ * foreign key with a share lock on this row, so while it is held nobody can add a member, a
+ * committee, a type or an export to the club — the emptiness the delete checks next stays true.
+ */
+export async function lockClub(
+  tx: TransactionClient,
+  scope: ClubScope,
+  clubId: string,
+): Promise<boolean> {
+  const reachable = await tx.club.count({ where: { AND: [scope, { id: clubId }] } });
+  if (reachable !== 1) return false;
+  await tx.$queryRaw`SELECT "id" FROM "Club" WHERE "id" = ${clubId}::uuid FOR UPDATE`;
+  return true;
+}
+
+/**
+ * The club with its committees and membership types. The caller has locked the club and made sure
+ * nothing else refers to them (no memberships, transactions, batches or exports are left), so
+ * the restricting foreign keys cannot fail here.
+ */
+export async function deleteClubTree(
+  tx: TransactionClient,
+  scopes: { clubs: ClubScope; committees: CommitteeScope; membershipTypes: MembershipTypeScope },
+  clubId: string,
+): Promise<{ committees: number; membershipTypes: number }> {
+  const committees = await tx.committee.deleteMany({
+    where: { AND: [scopes.committees, { clubId }] },
+  });
+  const membershipTypes = await tx.membershipType.deleteMany({
+    where: { AND: [scopes.membershipTypes, { clubId }] },
+  });
+  const { count } = await tx.club.deleteMany({ where: { AND: [scopes.clubs, { id: clubId }] } });
+  if (count !== 1) throw new NotFoundError('Club');
+  return { committees: committees.count, membershipTypes: membershipTypes.count };
+}
+
+export interface CommitteeForDeletion {
+  id: string;
+  clubId: string;
+  name: string;
+}
+
+export async function findCommitteeForDeletion(
+  scope: CommitteeScope,
+  committeeId: string,
+): Promise<CommitteeForDeletion | null> {
+  return db.committee.findFirst({
+    where: { AND: [scope, { id: committeeId }] },
+    select: { id: true, clubId: true, name: true },
+  });
+}
+
+/**
+ * Locks the committee row, which keeps new committee memberships out of it until the transaction
+ * ends, and returns it as it is now — a rename since the preview is seen here.
+ */
+export async function lockCommittee(
+  tx: TransactionClient,
+  scope: CommitteeScope,
+  committeeId: string,
+): Promise<CommitteeForDeletion | null> {
+  const reachable = await tx.committee.count({ where: { AND: [scope, { id: committeeId }] } });
+  if (reachable !== 1) return null;
+  const rows = await tx.$queryRaw<CommitteeForDeletion[]>`
+    SELECT "id", "clubId", "name" FROM "Committee" WHERE "id" = ${committeeId}::uuid FOR UPDATE
+  `;
+  return rows[0] ?? null;
+}
+
+/** The committee row, its view link with it. Everything below it must already be gone. */
+export async function deleteCommitteeRow(
+  tx: TransactionClient,
+  scope: CommitteeScope,
+  committeeId: string,
+): Promise<void> {
+  const { count } = await tx.committee.deleteMany({
+    where: { AND: [scope, { id: committeeId }] },
+  });
+  if (count !== 1) throw new NotFoundError('Committee');
+}
+
 // ─── Committee view link ─────────────────────────────────────
 
 const viewLinkSelect = {
