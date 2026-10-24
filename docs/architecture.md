@@ -396,6 +396,8 @@ Themes override semantic tokens under a selector: `[data-theme='dark']` today, `
 
 Server settings are validated by `src/server/env.ts` when the server starts (`src/instrumentation.ts`); an invalid value stops the process with the variable's name. Browser settings (`NEXT_PUBLIC_*`) are validated in `src/client/lib/public-env.ts`. Every variable is documented in `.env.example`; keep them in sync. A production server also refuses to start without `APP_ORIGIN`, its own `AUTH_SECRET`, `RESEND_API_KEY`/`EMAIL_FROM`, `CLIENT_IP_HEADER` and `AUTH_SELF_SIGNUP`; outside production they default (emails go to the console). Tools outside Next.js (Prisma CLI, seed, Vitest) load `.env` files the same way through `@next/env`.
 
+**Hosted environments** ([ADR 0028](adr/0028-hosting-and-deploys.md), README §12): dev (`develop`) and production (`main`) on Vercel in `fra1` with Neon Postgres in Frankfurt, deployed only by `.github/workflows/deploy.yml` (CI → build → `prisma migrate deploy` → grants → deploy). Both run `NODE_ENV=production`; what differs between them is env variables. The app connects through Neon's pooler as `digital_minds_app` (rows only); the Prisma CLI and `scripts/` use `DIRECT_URL` (owner role, unpooled), which the app never reads. `src/server/db/client.ts` hands its `pg.Pool` to Vercel's `attachDatabasePool`, so a suspended instance closes its idle connections. The client IP for rate limits is Vercel's `x-real-ip`. A daily encrypted `pg_dump` runs in `.github/workflows/backup.yml`.
+
 ## Adding a feature module
 
 Example: an `events` module that lists a club's events. Backend steps (1–7) and frontend steps (8–11) can run in parallel once the contract (1) is merged.

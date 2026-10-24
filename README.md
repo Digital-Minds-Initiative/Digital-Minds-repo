@@ -26,7 +26,7 @@ This repository is the foundation: architecture, authorization, contracts for ev
 9. [Adding a new feature module](#9-adding-a-new-feature-module)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Where to ask and where things live](#11-where-to-ask-and-where-things-live)
-12. [Deploying to production](#12-deploying-to-production)
+12. [Deploying (Vercel + Neon)](#12-deploying-vercel--neon)
 
 ---
 
@@ -228,37 +228,42 @@ Restart `pnpm dev` after changing it. Pick an account from **«حساب التج
 
 ## 5. Scripts
 
-| Script                  | What it does                                                                                        |
-| ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `pnpm dev`              | Starts the app at http://localhost:3000 with hot reload.                                            |
-| `pnpm build`            | Production build (also type-checks).                                                                |
-| `pnpm start`            | Serves the production build (needs `DEV_ACTOR_SWITCHER=false`).                                     |
-| `pnpm lint`             | ESLint, including the architecture boundary rules. `pnpm lint:fix` fixes what it can.               |
-| `pnpm format`           | Formats everything with Prettier. `pnpm format:check` only checks.                                  |
-| `pnpm knip`             | Finds unused files, exports and dependencies (configured in `knip.jsonc`; runs in CI).              |
-| `pnpm typecheck`        | Generates Next.js route types, then runs the TypeScript compiler.                                   |
-| `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                 |
-| `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).      |
-| `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded). |
-| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                            |
-| `pnpm db:deploy`        | Applies pending migrations without creating new ones (CI, production).                              |
-| `pnpm db:seed`          | Replaces all data in your local database with the demo data.                                        |
-| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds.                                   |
-| `pnpm db:studio`        | Opens Prisma Studio to browse the database.                                                         |
-| `pnpm db:generate`      | Regenerates the Prisma client (runs automatically after `pnpm install`).                            |
-| `pnpm storybook`        | Design system and components at http://localhost:6006. `pnpm storybook:build` builds it statically. |
+| Script                  | What it does                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`              | Starts the app at http://localhost:3000 with hot reload.                                                    |
+| `pnpm build`            | Production build (also type-checks).                                                                        |
+| `pnpm start`            | Serves the production build (needs `DEV_ACTOR_SWITCHER=false`).                                             |
+| `pnpm lint`             | ESLint, including the architecture boundary rules. `pnpm lint:fix` fixes what it can.                       |
+| `pnpm format`           | Formats everything with Prettier. `pnpm format:check` only checks.                                          |
+| `pnpm knip`             | Finds unused files, exports and dependencies (configured in `knip.jsonc`; runs in CI).                      |
+| `pnpm typecheck`        | Generates Next.js route types, then runs the TypeScript compiler.                                           |
+| `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                         |
+| `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).              |
+| `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded).         |
+| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                                    |
+| `pnpm db:deploy`        | Applies pending migrations without creating new ones (the deploy workflow runs it).                         |
+| `pnpm db:seed`          | Replaces all data in your local database with the demo data (hosted: dev only, §12.6).                      |
+| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds.                                           |
+| `pnpm db:studio`        | Opens Prisma Studio to browse the database.                                                                 |
+| `pnpm db:generate`      | Regenerates the Prisma client (runs automatically after `pnpm install`).                                    |
+| `pnpm db:backup`        | Encrypted `pg_dump` of a hosted database ([§12.9](#129-backups)).                                           |
+| `pnpm db:restore`       | Restores such a backup into a database, after you type its host ([§12.9](#129-backups)).                    |
+| `pnpm admin:grant`      | Makes a university address a full admin, creating the account if needed ([§12.6](#126-first-deploy)).       |
+| `pnpm measure:bulk`     | Times concurrent 5000-entry bulk-points batches against dev ([§12.10](#1210-measuring-bulk-points-on-dev)). |
+| `pnpm storybook`        | Design system and components at http://localhost:6006. `pnpm storybook:build` builds it statically.         |
 
 ---
 
 ## 6. Project structure
 
 ```text
-.github/          CI workflow and pull request template
+.github/          CI, deploy and backup workflows, and the pull request template
 .husky/           Git hooks: lint-staged on commit, commitlint on the message
 .storybook/       Storybook config (theme and RTL/LTR toolbars)
 .vscode/          Shared editor settings and recommended extensions
 docs/             Architecture guide and decision records (ADRs)
 prisma/           Database schema, migrations and the seed script
+scripts/          Operations: admin:grant, measure:bulk, backup and restore, the database roles' grants
 public/           Static files (including the MSW service worker)
 src/
   app/            Next.js routes: [locale]/ pages and api/v1/ route handlers (thin)
@@ -278,10 +283,10 @@ Read **[docs/architecture.md](docs/architecture.md)** before your first task: la
 ## 7. How to work on a task
 
 1. **Pick a task** from the [ClickUp list](https://app.clickup.com/1100380000022205/v/l/li/1100380000112612) and move it to _In progress_.
-2. **Create a branch** from an up-to-date `main`, named after the task:
+2. **Create a branch** from an up-to-date `develop`, named after the task:
 
    ```bash
-   git switch main && git pull
+   git switch develop && git pull
    git switch -c feat/<clickup-task-id>-short-name   # or fix/… or chore/…
    ```
 
@@ -289,8 +294,13 @@ Read **[docs/architecture.md](docs/architecture.md)** before your first task: la
 4. **Contracts first:** add or update the endpoint in `src/shared/contracts/<module>.ts`. Backend and frontend then work against the same contract (frontend can start immediately with a mock).
 5. **Write tests:** unit tests in a `__tests__/` folder next to the code; an integration test in `tests/integration/` for anything that reads or writes scoped data.
 6. **Commit** with [Conventional Commits](https://www.conventionalcommits.org): `feat(members): add CSV import preview`, `fix(points): reject future work dates`. The commit hook formats, lints and checks the message.
-7. **Open a pull request to `main`** using the template; **link the ClickUp task** in it. The PR title must also be a Conventional Commit — it becomes the commit message.
-8. **Get one review**, make CI green, then **squash and merge**. Delete the branch and move the ClickUp task to _Done_.
+7. **Open a pull request to `develop`** using the template; **link the ClickUp task** in it. The PR title must also be a Conventional Commit — it becomes the commit message.
+8. **Get one review**, make CI green, then **squash and merge**. The merge deploys to https://dev.digitalmindsint.org. Delete the branch and move the ClickUp task to _Done_.
+
+**Releases and hotfixes** ([§12](#12-deploying-vercel--neon) has the environments):
+
+- **Release:** once `develop` has been checked on dev, open a PR from `develop` to `main` titled `chore(release): …` and merge it with **Create a merge commit** — never squash. A squash gives `main` commits that `develop` does not have, and every later release then conflicts. The merge deploys to production after a reviewer approves the deployment.
+- **Hotfix:** branch `fix/…` from `main`, open the PR to `main`, and merge it with **Create a merge commit** (the only method `main` accepts). Then bring the fix into `develop` with a PR from `main` to `develop`, also merged with **Create a merge commit**.
 
 Before pushing: `pnpm typecheck && pnpm lint && pnpm test` (and `pnpm test:integration` if you changed server code).
 
@@ -398,18 +408,257 @@ Questions about a task go in its ClickUp comments, so the answer stays with the 
 
 ---
 
-## 12. Deploying to production
+## 12. Deploying (Vercel + Neon)
 
-Hosting is not decided yet; whatever runs the app must provide these. A production server (`pnpm start`) checks them at startup and refuses to start, naming each missing or unsafe variable (`src/server/env.ts`).
+| Environment | Git branch | URL                                   | Vercel environment | Neon branch  | Data      |
+| ----------- | ---------- | ------------------------------------- | ------------------ | ------------ | --------- |
+| Local       | any        | http://localhost:3000                 | —                  | — (Docker)   | demo seed |
+| Dev         | `develop`  | https://dev.digitalmindsint.org       | Preview            | `dev`        | demo seed |
+| Production  | `main`     | https://digitalmindsint.org (+ `www`) | Production         | `production` | real      |
 
-| Variable                                        | Production value                                                                                                                                                                                                                                                                                          |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`, `ALLOWED_EMAIL_DOMAINS`         | the production database, `uqu.edu.sa`                                                                                                                                                                                                                                                                     |
-| `APP_ORIGIN`                                    | the public URL people open, e.g. `https://app.digitalmindsint.org` (CSRF check)                                                                                                                                                                                                                           |
-| `AUTH_SECRET`                                   | your own random value, at least 32 characters (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)                                                                                                                                                                             |
-| `RESEND_API_KEY`, `EMAIL_FROM`                  | the Resend key and `Digital Minds <no-reply@auth.digitalmindsint.org>`. Leave `EMAIL_TRANSPORT` unset: production defaults to `resend` and refuses `console`                                                                                                                                              |
-| `CLIENT_IP_HEADER`                              | **required, no default.** The header your reverse proxy sets with the client IP (`x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`, …), so the per-IP sign-in limits work; or `none` to run without them deliberately. Never name a header the proxy does not set: clients could forge it.               |
-| `AUTH_SELF_SIGNUP`                              | **required, no default.** `false` at launch: sign-in is invite-only, so only full admins, club officers and committee leads get a code, and a new role holder is emailed an invitation ([ADR 0027](docs/adr/0027-invite-only-sign-in.md)). `true` lets anyone with a university address create an account |
-| `DEV_ACTOR_SWITCHER`, `NEXT_PUBLIC_API_MOCKING` | `false` and `disabled` (the server refuses anything else)                                                                                                                                                                                                                                                 |
+Vercel's Git integration is **off**. The only way anything deploys is `.github/workflows/deploy.yml`, on a push to `develop` or `main`: CI → `vercel pull` → `vercel build` → `prisma migrate deploy` → grants (`scripts/sql/app-role.sql`) → `vercel deploy --prebuilt` (plus the `dev.` alias for `develop`). Production waits for a reviewer's approval. The reasons are in [ADR 0028](docs/adr/0028-hosting-and-deploys.md).
 
-Run `pnpm db:deploy` before starting a new version. The details behind the sign-in settings are in [ADR 0014](docs/adr/0014-email-otp-sign-in.md) and [ADR 0027](docs/adr/0027-invite-only-sign-in.md). With `AUTH_SELF_SIGNUP=false` the sign-in code email is sent after the response with Next's `after()`, which serverless hosts such as Vercel keep running until it finishes. A failed send then shows only in the server log, so watch for `The sign-in code email could not be sent.` and `The role invitation email could not be sent.`: either one means Resend is refusing mail.
+Three database roles per Neon branch:
+
+| Role                   | Used by                                             | May                                                                 |
+| ---------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| `digital_minds_owner`  | migrations, `db:seed`, `admin:grant` (`DIRECT_URL`) | everything (owns the tables)                                        |
+| `digital_minds_app`    | the running app (`DATABASE_URL`, pooled)            | read and write rows; no DDL, no `TRUNCATE`, no `_prisma_migrations` |
+| `digital_minds_backup` | the daily backup (`BACKUP_DATABASE_URL`)            | read                                                                |
+
+> **Secrets never go into the chat, an issue, a commit or a file in this folder.** For the commands below that need a database URL, set it in the terminal so it is not saved in your shell history: `read -rs DIRECT_URL && export DIRECT_URL` (Git Bash; paste, then Enter), or `$env:DIRECT_URL = Read-Host` (PowerShell). Close the terminal when you are done.
+
+Follow the steps in order the first time. Each one says where a value comes from.
+
+### 12.1 Neon
+
+The project `digital-minds` (AWS Europe Central 1, Postgres 18, database `digital_minds`, branches `production` and `dev`) already exists.
+
+1. **Where the URLs are:** project → **Connect**. Pick the branch, database `digital_minds`, and role `digital_minds_owner`. **Connection pooling on** gives the pooled URL (its host contains `-pooler`); **off** gives the direct one. You need both, for each branch.
+2. **Mark each branch with its environment.** Open the **SQL Editor** on the `production` branch and run:
+
+   ```sql
+   ALTER DATABASE digital_minds SET app.environment = 'production';
+   ```
+
+   Then switch to the `dev` branch and run it with `'dev'`. The seed and `measure:bulk` refuse every hosted database that does not say `dev`. A branch you later create from production inherits `'production'`, so it is refused too.
+
+3. **Create the app and backup roles**, on **each** branch, in the SQL Editor as `digital_minds_owner`. Generate a different password for each role on each branch (four in all):
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+   ```
+
+   ```sql
+   CREATE ROLE digital_minds_app LOGIN PASSWORD '<generated>';
+   CREATE ROLE digital_minds_backup LOGIN PASSWORD '<generated>';
+   ```
+
+   Create them with SQL, not in the console's Roles page: roles made there join `neon_superuser`, which is far more than the app needs. You do not run the grants by hand. The deploy workflow applies `scripts/sql/app-role.sql` after every migration.
+
+4. **Build the URLs for the new roles.** Take the URL from step 1 and replace `digital_minds_owner:<password>` with the new role and its password:
+   - the app: the **pooled** URL with `digital_minds_app` (→ Vercel's `DATABASE_URL`, §12.4);
+   - the backup: production's **direct** URL with `digital_minds_backup` (→ GitHub's `BACKUP_DATABASE_URL`, §12.3).
+
+   Keep them in your password manager.
+
+### 12.2 Vercel
+
+Use the Vercel CLI from this folder. The Git integration is never connected, so create the project here, not with "Import Git Repository":
+
+1. `npx vercel@64.7.0 login`, then `npx vercel@64.7.0 link`. Answer **no** to linking an existing project, name it `digital-minds`, accept the detected Next.js settings, and answer **no** if it offers to connect the Git repository. This writes `.vercel/project.json` (git-ignored), which holds **`orgId`** and **`projectId`**: the `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` secrets in §12.3.
+2. Dashboard → the project → **Settings**:
+   - **Build and Deployment → Node.js Version:** `24.x` (the version in `.nvmrc`).
+   - **Functions:** the region shows `fra1` (from `vercel.json`). Leave **Fluid compute** on.
+   - **Deployment Protection → Vercel Authentication: off.** Otherwise only your Vercel account can open `dev.digitalmindsint.org`, and the app has its own sign-in.
+   - **Git:** nothing to connect. `vercel.json` already turns Git deployments off.
+3. **Environment Variables:** add each variable from §12.4 twice, once for **Production** and once for **Preview** (Preview is dev). Mark every secret as **Sensitive**. Never tick **Development**. Do not add `NODE_ENV`: Vercel sets it to `production` in both environments, which the app requires.
+4. **Domains:** add `digitalmindsint.org` (Production), `www.digitalmindsint.org` as a **redirect to `digitalmindsint.org` (308)**, and `dev.digitalmindsint.org` with no branch (the deploy workflow aliases it to each `develop` deployment). The redirect matters: the app accepts form posts only from its own origin, so a `www` page that did not redirect would refuse every sign-in.
+5. **Access token:** avatar → **Account Settings → Tokens → Create**. Scope: your Hobby account. Pick an expiry and write the date down, because deploys fail when it expires. This is `VERCEL_TOKEN`.
+
+None of this needs Vercel Pro. Hobby's limits: non-commercial use, one member (only you can see the dashboard), and instant rollback only to the previous production deployment.
+
+### 12.3 GitHub
+
+1. **Make the repository public** once the history check in the handoff is settled: Settings → General → Danger Zone → Change visibility. That turns on branch protection, environment secrets and required reviewers, which the Free plan does not offer on private repositories.
+2. **Settings → Actions → General:** under _Fork pull request workflows from outside collaborators_, choose **Require approval for all outside collaborators**. Leave _Workflow permissions_ on **Read repository contents**.
+3. **Settings → General → Pull Requests:** tick **Allow merge commits** and **Allow squash merging**. Feature PRs are squashed; release PRs use a merge commit. Untick _Allow rebase merging_.
+4. **Create `develop` from `main`** (after this PR is merged):
+
+   ```bash
+   git switch main && git pull
+   git switch -c develop && git push -u origin develop
+   ```
+
+   Then **Settings → General → Default branch → `develop`**. New PRs then target `develop`, and the daily backup schedule runs from it.
+
+5. **Rules:** Settings → Rules → Rulesets → **New branch ruleset**, one for each branch. Enforcement **Active**, no bypass list:
+
+   | Rule                                                | `main`         | `develop`                |
+   | --------------------------------------------------- | -------------- | ------------------------ |
+   | Target                                              | `main`         | `develop`                |
+   | Restrict deletions, Block force pushes              | ✓              | ✓                        |
+   | Require a pull request · required approvals         | 1              | 1                        |
+   | Dismiss stale approvals on new commits              | ✓              | ✓                        |
+   | Allowed merge methods                               | **Merge** only | **Squash** and **Merge** |
+   | Require status checks to pass · branches up to date | ✓              | ✓                        |
+
+   Required checks (pick them after CI has run once on a PR): `No env files committed`, `PR title is a Conventional Commit`, `Typecheck, lint, unit tests, build`, `Integration tests (PostgreSQL)`. `develop` allows **Merge** too, for merging `main` back after a hotfix.
+
+6. **Environments:** Settings → Environments → **New environment**, three of them:
+
+   | Environment  | Deployment branches and tags | Required reviewers | Secrets                                                                                                           |
+   | ------------ | ---------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+   | `dev`        | Selected: `develop`          | —                  | `VERCEL_TOKEN` (§12.2), `DIRECT_URL` = **dev** direct URL, `digital_minds_owner`                                  |
+   | `production` | Selected: `main`             | you (+ one more)   | `VERCEL_TOKEN` (same token), `DIRECT_URL` = **production** direct URL, `digital_minds_owner`                      |
+   | `backup`     | Selected: `develop`          | —                  | `BACKUP_DATABASE_URL` = production direct URL, `digital_minds_backup` (§12.1 step 4); `BACKUP_PASSPHRASE` (below) |
+
+   Tick **Prevent self-review** on `production` if two people can approve. The token is stored per environment rather than as a repository secret on purpose: a repository secret reaches any workflow on any branch, an environment secret only the branch its environment allows. The backup runs on a schedule, and schedules run from the default branch, so `backup` allows `develop`. It holds read-only access and needs no approval, so it never waits on anyone.
+
+   Generate the backup passphrase with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and **store it in your password manager as well**: without it no backup can be read.
+
+7. **Repository secrets** (Settings → Secrets and variables → Actions → _Repository secrets_): `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` from `.vercel/project.json` (§12.2). They identify the project and are not sensitive, but the workflow reads them as secrets.
+
+### 12.4 Environment variables (Vercel)
+
+The same names in **Production** and **Preview**. The app refuses to start, naming the variable, when one is missing or unsafe (`src/server/env.ts`).
+
+| Variable                  | Production                                          | Preview (dev)                                       |
+| ------------------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `DATABASE_URL`            | production **pooled** URL, `digital_minds_app`      | dev **pooled** URL, `digital_minds_app`             |
+| `ALLOWED_EMAIL_DOMAINS`   | `uqu.edu.sa`                                        | `uqu.edu.sa`                                        |
+| `APP_ORIGIN`              | `https://digitalmindsint.org`                       | `https://dev.digitalmindsint.org`                   |
+| `AUTH_SECRET`             | the production secret                               | the dev secret                                      |
+| `VIEW_LINK_SECRET`        | the production secret                               | the dev secret                                      |
+| `CLIENT_IP_HEADER`        | `x-real-ip`                                         | `x-real-ip`                                         |
+| `AUTH_SELF_SIGNUP`        | `false`                                             | `false`                                             |
+| `RESEND_API_KEY`          | the production key                                  | the dev key                                         |
+| `EMAIL_FROM`              | `Digital Minds <no-reply@auth.digitalmindsint.org>` | `Digital Minds <no-reply@auth.digitalmindsint.org>` |
+| `DEV_ACTOR_SWITCHER`      | `false`                                             | `false`                                             |
+| `NEXT_PUBLIC_API_MOCKING` | `disabled`                                          | `disabled`                                          |
+
+- **Do not set** `DIRECT_URL` (it lives only in GitHub), `EMAIL_TRANSPORT` (production defaults to `resend` and refuses `console`), `NODE_ENV` (Vercel sets it) or `TEST_DATABASE_URL`.
+- **Generate** each secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`, a different value per variable and per environment. Changing `AUTH_SECRET` later invalidates pending sign-in codes; changing `VIEW_LINK_SECRET` invalidates every committee view link.
+- **`CLIENT_IP_HEADER=x-real-ip`:** Vercel sets `x-real-ip` to the address that connected and replaces whatever the client sent, so the per-IP limits on sign-in and on the public view cannot be dodged by forging it.
+- With `AUTH_SELF_SIGNUP=false`, sign-in codes are sent after the response (`after()`). A failed send shows only in the logs (Vercel → project → Logs): watch for `The sign-in code email could not be sent.` and `The role invitation email could not be sent.` Either one means Resend is refusing mail ([ADR 0027](docs/adr/0027-invite-only-sign-in.md)).
+
+### 12.5 DNS at IONOS
+
+Vercel → Settings → Domains shows the exact records for each domain; **copy what it shows**, which may be a project-specific value. Typically:
+
+| Host  | Type  | Value                                                  |
+| ----- | ----- | ------------------------------------------------------ |
+| `@`   | A     | the IP Vercel shows (often `76.76.21.21`)              |
+| `www` | CNAME | the target Vercel shows (often `cname.vercel-dns.com`) |
+| `dev` | CNAME | the same target                                        |
+
+- At IONOS, delete the default **A** and **AAAA** records for `@` and `www` (the parking page) before adding these. A leftover AAAA record sends IPv6 visitors to IONOS.
+- If the domain has **CAA** records, add one allowing `letsencrypt.org`, or Vercel cannot issue certificates.
+- ⚠️ **Do not touch the records for `auth`**: `resend._domainkey.auth`, `send.auth` (MX and TXT), `_dmarc.auth` and anything else ending in `.auth`. They are what lets Resend send sign-in codes from `auth.digitalmindsint.org`, and changing them stops all sign-in email.
+
+Vercel shows each domain as _Valid Configuration_ once DNS has propagated (minutes to a few hours).
+
+### 12.6 First deploy
+
+1. Finish §12.1–12.5. Then merge the PR that added this section into `main`. The push starts **Deploy** in the Actions tab: CI, then the production job, which waits for your approval (**Review deployments → Approve**). It migrates the empty production database, applies the grants and deploys. Open https://digitalmindsint.org.
+2. Create `develop` (§12.3 step 4). That push deploys dev the same way, with no approval, and points `dev.digitalmindsint.org` at it.
+3. **Seed dev** (replaces everything in the dev database with the demo data), with dev's **direct** owner URL:
+
+   ```bash
+   read -rs DIRECT_URL && export DIRECT_URL      # paste the dev direct URL
+   ALLOW_SEED=true pnpm db:seed
+   ```
+
+   It refuses unless the database says `app.environment = 'dev'` (§12.1 step 2).
+
+4. **Make yourself a full admin**, on dev and on production. The full-admin flag cannot be granted through the website. Set `DIRECT_URL` to that environment's direct URL (as above), then:
+
+   ```bash
+   pnpm admin:grant s44xxxxxxx@st.uqu.edu.sa --name "الاسم الكامل"
+   ```
+
+   It prints the database (host and `app.environment`) and what it did: _Created and granted_, _Granted_ or _No change_. `--name` is needed only for an address with no account yet; it is the name you confirm at your first sign-in. Seeding dev again wipes this, so run it again after every seed. The demo personas cannot sign in on dev, since their addresses are not real inboxes.
+
+5. Run the smoke test (§12.7) on dev, then on production.
+
+### 12.7 Smoke test
+
+Run it on **dev** first, then on **production** with real but harmless data. On production, remove what you created afterwards: points can be cancelled, a club can be archived, and a full admin can delete an empty club.
+
+- [ ] Sign in with a real university address. The code arrives (**check Junk**), the name step works, and you land on the dashboard.
+- [ ] Create a club and a committee (full admin).
+- [ ] Add a member by university email.
+- [ ] Make a second person (one who has never signed in) a committee lead: their invitation email arrives, and they can sign in.
+- [ ] Add points to a member, then a bulk-points batch for several members.
+- [ ] Import a CSV (preview, then import) using `GET …/import/template` as the starting file.
+- [ ] Export the members list to Excel and open the file.
+- [ ] Create a committee view link and open it on a phone, signed out: names and balances only.
+- [ ] Open the browser console on a few pages: no Content-Security-Policy errors.
+- [ ] Response headers (DevTools → Network → the page request): `content-security-policy` with a nonce, `strict-transport-security`, `x-content-type-options: nosniff`, `x-frame-options: DENY`, `referrer-policy`. On the view link's API calls: `referrer-policy: no-referrer` and `x-robots-tag: noindex`.
+- [ ] `https://www.digitalmindsint.org` redirects to `https://digitalmindsint.org`.
+- [ ] **Dev only, once:** the bulk measurement (§12.10).
+
+### 12.8 Rollback
+
+**A bad deploy (code):**
+
+- **Production:** Vercel → Deployments → the previous production deployment → **Instant Rollback**. It switches the domains back within seconds. Hobby can roll back only to the _previous_ production deployment; for an older one, open it → **Promote**. After a rollback Vercel stops giving new deployments the production domains, so the next deploy from `main` goes live only after you **Undo Rollback** or promote it. Fix forward with a hotfix (§7).
+- **Dev:** `npx vercel@64.7.0 alias set <older deployment URL> dev.digitalmindsint.org`, with the URL from Vercel → Deployments.
+- Rolling code back leaves the database as it is. That is safe only because every migration must keep working with the code before it: add things in one release, remove them in a later one (ADR 0028).
+
+**A migration that failed:** the deploy job stops at _Migrate the database_. Nothing is deployed and the live site keeps running the previous code. Then:
+
+1. Read the error in the job log. Prisma has recorded the migration as failed, and later deploys refuse to migrate (`P3009`) until it is resolved.
+2. Check what the migration changed before it failed (Neon SQL Editor). Undo any part of it that was applied.
+3. Mark it rolled back, with `DIRECT_URL` set for that environment: `pnpm exec prisma migrate resolve --rolled-back <migration_folder_name>`.
+4. Fix the migration in a PR. A migration that never applied anywhere may be edited; otherwise add a new one. Merge it, and the deploy runs again.
+
+**A migration that ran but damaged data:** within **6 hours**, Neon can restore the branch to a point in time (Neon → Branches → `production` → **Restore**, choosing a time before the deploy). Neon keeps the replaced state as a backup branch. After 6 hours, restore last night's backup (§12.9).
+
+### 12.9 Backups
+
+**Daily:** `.github/workflows/backup.yml` runs at 03:17 Riyadh time. It writes an encrypted dump (`pg_dump` custom format, AES-256 with `BACKUP_PASSPHRASE`) and keeps it as an artifact for **30 days**: Actions → **Backup** → a run → _Artifacts_. The repository is public, so anyone can download these files. The passphrase is what protects them: keep it long, keep it only in GitHub and your password manager, and rotate it if it might have leaked. GitHub stops scheduled workflows after 60 days without a commit and emails a warning first.
+
+**By hand:** Actions → **Backup** → **Run workflow**. Or locally, with Docker and gpg (Git Bash):
+
+```bash
+read -rs BACKUP_DATABASE_URL && export BACKUP_DATABASE_URL   # production direct URL, digital_minds_backup
+read -rs BACKUP_PASSPHRASE && export BACKUP_PASSPHRASE
+pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump.gpg (git-ignored)
+```
+
+**Restore**, into a new branch first, never straight into production:
+
+1. Download the artifact you want and unzip it to get the `.dump.gpg` file.
+2. Neon → Branches → **Create branch** from `production`, named e.g. `restore-2026-11-03`. Take its **direct** URL with `digital_minds_owner` (§12.1 step 1).
+3. Restore into it:
+
+   ```bash
+   read -rs RESTORE_DATABASE_URL && export RESTORE_DATABASE_URL   # the restore branch's direct URL
+   read -rs BACKUP_PASSPHRASE && export BACKUP_PASSPHRASE
+   pnpm db:restore path/to/digital-minds-….dump.gpg
+   ```
+
+   It shows the target and asks you to type its host. Then it replaces every table in **one transaction**: all of the backup lands, or nothing changes.
+
+4. Re-apply the grants (the dump carries none): `DIRECT_URL="$RESTORE_DATABASE_URL" pnpm exec prisma db execute --file scripts/sql/app-role.sql`.
+5. Check it in the Neon SQL Editor on that branch: the rows you expect, the latest `createdAt` values.
+6. **Switch:** create one more branch from `production` as a snapshot of the state you are replacing. Then run steps 3 and 4 again with production's direct owner URL. Anything written to production after the backup was taken is lost, so compare first if that matters.
+7. Delete the restore branch when you are done.
+
+**A better home for backups, later:** workflow artifacts are public in a public repository, and they last at most 90 days. For real data, a private bucket (Cloudflare R2's free tier, with object lock) or Neon's paid plan (longer history) is better. `scripts/db-backup.sh` writes one file, so moving it means adding an upload step.
+
+### 12.10 Measuring bulk points on dev
+
+To decide whether 5000 entries per club batch stays (`CLUB_POINTS_BULK_MAX`), measure 2–3 concurrent batches against dev, never production:
+
+```bash
+read -rs DIRECT_URL && export DIRECT_URL            # the dev direct URL (the script refuses non-dev databases)
+pnpm measure:bulk setup                             # scratch club «قياس الحمل (مؤقت)»: 2500 people × 2 committees
+export MEASURE_ORIGIN=https://dev.digitalmindsint.org
+read -rs MEASURE_SESSION && export MEASURE_SESSION  # your __Host-dm-session cookie value on dev (DevTools → Application → Cookies)
+pnpm measure:bulk run 3                             # then `run 2`; prints each request's status and time
+pnpm measure:bulk teardown                          # removes the scratch club, its people and its points
+```
+
+Use **teardown**, not the full-admin club delete: that refuses a club that ever had members. A request that takes longer than about 5 seconds inside its transaction fails with a 500 and writes nothing. That is the limit the measurement is looking for.

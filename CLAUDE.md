@@ -19,12 +19,15 @@ pnpm test:e2e               # Playwright, real app on :3100 + digital_minds_e2e_
 pnpm build                  # production build
 pnpm storybook              # :6006
 pnpm db:migrate --name x    # after editing prisma/schema.prisma (--create-only first if you will hand-edit the SQL)
-pnpm db:seed                # replaces local data with the demo dataset
+pnpm db:seed                # replaces local data with the demo dataset (hosted: dev only, ALLOW_SEED=true)
+pnpm admin:grant <email>    # makes a person a full admin (the API cannot); --name for a new account
+pnpm measure:bulk setup|run|teardown   # concurrent 5000-entry bulk batches, dev only
+pnpm db:backup / db:restore # encrypted pg_dump / restore (README §12.9)
 ```
 
 Run `pnpm typecheck && pnpm lint && pnpm test` before declaring work done; add `pnpm test:integration` when server code changed.
 
-Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything that drops data without the user's explicit consent in the current conversation.
+Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything that drops data without the user's explicit consent in the current conversation. Never point any command at a hosted (Neon) database — no seed, migrate, `admin:grant`, restore or measurement — unless the user asks for that exact command in the current conversation, and never ask for a database URL, token or secret in the chat: the user sets them in their own shell.
 
 ## Architecture rules (enforced by ESLint where possible — do not disable them)
 
@@ -107,12 +110,14 @@ Never run `prisma migrate reset`, `pnpm db:reset`, `pnpm db:seed` or anything th
 - **Node version:** set only in `.nvmrc` (fnm and CI read it). To change it, also update `engines` in `package.json` and the README Prerequisites; `tests/repo/toolchain-versions.test.ts` fails until all three match.
 - **pnpm 12:** settings live in `pnpm-workspace.yaml`; new packages younger than one day are refused; dependencies with install scripts must be added to `allowBuilds` deliberately.
 - **TypeScript 6** (not 7) and **ESLint 9** (not 10) on purpose — see ADR 0010.
+- **Hosting** (ADR 0028, README §12): Vercel `fra1` + Neon Frankfurt, deployed only by `deploy.yml` (Git deployments are off in `vercel.json`). The app reaches Neon through its **pooler (PgBouncer, transaction mode)**: anything that must share a connection (`FOR UPDATE`, a read-then-conditional-write) goes inside one `$transaction`; no advisory locks, `SET` outside a transaction or `LISTEN`. `DATABASE_URL` is the pooled URL with the read/write-only `digital_minds_app` role; `DIRECT_URL` (owner, unpooled) is read only by `prisma.config.ts` and `scripts/`, never by the app, so it is not in `env.ts`. Grants are `scripts/sql/app-role.sql` (re-applied after every migration). A migration goes live **before** its code and stays if the deploy fails, so it must keep the previous release working: add in one release, remove in a later one. Dev and production both run `NODE_ENV=production`; anything that differs between them is an env variable. Hosted databases carry `app.environment` (`dev` / `production`), which `scripts/lib/database-target.ts` checks before anything destructive.
 
 ## Workflow
 
-- Branch `feat/<clickup-task-id>-short-name` (or `fix/`, `chore/`), Conventional Commits (`feat(members): …`), PR to `main` with the template, squash merge. Do not commit or push unless asked.
+- Branch `feat/<clickup-task-id>-short-name` (or `fix/`, `chore/`) **from `develop`**, Conventional Commits (`feat(members): …`), PR to `develop` with the template, squash merge. Do not commit or push unless asked.
+- **Releases** are a PR from `develop` to `main` merged with a **merge commit, never squash** (a squash makes the branches drift). **Hotfixes** branch from `main`, merge into `main` with a merge commit, then `main` is merged back into `develop` (a PR, merge commit). Pushes to `develop` deploy dev, pushes to `main` deploy production (`.github/workflows/deploy.yml`, ADR 0028).
 - Checks by task size:
   - Small, contained changes (one component, copy, styles, a single helper): run typecheck, lint and only the tests for the files you changed. Don't run the full suite or the build locally; CI runs everything on the PR.
   - Larger changes, anything touching auth, permissions, the database schema, shared contracts or more than one module: run the full suite and the build locally before opening the PR.
 - Never commit `.env*` files (only `.env.example`). Never log personal data (phones, emails); log ids.
-- Keep docs in sync: new env vars → `.env.example` + `src/server/env.ts`; new decisions → an ADR; changed personas → README "Seeded accounts".
+- Keep docs in sync: new env vars → `.env.example` + `src/server/env.ts` (a variable only the CLI and `scripts/` read, like `DIRECT_URL`, goes in `.env.example` alone), and in README §12.4 if hosted environments need it; new decisions → an ADR; changed personas → README "Seeded accounts".
