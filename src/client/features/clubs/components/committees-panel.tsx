@@ -259,25 +259,27 @@ function CommitteeCard({
         ) : (
           <Badge variant="success">{t('statusActive')}</Badge>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ms-auto"
-          aria-label={tLink('openLabel', { name: committee.name })}
-          onClick={() => setSharing(true)}
-        >
-          <Link2 aria-hidden />
-          {tLink('open')}
-        </Button>
-        <Button asChild variant="ghost" size="sm">
-          <Link
-            href={`/dashboard/members?committeeId=${committee.id}`}
-            aria-label={t('viewMembersLabel', { name: committee.name })}
+        {/* The two actions move together; on phones the link button keeps only its icon. */}
+        <div className="ms-auto flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={tLink('openLabel', { name: committee.name })}
+            onClick={() => setSharing(true)}
           >
-            {t('viewMembers')}
-            <DirectionalIcon icon={ArrowRight} />
-          </Link>
-        </Button>
+            <Link2 aria-hidden />
+            <span className="max-sm:sr-only">{tLink('open')}</span>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              href={`/dashboard/members?committeeId=${committee.id}`}
+              aria-label={t('viewMembersLabel', { name: committee.name })}
+            >
+              {t('viewMembers')}
+              <DirectionalIcon icon={ArrowRight} />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <CommitteeViewLinkDialog
