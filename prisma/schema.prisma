@@ -47,6 +47,13 @@ enum MemberExportSelection {
   IDS
 }
 
+/// What a full admin deleted (docs/adr/0015-archive-instead-of-delete.md, ADR 0026).
+enum DeletionKind {
+  CLUB
+  COMMITTEE
+  PERSON
+}
+
 enum PointRevisionAction {
   UPDATED
   CANCELLED
@@ -64,10 +71,15 @@ model User {
   /// Arabic-normalised copy of fullName used for search (see src/shared/lib/arabic.ts).
   searchName   String
   /// Always lower-case (CHECK constraint). The identity key for linking registration.
-  uniEmail     String    @unique
+  /// Null only on a deleted person, which frees the address for a fresh account (ADR 0026).
+  uniEmail     String?   @unique
   isFullAdmin  Boolean   @default(false)
   /// Null until the person registers themselves.
   registeredAt DateTime?
+  /// Set when a full admin deleted this person's data (docs/adr/0026-person-deletion.md). The row
+  /// stays, emptied, only so the history other people wrote keeps pointing at someone: a CHECK
+  /// constraint keeps the name, email, roles and registration blank while this is set.
+  deletedAt    DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -79,6 +91,7 @@ model User {
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
   memberExports              MemberExport[]
+  deletionsMade              DeletionRecord[]
   sessions                   Session[]
 }
 
@@ -333,6 +346,27 @@ model MemberExport {
 
   @@index([clubId, createdAt])
   @@index([exportedById, createdAt])
+}
+
+/// Append-only: one row per full-admin delete (docs/adr/0015-archive-instead-of-delete.md). It
+/// keeps ids and counts only — never a name, an email or the confirmation the admin typed — and
+/// no foreign key to the deleted row, which no longer exists (or, for a person, is emptied).
+model DeletionRecord {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  kind        DeletionKind
+  /// The deleted club, committee or user id.
+  targetId    String       @db.Uuid
+  /// The committee's club (CHECK: set exactly for COMMITTEE). No foreign key: the club may be
+  /// deleted later.
+  clubId      String?      @db.Uuid
+  deletedById String       @db.Uuid
+  /// Rows removed per table, e.g. { "pointTransactions": 340 } (CHECK: a JSON object).
+  counts      Json
+  createdAt   DateTime     @default(now())
+
+  deletedBy User @relation(fields: [deletedById], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
 }
 
 // ─── Sign-in (docs/adr/0014-email-otp-sign-in.md) ─────────────────────────────────────────────

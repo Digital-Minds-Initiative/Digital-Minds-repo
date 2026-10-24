@@ -19,6 +19,7 @@ import {
   membershipTypeNotInClub,
   NotFoundError,
 } from '@/server/errors';
+import { liveUniEmail } from '@/server/live-user';
 import { endUserSessions } from '@/server/modules/auth';
 import { getActivePointsByMember, type MemberBalances } from '@/server/modules/points';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
@@ -345,7 +346,7 @@ export async function updateMember(
   const changes = {
     uniEmail: changed(
       body.uniEmail === undefined ? undefined : normalizeEmail(body.uniEmail),
-      row.user.uniEmail,
+      liveUniEmail(row.user.uniEmail),
     ),
     fullName: changed(
       body.fullName === undefined ? undefined : normalizePersonName(body.fullName),

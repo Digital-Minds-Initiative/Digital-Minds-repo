@@ -17,15 +17,17 @@ const newEmail = () => `s8${String((sequence += 1)).padStart(8, '0')}@st.uqu.edu
 
 /** A person as an admin would add them: an account that has not registered yet. */
 async function addedByAdmin(fullName: string, registered = false) {
-  return db.user.create({
+  const uniEmail = newEmail();
+  const user = await db.user.create({
     data: {
-      uniEmail: newEmail(),
+      uniEmail,
       fullName,
       searchName: normalizeForSearch(fullName),
       registeredAt: registered ? new Date() : null,
     },
-    select: { id: true, uniEmail: true, fullName: true },
+    select: { id: true, fullName: true },
   });
+  return { ...user, uniEmail };
 }
 
 beforeAll(async () => {
@@ -149,7 +151,7 @@ describe('after a correct code', () => {
 
   it('refuses to change the stored name at the confirm step', async () => {
     const person = await addedByAdmin('ريم خالد');
-    const { session } = await signIn(person.uniEmail);
+    const { session } = await signIn(person.uniEmail ?? '');
 
     const refused = await auth.completeName('ريم خالد العتيبي', { session });
     expect(refused.status).toBe(422);
@@ -206,7 +208,7 @@ describe('after a correct code', () => {
     const person = await db.user.create({
       data: { uniEmail: newEmail(), fullName: 'شخص مضاف', searchName: 'شخص مضاف' },
     });
-    const { session } = await signIn(person.uniEmail);
+    const { session } = await signIn(person.uniEmail ?? '');
     await db.user.update({ where: { id: person.id }, data: { uniEmail: newEmail() } });
 
     expect((await auth.completeName('شخص مضاف', { session })).status).toBe(401);
@@ -276,7 +278,7 @@ describe('GET /auth/session', () => {
     const admitted = await db.user.create({
       data: { uniEmail: newEmail(), fullName: 'مضاف حديثاً', searchName: 'مضاف حديثاً' },
     });
-    expect(await state((await signIn(admitted.uniEmail)).session)).toEqual({
+    expect(await state((await signIn(admitted.uniEmail ?? '')).session)).toEqual({
       step: 'confirm_name',
       fullName: 'مضاف حديثاً',
     });

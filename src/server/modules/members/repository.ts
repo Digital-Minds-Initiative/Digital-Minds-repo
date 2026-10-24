@@ -10,6 +10,7 @@ import type {
 import { db, type TransactionClient } from '@/server/db/client';
 import type { Prisma } from '@/server/db/generated/client';
 import { ConflictError, NotFoundError } from '@/server/errors';
+import { liveUniEmail } from '@/server/live-user';
 import type {
   ClubRole,
   CommitteeRole,
@@ -651,7 +652,7 @@ export async function findAccountsByUniEmails(
     users.map((user) => {
       const membership = user.memberships[0];
       return [
-        user.uniEmail,
+        liveUniEmail(user.uniEmail),
         {
           userId: user.id,
           membership: membership
@@ -825,7 +826,7 @@ async function createAccounts(
     where: { uniEmail: { in: fresh.map((add) => add.uniEmail) } },
     select: { id: true, uniEmail: true },
   });
-  return new Map(created.map((user) => [user.uniEmail, user.id]));
+  return new Map(created.map((user) => [liveUniEmail(user.uniEmail), user.id]));
 }
 
 async function createMemberships(
