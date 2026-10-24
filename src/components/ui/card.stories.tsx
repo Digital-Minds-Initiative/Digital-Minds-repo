@@ -23,7 +23,7 @@ export const Default: Story = {
         <CardDescription>نادي الحاسبات · 24 عضواً</CardDescription>
       </CardHeader>
       <CardContent className="flex gap-2">
-        <Badge variant="info">قائد: محمد العتيبي</Badge>
+        <Badge variant="info">مسؤول اللجنة: محمد العتيبي</Badge>
       </CardContent>
       <CardFooter>
         <Button size="sm" variant="outline">

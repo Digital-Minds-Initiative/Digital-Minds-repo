@@ -38,7 +38,7 @@
     "allTypes": "كل الأنواع",
     "role": "الصلاحية",
     "allRoles": "كل الصلاحيات",
-    "roleOfficer": "مدراء الشؤون",
+    "roleOfficer": "مسؤولو النادي",
     "roleMember": "بدون صلاحية إدارية",
     "registered": "التسجيل",
     "allRegistered": "كل حالات التسجيل",
@@ -62,12 +62,12 @@
   "error": {
     "title": "تعذّر تحميل الأعضاء"
   },
-  "leadBadge": "قائد",
+  "leadBadge": "مسؤول",
   "none": "—",
   "stats": {
     "label": "أرقام الأعضاء",
     "total": "إجمالي الأعضاء",
-    "roles": "القادة والإدارة"
+    "roles": "المسؤولون"
   },
   "toolbar": {
     "addMember": "إضافة عضو",
@@ -132,14 +132,14 @@
       "label": "نوع العضوية",
       "save": "حفظ النوع",
       "saved": "تغيّر نوع العضوية",
-      "leadHint": "بصفتك قائد لجنة يمكنك تغيير نوع العضوية فقط."
+      "leadHint": "بصفتك مسؤول لجنة يمكنك تغيير نوع العضوية فقط."
     },
     "committees": {
       "empty": "ليس في أي لجنة ضمن نطاقك.",
       "add": "إضافة إلى لجنة",
       "addPlaceholder": "اختر لجنة",
       "addAll": "العضو في كل لجان النادي.",
-      "leadBadge": "قائد",
+      "leadBadge": "مسؤول",
       "points": "{points} نقطة",
       "remove": "إزالة {name} من {committee}",
       "removeLabel": "إزالة من {committee}",

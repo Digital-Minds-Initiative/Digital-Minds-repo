@@ -32,7 +32,7 @@ export const Default: Story = {
         <DialogHeader>
           <DialogTitle>إضافة لجنة جديدة</DialogTitle>
           <DialogDescription>
-            ستظهر اللجنة لمدير شؤون النادي ويمكن تعيين قائد لها لاحقاً.
+            ستظهر اللجنة لمسؤول النادي ويمكن تعيين مسؤول لها لاحقاً.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">

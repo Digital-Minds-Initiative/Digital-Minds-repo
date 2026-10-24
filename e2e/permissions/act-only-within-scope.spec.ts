@@ -91,11 +91,11 @@ async function offeredActions(page: Page) {
   let appointLead = false;
   if (!permissionsForbidden) {
     await page
-      .getByRole('button', { name: /^تعيين قائد لـ/ })
+      .getByRole('button', { name: /^تعيين مسؤول لـ/ })
       .first()
       .waitFor();
-    appointOfficer = await has('تعيين مدير شؤون');
-    appointLead = await has(/^تعيين قائد لـ/);
+    appointOfficer = await has('تعيين مسؤول نادي');
+    appointLead = await has(/^تعيين مسؤول لـ/);
   }
   return { addMember, addClub, addCommittee, appointOfficer, appointLead, permissionsForbidden };
 }

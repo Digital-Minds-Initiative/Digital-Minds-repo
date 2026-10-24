@@ -85,7 +85,7 @@ describe('MembersToolbar — every filter the API offers', { timeout: 20_000 }, 
     const onChange = vi.fn();
     const user = renderToolbar(onChange);
     await user.click(await screen.findByRole('combobox', { name: 'الصلاحية' }));
-    await user.click(await screen.findByRole('option', { name: 'مدراء الشؤون' }));
+    await user.click(await screen.findByRole('option', { name: 'مسؤولو النادي' }));
     expect(onChange).toHaveBeenLastCalledWith({ role: 'CLUB_OFFICER' });
   });
 

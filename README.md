@@ -6,7 +6,7 @@ Digital Minds (العقول الرقمية) is the platform for the tech student
 
 - one account per person, identified by the university email; admins can add people before they register;
 - clubs, their committees, and membership types that each club defines;
-- hierarchical permissions: full admin → club officer (مدير شؤون) → committee lead (قائد لجنة);
+- hierarchical permissions: full admin → club officer (مسؤول نادي) → committee lead (مسؤول لجنة);
 - a points ledger per member per committee (add, deduct, edit, cancel; every change is recorded).
 
 This repository is the foundation: architecture, authorization, contracts for every phase-one endpoint, the design system, and one feature (the members list) built end to end as the pattern to copy. People sign in with a one-time code sent to their university email (the API is ready; the sign-in screens are the next task). In development you can also switch between seeded accounts with a dev-only switcher.

@@ -121,7 +121,7 @@ describe('PointsScreen — members and their points', { timeout: 30_000 }, () =>
     const table = await screen.findByRole('table');
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows.length).toBeGreaterThan(0);
-    expect(within(table).getAllByText('قائد اللجنة').length).toBeGreaterThan(0);
+    expect(within(table).getAllByText('مسؤول اللجنة').length).toBeGreaterThan(0);
     expect(within(table).getAllByText(/نقطة$/).length).toBeGreaterThan(0);
     for (const row of rows) {
       expect(within(row).getByRole('button', { name: /^عرض سجل / })).toBeTruthy();

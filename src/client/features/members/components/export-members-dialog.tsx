@@ -18,7 +18,6 @@ import {
 import { toast } from '@/components/ui/toaster';
 import {
   MEMBER_EXPORT_MAX_ROWS,
-  memberExportColumns,
   memberExportEndpoint,
   type MemberExportBodyInput,
   type MemberExportColumn,
@@ -27,7 +26,8 @@ import {
 
 /**
  * The columns in the order the table shows them: the name cell carries the university email, and
- * the role badge sits in the membership type's cell. Registration and status have no column.
+ * the role badge sits in the membership type's cell. The server also accepts `registered` and
+ * `status`; the picker does not offer them.
  */
 const COLUMN_ORDER: readonly MemberExportColumn[] = [
   'fullName',
@@ -42,15 +42,14 @@ const COLUMN_ORDER: readonly MemberExportColumn[] = [
   'major',
   'level',
   'joinedAt',
-  'registered',
-  'status',
 ];
 
 /** Always ticked when the dialog opens: who the row is. */
 const IDENTITY_COLUMNS: readonly MemberExportColumn[] = ['fullName', 'uniEmail'];
 
+/** Only the columns the picker offers can start ticked. */
 function isExportColumn(id: string): id is MemberExportColumn {
-  return (memberExportColumns as readonly string[]).includes(id);
+  return (COLUMN_ORDER as readonly string[]).includes(id);
 }
 
 export interface ExportMembersDialogProps {

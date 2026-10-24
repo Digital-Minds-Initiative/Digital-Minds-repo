@@ -18,7 +18,7 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-wrap gap-2">
       <Badge variant="neutral">مستفيد</Badge>
-      <Badge variant="primary">مدير شؤون</Badge>
+      <Badge variant="primary">مسؤول نادي</Badge>
       <Badge variant="info">
         <Crown aria-hidden />
         لجنة البرمجة
