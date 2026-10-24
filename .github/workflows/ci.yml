@@ -1,9 +1,11 @@
 name: CI
 
+# Pull requests run it here. Pushes to develop and main run it through deploy.yml, which calls this
+# workflow and deploys only when every job passed on that same commit.
 on:
   pull_request:
-  push:
-    branches: [main]
+    branches: [main, develop]
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -49,7 +51,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # We squash-merge, so the PR title becomes the commit message on main.
+      # Feature PRs are squash-merged into develop, so the title becomes the commit message there.
+      # Release PRs (develop → main) use a merge commit, whose message starts with the title too.
       - name: Check the PR title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}

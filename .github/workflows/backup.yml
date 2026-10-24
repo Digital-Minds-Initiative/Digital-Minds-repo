@@ -1,0 +1,47 @@
+name: Backup
+
+# A daily encrypted dump of the production database, kept as a workflow artifact for 30 days.
+# Neon's free plan keeps 6 hours of history, so this is what undoes a mistake noticed next day.
+# Restoring: README, "Deploying" → Backups.
+#
+# The job uses the `backup` GitHub Environment, which holds only production's read-only backup
+# role (BACKUP_DATABASE_URL) and the passphrase (BACKUP_PASSPHRASE) — never the owner role or a
+# deploy token — and needs no reviewer, so the schedule is never stuck waiting for an approval.
+# The file only ever exists encrypted (scripts/db-backup.sh streams pg_dump into gpg); the repo is
+# public, so anyone can download the artifact and the passphrase is all that protects it.
+on:
+  schedule:
+    # 00:17 UTC = 03:17 in Riyadh. Off the hour: GitHub delays jobs scheduled at :00.
+    # Scheduled workflows run on the default branch (develop) and stop after 60 days without a
+    # commit to the repository; GitHub emails a warning first.
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Back up production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: backup
+    steps:
+      - uses: actions/checkout@v7
+      - name: Dump and encrypt
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: bash scripts/db-backup.sh "$RUNNER_TEMP/backup"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: production-backup-${{ github.run_number }}
+          path: ${{ runner.temp }}/backup/*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error
+          # Encrypted data does not compress.
+          compression-level: 0

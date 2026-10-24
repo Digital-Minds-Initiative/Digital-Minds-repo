@@ -1,0 +1,94 @@
+name: Deploy
+
+# develop → dev.digitalmindsint.org (Vercel's Preview environment, Neon branch `dev`)
+# main    → digitalmindsint.org     (Vercel's Production environment, Neon branch `production`)
+#
+# Vercel's Git integration is off (vercel.json); this workflow is the only way anything is
+# deployed, following Vercel's guide for GitHub Actions: pull the environment, build here, migrate,
+# then upload the prebuilt output. docs/adr/0028-hosting-and-deploys.md explains why.
+on:
+  push:
+    branches: [develop, main]
+
+# One deploy per branch at a time. A newer push waits for the running one instead of cancelling
+# it halfway through a migration; GitHub keeps only the newest waiting run.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The GitHub Environment holds this branch's secrets — VERCEL_TOKEN and the Neon owner role's
+    # DIRECT_URL — so the dev job never sees production's. Each environment only accepts its own
+    # branch, and production waits for a required reviewer.
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'dev' }}
+      url: ${{ github.ref_name == 'main' && 'https://digitalmindsint.org' || 'https://dev.digitalmindsint.org' }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      PROD_FLAG: ${{ github.ref_name == 'main' && '--prod' || '' }}
+      DEV_DOMAIN: dev.digitalmindsint.org
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install the Vercel CLI
+        run: npm install --global vercel@64.7.0
+
+      # The token is only ever expanded inside a command, never echoed; GitHub also masks it.
+      - name: Pull the Vercel environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment="$VERCEL_ENVIRONMENT" --token="$VERCEL_TOKEN"
+
+      # Built before the database is touched: a commit that does not build never migrates.
+      - name: Build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel build $PROD_FLAG --token="$VERCEL_TOKEN"
+
+      # A failed migration fails the job here, and nothing below runs: the live deployment stays.
+      - name: Migrate the database
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: pnpm exec prisma migrate deploy
+
+      # Tables a migration just created get the app role's rights before the new code needs them.
+      - name: Apply the database roles' grants
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: pnpm exec prisma db execute --file scripts/sql/app-role.sql
+
+      - name: Deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url="$(vercel deploy --prebuilt $PROD_FLAG --token="$VERCEL_TOKEN")"
+          echo "Deployed $url"
+          echo "DEPLOYMENT_URL=$url" >> "$GITHUB_ENV"
+
+      # Production deploys take the production domains automatically. Hobby has no custom
+      # environments, so dev is a Preview deployment that this step points dev.digitalmindsint.org at.
+      - name: Point the dev domain at this deployment
+        if: github.ref_name != 'main'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel alias set "$DEPLOYMENT_URL" "$DEV_DOMAIN" --token="$VERCEL_TOKEN"
