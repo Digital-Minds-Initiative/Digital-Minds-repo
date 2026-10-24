@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 import { parseEmailDomains } from '@/shared/lib/email-domains';
+import { parseSelfSignup } from '@/shared/lib/self-signup';
 
 /**
  * Server environment, validated once at startup (src/instrumentation.ts imports this module).
@@ -113,6 +114,12 @@ const envSchema = (phase: string | undefined) =>
       RESEND_API_KEY: optionalString,
       /** For example `Digital Minds <no-reply@auth.digitalmindsint.org>`. */
       EMAIL_FROM: optionalString,
+      /**
+       * `false` makes sign-in invite-only: codes go only to people with dashboard access, and
+       * the sign-in flow never creates an account (docs/adr/0027-invite-only-sign-in.md).
+       * Unset means `true` in development and test; a production server requires it.
+       */
+      AUTH_SELF_SIGNUP: z.enum(['true', 'false']).optional(),
       DEV_ACTOR_SWITCHER: z
         .enum(['true', 'false'])
         .default('false')
@@ -137,6 +144,15 @@ const envSchema = (phase: string | undefined) =>
             path: ['CLIENT_IP_HEADER'],
             message:
               'is required in production: the header your proxy sets with the client IP, or "none" (turns the per-IP limits off)',
+          });
+        }
+        // Whether strangers may create accounts is a decision for each deployment, never a default.
+        if (!env.AUTH_SELF_SIGNUP) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['AUTH_SELF_SIGNUP'],
+            message:
+              'is required in production: "false" for invite-only sign-in, "true" to let anyone with a university address create an account',
           });
         }
         if (env.AUTH_SECRET === DEVELOPMENT_AUTH_SECRET) {
@@ -197,6 +213,7 @@ const envSchema = (phase: string | undefined) =>
       ),
       APP_ORIGIN: env.APP_ORIGIN ?? 'http://localhost:3000',
       AUTH_SECRET: env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
+      AUTH_SELF_SIGNUP: parseSelfSignup(env.AUTH_SELF_SIGNUP),
       VIEW_LINK_SECRET: env.VIEW_LINK_SECRET ?? env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
       CLIENT_IP_HEADER:
         env.CLIENT_IP_HEADER === undefined || env.CLIENT_IP_HEADER === 'none'
