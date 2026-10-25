@@ -35,7 +35,7 @@ The build comes first, so a commit that does not build never touches the databas
 
 **What differs between dev and production comes from env variables, never from `NODE_ENV`.** `NODE_ENV=production` in both, so both are held to the production checks in `src/server/env.ts`.
 
-**A hosted database says which environment it is.** `ALTER DATABASE digital_minds SET app.environment = 'dev' | 'production'` is run once per branch. The seed and the bulk measurement refuse any non-local database that does not answer `dev`, and the seed also needs `ALLOW_SEED=true`. A production URL pasted by mistake is then refused without the repository knowing any production host, and a branch copied from production inherits the refusal.
+**A hosted database says which environment it is.** `COMMENT ON DATABASE digital_minds IS 'app.environment=dev'` (or `=production`) is run once per branch. It is the database comment, not a custom setting, because `ALTER DATABASE … SET app.environment` needs a superuser on Postgres 15+ and Neon roles are not superusers; the owner may set the comment. The seed and the bulk measurement refuse any non-local database that does not answer `dev`, and the seed also needs `ALLOW_SEED=true`. A production URL pasted by mistake is then refused without the repository knowing any production host, and a branch copied from production inherits the refusal.
 
 **Backups.** `.github/workflows/backup.yml` runs once a day. It streams `pg_dump` into `gpg --symmetric` (AES-256) and keeps the file as a workflow artifact for 30 days. Restores go into a new Neon branch first (`scripts/db-restore.sh`).
 

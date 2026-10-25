@@ -85,10 +85,13 @@ jobs:
           echo "Deployed $url"
           echo "DEPLOYMENT_URL=$url" >> "$GITHUB_ENV"
 
-      # Production deploys take the production domains automatically. Hobby has no custom
-      # environments, so dev is a Preview deployment that this step points dev.digitalmindsint.org at.
+      # Production deploys (--prod) take the project's domains, the apex and www, automatically.
+      # Hobby has no custom environments, so dev is a Preview deployment that this step points
+      # dev.digitalmindsint.org at. The dev domain is deliberately not one of the project's domains:
+      # there it could only be a Production domain, and every production deploy would take it.
+      # A preview deploy never takes the production domains, and only develop runs this step.
       - name: Point the dev domain at this deployment
-        if: github.ref_name != 'main'
+        if: github.ref_name == 'develop'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel alias set "$DEPLOYMENT_URL" "$DEV_DOMAIN" --token="$VERCEL_TOKEN"

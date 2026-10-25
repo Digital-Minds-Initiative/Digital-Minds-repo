@@ -9,7 +9,7 @@
  *                                MEASURE_ORIGIN as the signed-in person whose session is MEASURE_SESSION
  *   pnpm measure:bulk teardown   deletes the scratch club, its people and every point given in it
  *
- * Every step refuses a database whose app.environment is not 'dev' (scripts/lib/database-target.ts).
+ * Every step refuses a database whose comment does not say app.environment=dev (scripts/lib/database-target.ts).
  * `run` also refuses any origin but https://dev.digitalmindsint.org and localhost.
  *
  * The scratch people have addresses under bulk-measure.invalid, a reserved domain no mail can reach,

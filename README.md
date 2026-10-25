@@ -438,10 +438,16 @@ The project `digital-minds` (AWS Europe Central 1, Postgres 18, database `digita
 2. **Mark each branch with its environment.** Open the **SQL Editor** on the `production` branch and run:
 
    ```sql
-   ALTER DATABASE digital_minds SET app.environment = 'production';
+   COMMENT ON DATABASE digital_minds IS 'app.environment=production';
    ```
 
-   Then switch to the `dev` branch and run it with `'dev'`. The seed and `measure:bulk` refuse every hosted database that does not say `dev`. A branch you later create from production inherits `'production'`, so it is refused too.
+   Then switch to the `dev` branch and run:
+
+   ```sql
+   COMMENT ON DATABASE digital_minds IS 'app.environment=dev';
+   ```
+
+   Run them as `digital_minds_owner` (the database's owner). The marker is the database's comment because Neon roles are not superusers, and Postgres refuses `ALTER DATABASE … SET app.environment` to anyone else. Check a branch with `SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = current_database();`. The seed and `measure:bulk` refuse every hosted database whose comment is not exactly `app.environment=dev`. A branch you later create from production inherits `app.environment=production`, so it is refused too.
 
 3. **Create the app and backup roles**, on **each** branch, in the SQL Editor as `digital_minds_owner`. Generate a different password for each role on each branch (four in all):
 
@@ -473,7 +479,7 @@ Use the Vercel CLI from this folder. The Git integration is never connected, so 
    - **Deployment Protection → Vercel Authentication: off.** Otherwise only your Vercel account can open `dev.digitalmindsint.org`, and the app has its own sign-in.
    - **Git:** nothing to connect. `vercel.json` already turns Git deployments off.
 3. **Environment Variables:** add each variable from §12.4 twice, once for **Production** and once for **Preview** (Preview is dev). Mark every secret as **Sensitive**. Never tick **Development**. Do not add `NODE_ENV`: Vercel sets it to `production` in both environments, which the app requires.
-4. **Domains:** add `digitalmindsint.org` (Production), `www.digitalmindsint.org` as a **redirect to `digitalmindsint.org` (308)**, and `dev.digitalmindsint.org` with no branch (the deploy workflow aliases it to each `develop` deployment). The redirect matters: the app accepts form posts only from its own origin, so a `www` page that did not redirect would refuse every sign-in.
+4. **Domains:** add only `digitalmindsint.org` (Production) and `www.digitalmindsint.org` as a **redirect to `digitalmindsint.org` (308)**. Do **not** add `dev.digitalmindsint.org` here: on Hobby without the Git integration it could only be attached to Production, and a Production domain moves to every new production deployment. The deploy workflow points it at each `develop` deployment with `vercel alias set`, which works because the apex is already on your account; its DNS record is in §12.5. The redirect matters: the app accepts form posts only from its own origin, so a `www` page that did not redirect would refuse every sign-in.
 5. **Access token:** avatar → **Account Settings → Tokens → Create**. Scope: your Hobby account. Pick an expiry and write the date down, because deploys fail when it expires. This is `VERCEL_TOKEN`.
 
 None of this needs Vercel Pro. Hobby's limits: non-commercial use, one member (only you can see the dashboard), and instant rollback only to the previous production deployment.
@@ -571,7 +577,7 @@ Vercel shows each domain as _Valid Configuration_ once DNS has propagated (minut
    ALLOW_SEED=true pnpm db:seed
    ```
 
-   It refuses unless the database says `app.environment = 'dev'` (§12.1 step 2).
+   It refuses unless the database's comment says `app.environment=dev` (§12.1 step 2).
 
 4. **Make yourself a full admin**, on dev and on production. The full-admin flag cannot be granted through the website. Set `DIRECT_URL` to that environment's direct URL (as above), then:
 
@@ -643,7 +649,7 @@ pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump
    It shows the target and asks you to type its host. Then it replaces every table in **one transaction**: all of the backup lands, or nothing changes.
 
 4. Re-apply the grants (the dump carries none): `DIRECT_URL="$RESTORE_DATABASE_URL" pnpm exec prisma db execute --file scripts/sql/app-role.sql`.
-5. Check it in the Neon SQL Editor on that branch: the rows you expect, the latest `createdAt` values.
+5. Check it in the Neon SQL Editor on that branch: the rows you expect, the latest `createdAt` values, and the environment marker (§12.1 step 2). The dump does not carry the database comment, so the branch keeps the one it was created with (`app.environment=production` for a branch of production); make sure it is the one you expect.
 6. **Switch:** create one more branch from `production` as a snapshot of the state you are replacing. Then run steps 3 and 4 again with production's direct owner URL. Anything written to production after the backup was taken is lost, so compare first if that matters.
 7. Delete the restore branch when you are done.
 
