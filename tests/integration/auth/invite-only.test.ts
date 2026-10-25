@@ -107,6 +107,9 @@ describe('requesting a code', () => {
     const ip = '203.0.113.77';
     const email = unknownEmail();
     vi.useFakeTimers({ toFake: ['Date'] });
+    // The per-email limit counts in fixed UTC hours, and the requests below span five minutes:
+    // start just after the hour, so they never straddle a window boundary and reset the count.
+    vi.setSystemTime(Math.floor(Date.now() / 3_600_000) * 3_600_000 + 1_000);
     try {
       for (let index = 0; index < 5; index += 1) {
         expect((await request(email, ip)).status).toBe(200);
