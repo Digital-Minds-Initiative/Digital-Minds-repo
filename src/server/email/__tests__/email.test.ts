@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { withEmailAllowlist } from '../allowlist';
 import { clearSentEmails, devEmailSender, maskEmail, sentEmails } from '../dev';
 import { createResendSender } from '../resend';
 
@@ -53,5 +54,31 @@ describe('Resend sender', () => {
     const sending = createResendSender({ apiKey: 'k', from: 'f', fetch }).send(message);
     await expect(sending).rejects.toThrow('HTTP 422');
     await expect(sending).rejects.not.toThrow(message.to);
+  });
+});
+
+describe('EMAIL_ALLOWLIST', () => {
+  afterEach(() => {
+    clearSentEmails();
+    vi.restoreAllMocks();
+  });
+
+  it('sends to listed addresses, whatever their case', async () => {
+    const sender = withEmailAllowlist(devEmailSender, ['S443001234@st.uqu.edu.sa']);
+    await sender.send({ ...message, to: 's443001234@ST.uqu.edu.sa' });
+    expect(sentEmails()).toHaveLength(1);
+  });
+
+  it('skips anyone else as if the email went out, and logs without the address', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const sender = withEmailAllowlist(devEmailSender, ['someone.else@uqu.edu.sa']);
+    await expect(sender.send(message)).resolves.toBeUndefined();
+    expect(sentEmails()).toEqual([]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(message.to);
+  });
+
+  it('leaves the sender alone when no list is set', () => {
+    expect(withEmailAllowlist(devEmailSender, null)).toBe(devEmailSender);
   });
 });

@@ -63,6 +63,8 @@ export default defineConfig({
             // Sending real email from a test run would be a surprise; a developer who has
             // set EMAIL_TRANSPORT=resend in .env.local does not get one.
             EMAIL_TRANSPORT: 'console',
+            // Tests read every email they cause; a developer's dev allowlist must not swallow them.
+            EMAIL_ALLOWLIST: '',
           },
         },
       },

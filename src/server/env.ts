@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { parseEmailDomains } from '@/shared/lib/email-domains';
+import { normalizeEmail, parseEmailDomains } from '@/shared/lib/email-domains';
 import { parseSelfSignup } from '@/shared/lib/self-signup';
 
 /**
@@ -115,6 +115,27 @@ const envSchema = (phase: string | undefined) =>
       /** For example `Digital Minds <no-reply@auth.digitalmindsint.org>`. */
       EMAIL_FROM: optionalString,
       /**
+       * Comma-separated addresses; when set, only they receive email and every other send is
+       * skipped (src/server/email/allowlist.ts). For the hosted dev environment, never production.
+       */
+      EMAIL_ALLOWLIST: optionalString.pipe(
+        z
+          .string()
+          .transform((raw) =>
+            raw
+              .split(',')
+              .map(normalizeEmail)
+              .filter((address) => address.length > 0),
+          )
+          .pipe(z.array(z.email({ error: 'must list email addresses' })).min(1))
+          .optional(),
+      ),
+      /**
+       * Set by Vercel on every deployment: `production`, `preview` or `development`. Dev and
+       * production both run NODE_ENV=production, so this is what tells them apart.
+       */
+      VERCEL_ENV: optionalString,
+      /**
        * `false` makes sign-in invite-only: codes go only to people with dashboard access, and
        * the sign-in flow never creates an account (docs/adr/0027-invite-only-sign-in.md).
        * Unset means `true` in development and test; a production server requires it.
@@ -190,6 +211,15 @@ const envSchema = (phase: string | undefined) =>
             'must be "resend" in production (the console sender prints sign-in codes to the log)',
         });
       }
+      // An allowlist on production would silently stop sign-in codes reaching real people.
+      if (productionServer && env.VERCEL_ENV === 'production' && env.EMAIL_ALLOWLIST) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['EMAIL_ALLOWLIST'],
+          message:
+            'must not be set in production (only the listed addresses would get sign-in codes)',
+        });
+      }
       if (productionServer && env.DEV_ACTOR_SWITCHER) {
         ctx.addIssue({
           code: 'custom',
@@ -214,6 +244,7 @@ const envSchema = (phase: string | undefined) =>
       APP_ORIGIN: env.APP_ORIGIN ?? 'http://localhost:3000',
       AUTH_SECRET: env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
       AUTH_SELF_SIGNUP: parseSelfSignup(env.AUTH_SELF_SIGNUP),
+      EMAIL_ALLOWLIST: env.EMAIL_ALLOWLIST ?? null,
       VIEW_LINK_SECRET: env.VIEW_LINK_SECRET ?? env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
       CLIENT_IP_HEADER:
         env.CLIENT_IP_HEADER === undefined || env.CLIENT_IP_HEADER === 'none'

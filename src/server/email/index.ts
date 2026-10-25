@@ -2,6 +2,7 @@ import 'server-only';
 
 import { env } from '@/server/env';
 
+import { withEmailAllowlist } from './allowlist';
 import { devEmailSender } from './dev';
 import { createResendSender } from './resend';
 import type { EmailSender } from './types';
@@ -13,9 +14,14 @@ export type { EmailMessage, EmailSender } from './types';
  * code included) and keeps it in memory for tests. It defaults to the console in development
  * and test and to Resend in production, and env.ts refuses to start a server whose transport
  * has no key — so this is a choice, never a guess from which variables happen to be set.
+ *
+ * EMAIL_ALLOWLIST, when set (the dev environment only), narrows either transport to the listed
+ * addresses.
  */
-export const emailSender: EmailSender =
-  env.EMAIL_TRANSPORT === 'resend' ? resend() : devEmailSender;
+export const emailSender: EmailSender = withEmailAllowlist(
+  env.EMAIL_TRANSPORT === 'resend' ? resend() : devEmailSender,
+  env.EMAIL_ALLOWLIST,
+);
 
 function resend(): EmailSender {
   const { RESEND_API_KEY: apiKey, EMAIL_FROM: from } = env;
