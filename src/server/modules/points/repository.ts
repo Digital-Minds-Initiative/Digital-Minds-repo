@@ -655,6 +655,14 @@ export interface BulkPointsInput {
  * do — the db client maps it to a 409 before a repository could read it, and a request that rolls
  * back has to leave its key free for the corrected retry.
  */
+/**
+ * Prisma's defaults (5 s to run, 2 s to get a connection) are for small transactions. Three
+ * concurrent 5000-pair batches overran the 5 s and failed whole (ADR 0022, amendment); 20 s leaves
+ * a 2000-pair batch room under load, and a request may wait up to 10 s for a pooled connection
+ * while other batches hold theirs. Both stay well inside a Vercel function's time limit.
+ */
+const BULK_TRANSACTION_OPTIONS = { timeout: 20_000, maxWait: 10_000 } as const;
+
 export async function savePointsBatch(
   scopes: {
     members: MemberScope;
@@ -701,7 +709,7 @@ export async function savePointsBatch(
       select: { id: true, committeeId: true },
     });
     return { rows: [...rows].sort((a, b) => (a.id < b.id ? -1 : 1)), exists: false };
-  });
+  }, BULK_TRANSACTION_OPTIONS);
 }
 
 // ─── Revisions ───────────────────────────────────────────────

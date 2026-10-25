@@ -363,15 +363,15 @@ describe('bulk points across a club', () => {
       expect(() => body([])).toThrow();
     });
 
-    it('takes 5000 pairs and refuses 5001', () => {
+    it('takes 2000 pairs and refuses 2001', () => {
       // Written out, not derived from the constant, so the number itself is pinned.
-      expect(CLUB_POINTS_BULK_MAX).toBe(5000);
-      const pairs = Array.from({ length: 5001 }, (_, i) => ({
+      expect(CLUB_POINTS_BULK_MAX).toBe(2000);
+      const pairs = Array.from({ length: 2001 }, (_, i) => ({
         memberId: `0199c0e5-3333-7000-8000-${String(i).padStart(12, '0')}`,
         committeeId: s.committees.a1.id,
       }));
       expect(() => body(pairs)).toThrow();
-      expect(() => body(pairs.slice(0, 5000))).not.toThrow();
+      expect(() => body(pairs.slice(0, 2000))).not.toThrow();
     });
   });
 

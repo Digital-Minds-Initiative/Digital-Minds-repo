@@ -1,6 +1,6 @@
 # 0022. Bulk points: two endpoints, all or nothing, and a key that makes a resend harmless
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-25 — the club batch takes 2000 pairs, and the write gets a 20 s transaction ([below](#amendment-2026-10-25-2000-pairs-and-a-20-s-transaction))
 - Date: 2026-10-17
 
 ## Context
@@ -214,3 +214,24 @@ list is the one exception to "outside scope is a 404 on the request"; the reques
 not. The 422 list is capped, so a client must treat a short list as "at least these". And a batch
 is a label, not a unit of work: editing or cancelling one of its transactions never touches the
 others, and nothing in this decision adds a bulk edit or a bulk cancel.
+
+## Amendment (2026-10-25): 2000 pairs and a 20 s transaction
+
+The 5000-pair limit was measured alone: one batch took about 3 s inside its transaction. Before
+launch, three **concurrent** 5000-pair club batches were sent against a local server
+(`pnpm measure:bulk`). All three failed with a 500: each overran Prisma's default interactive
+transaction timeout of 5 s while the others held the database. All-or-nothing held — nothing was
+written and every key was freed — but three officers ending a term at the same time would each
+have been told the batch failed. Two concurrent batches passed at 4–5 s each, too close to the
+same edge.
+
+- `CLUB_POINTS_BULK_MAX` is now **2000**, decided without measuring further on the hosted
+  database: nothing in the product needs 5000 pairs in one request, and a whole club's term
+  attendance fits in a few batches. The committee limit stays at **500**.
+- `savePointsBatch` runs its transaction with `timeout: 20_000` and `maxWait: 10_000`, instead of
+  the defaults of 5 s and 2 s. The 20 s ceiling is what absorbs concurrent batches; the 10 s lets a
+  request wait for a pooled connection while other batches hold theirs. Both stay well inside a
+  Vercel function's time limit.
+
+Everything else in this decision stands. `pnpm measure:bulk` stays in the repository: run it
+against dev before raising either number.

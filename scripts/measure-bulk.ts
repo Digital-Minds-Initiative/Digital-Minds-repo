@@ -1,11 +1,11 @@
 /*
- * How long concurrent 5000-entry club bulk-points requests take against a hosted environment, to
- * decide whether CLUB_POINTS_BULK_MAX stays at 5000 (docs/reviews/2026-10-backend-review.md, S1/Q2).
+ * How long concurrent club bulk-points requests of CLUB_POINTS_BULK_MAX pairs take against a hosted
+ * environment — run it before raising that limit or the bulk transaction's timeout (ADR 0022).
  * Only for the dev environment or a local server — never production.
  *
- *   pnpm measure:bulk setup      creates a scratch club «قياس الحمل (مؤقت)» with 2500 people in two
- *                                committees (5000 pairs), written straight to the database
- *   pnpm measure:bulk run [N]    sends N (2 or 3, default 3) concurrent 5000-pair requests to
+ *   pnpm measure:bulk setup      creates a scratch club «قياس الحمل (مؤقت)» with CLUB_POINTS_BULK_MAX / 2
+ *                                people in two committees, written straight to the database
+ *   pnpm measure:bulk run [N]    sends N (2 or 3, default 3) concurrent full-size requests to
  *                                MEASURE_ORIGIN as the signed-in person whose session is MEASURE_SESSION
  *   pnpm measure:bulk teardown   deletes the scratch club, its people and every point given in it
  *
