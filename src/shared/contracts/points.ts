@@ -261,8 +261,11 @@ export const listPointTransactionRevisionsEndpoint = defineEndpoint({
 
 /** Members one committee-bulk request may cover. */
 export const COMMITTEE_POINTS_BULK_MAX = 500;
-/** Member-and-committee pairs one club-bulk request may cover. */
-export const CLUB_POINTS_BULK_MAX = 5000;
+/**
+ * Member-and-committee pairs one club-bulk request may cover. 2000, down from 5000: three concurrent
+ * 5000-pair batches outran their transaction (docs/adr/0022-bulk-points.md, amendment).
+ */
+export const CLUB_POINTS_BULK_MAX = 2000;
 /**
  * Rejected entries one 422 lists. A request big enough to pass it is already all-or-nothing, so
  * a truncated list still describes a request that wrote nothing.

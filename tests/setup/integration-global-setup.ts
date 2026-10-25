@@ -32,7 +32,9 @@ export default async function setup(): Promise<void> {
   }
 
   execSync('pnpm exec prisma migrate deploy', {
-    env: { ...process.env, DATABASE_URL: url },
+    // DIRECT_URL too: prisma.config.ts prefers it, and one in a developer's .env.local must
+    // never point the test migrations at another database.
+    env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url },
     stdio: 'inherit',
   });
 }

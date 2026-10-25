@@ -27,7 +27,8 @@ export default async function globalSetup(): Promise<void> {
     await admin.end();
   }
 
-  const env = { ...process.env, DATABASE_URL: url };
+  // DIRECT_URL too: prisma.config.ts and the seed prefer it over DATABASE_URL.
+  const env = { ...process.env, DATABASE_URL: url, DIRECT_URL: url };
   execSync('pnpm exec prisma migrate deploy', { env, stdio: 'inherit' });
   execSync('pnpm exec prisma db seed', { env, stdio: 'inherit' });
 }

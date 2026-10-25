@@ -35,7 +35,7 @@ describe('sign-in email step', () => {
     );
     const user = userEvent.setup();
     renderWithProviders(<SignInFlow mode="login" selfSignup />);
-    await user.type(await screen.findByLabelText(/البريد الجامعي/), 's443001102@st.uqu.edu.sa');
+    await user.type(await screen.findByLabelText(/البريد الجامعي/), 's000000001@st.uqu.edu.sa');
     await user.dblClick(screen.getByRole('button', { name: 'تسجيل الدخول' }));
     await waitFor(() => expect(screen.getByText('اكتب الرمز')).toBeTruthy());
     expect(requests).toBe(1);

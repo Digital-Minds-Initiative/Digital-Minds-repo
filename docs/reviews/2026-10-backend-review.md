@@ -348,7 +348,7 @@ database and check the pool size, and consider lowering `CLUB_POINTS_BULK_MAX` t
 2000 if the numbers are uncomfortable — nothing in the product needs 5000 in one request, and the
 limit is an exported constant precisely so it can change.
 
-**Decided (2026-10-19): keep 5000**, and measure on the hosted database — the measurement is an
+**Superseded (2026-10-25): 2000, with a 20 s transaction** — three concurrent 5000-pair batches overran the 5 s default ([ADR 0022](../adr/0022-bulk-points.md), amendment). **Decided (2026-10-19): keep 5000**, and measure on the hosted database — the measurement is an
 environment-setup item below, not a code change.
 
 ### Q3 — `User.publicId` is the public identifier for every committee page

@@ -31,6 +31,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0025](0025-members-export.md)                    | Members export: the list written to a file, refused rather than trimmed, and logged | Accepted                        |
 | [0026](0026-person-deletion.md)                   | Deleting a person's data: the account is emptied in place                           | Accepted (amends 0003, 0019)    |
 | [0027](0027-invite-only-sign-in.md)               | Invite-only sign-in at launch, and invitations for new role holders                 | Accepted (amends 0014, 0018)    |
+| [0028](0028-hosting-and-deploys.md)               | Vercel and Neon in Frankfurt, deployed only from GitHub Actions                     | Accepted                        |
 
 ## Writing a new ADR
 

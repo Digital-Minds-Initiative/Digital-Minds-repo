@@ -16,21 +16,21 @@ import { E2E_ORIGIN } from './database';
  * «حساب التجربة» menu sets.
  */
 export const persona = {
-  admin: 'aalghamdi@uqu.edu.sa',
-  officerComputing: 's443001102@st.uqu.edu.sa',
-  officerTuwaiq: 's442002118@st.uqu.edu.sa',
+  admin: 'demo-staff-01@uqu.edu.sa',
+  officerComputing: 's000000001@st.uqu.edu.sa',
+  officerTuwaiq: 's000000002@st.uqu.edu.sa',
   /** Officer of Computing, plain member of Tuwaiq. */
-  mixedOfficer: 's443003127@st.uqu.edu.sa',
+  mixedOfficer: 's000000003@st.uqu.edu.sa',
   /** Lead of Tuwaiq / التطوير, plain member of Computing / البرمجة. */
-  mixedLead: 's443005244@st.uqu.edu.sa',
+  mixedLead: 's000000007@st.uqu.edu.sa',
   /** Lead of Computing / البرمجة. */
-  leadProgramming: 's444001205@st.uqu.edu.sa',
+  leadProgramming: 's000000004@st.uqu.edu.sa',
   /** Lead of Computing / الفعاليات and الإعلام. */
-  leadOfTwo: 's443004231@st.uqu.edu.sa',
-  plainMember: 's445001301@st.uqu.edu.sa',
+  leadOfTwo: 's000000006@st.uqu.edu.sa',
+  plainMember: 's000000011@st.uqu.edu.sa',
   /** Removed from Computing, where they were a design lead; still a member of Tuwaiq. */
-  removed: 's443006378@st.uqu.edu.sa',
-  noMemberships: 's445008468@st.uqu.edu.sa',
+  removed: 's000000018@st.uqu.edu.sa',
+  noMemberships: 's000000027@st.uqu.edu.sa',
 } as const;
 
 export const club = { computing: 'نادي الحاسبات', tuwaiq: 'نادي طويق' } as const;

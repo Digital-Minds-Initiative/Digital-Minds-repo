@@ -25,8 +25,8 @@ const asActor = (uniEmail: string) =>
   });
 
 /** Seeded personas (README "Seeded accounts"): سارة is an officer of the Computing club. */
-const OFFICER = 's443001102@st.uqu.edu.sa';
-const LEAD = 's444002216@st.uqu.edu.sa'; // ريم: leads one committee of the Computing club
+const OFFICER = 's000000001@st.uqu.edu.sa';
+const LEAD = 's000000005@st.uqu.edu.sa'; // ريم: leads one committee of the Computing club
 
 const file = (...lines: string[]) =>
   Buffer.from(

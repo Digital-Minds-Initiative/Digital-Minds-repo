@@ -25,7 +25,7 @@ export const WithLabel: Story = {
 
 /** Emails and phone numbers stay left-to-right inside an RTL form. */
 export const LeftToRightValue: Story = {
-  args: { type: 'email', dir: 'ltr', defaultValue: 's443001102@st.uqu.edu.sa' },
+  args: { type: 'email', dir: 'ltr', defaultValue: 's000000001@st.uqu.edu.sa' },
 };
 
 export const Invalid: Story = { args: { 'aria-invalid': true, defaultValue: 'خطأ' } };

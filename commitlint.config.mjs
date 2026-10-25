@@ -1,6 +1,6 @@
 // Conventional Commits: https://www.conventionalcommits.org
-// Checked locally on every commit (Husky) and on the PR title in CI, because we squash-merge
-// and the PR title becomes the commit message on `main`.
+// Checked locally on every commit (Husky) and on the PR title in CI, because feature PRs are
+// squash-merged and the PR title becomes the commit message on `develop`.
 export default {
   extends: ['@commitlint/config-conventional'],
   rules: {

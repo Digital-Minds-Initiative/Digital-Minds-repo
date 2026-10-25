@@ -18,8 +18,8 @@ import { openWorkbook } from '@tests/utils/xlsx';
 
 const BASE_URL = 'http://localhost:3000';
 /** Seeded personas (README "Seeded accounts"). */
-const OFFICER = 's443001102@st.uqu.edu.sa'; // سارة: officer of the Computing club
-const LEAD = 's444002216@st.uqu.edu.sa'; // ريم: leads one committee of the Computing club
+const OFFICER = 's000000001@st.uqu.edu.sa'; // سارة: officer of the Computing club
+const LEAD = 's000000005@st.uqu.edu.sa'; // ريم: leads one committee of the Computing club
 
 function idOf(key: string): string {
   const club = demoClubs.find((candidate) => candidate.key === key);

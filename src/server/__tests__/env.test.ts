@@ -126,6 +126,32 @@ describe('auth and email settings', () => {
     });
   });
 
+  it('reads EMAIL_ALLOWLIST as normalised addresses, and null when unset', () => {
+    expect(parseServerEnv(valid)).toMatchObject({ EMAIL_ALLOWLIST: null });
+    expect(parseServerEnv({ ...valid, EMAIL_ALLOWLIST: '' })).toMatchObject({
+      EMAIL_ALLOWLIST: null,
+    });
+    expect(
+      parseServerEnv({ ...valid, EMAIL_ALLOWLIST: ' A@St.UQU.edu.sa , b@uqu.edu.sa,' }),
+    ).toMatchObject({ EMAIL_ALLOWLIST: ['a@st.uqu.edu.sa', 'b@uqu.edu.sa'] });
+    expect(() => parseServerEnv({ ...valid, EMAIL_ALLOWLIST: 'a@uqu.edu.sa, nobody' })).toThrow(
+      /EMAIL_ALLOWLIST/,
+    );
+  });
+
+  it('allows EMAIL_ALLOWLIST on a dev (preview) deployment but refuses it in production', () => {
+    const list = { EMAIL_ALLOWLIST: 'a@uqu.edu.sa' };
+    expect(parseServerEnv({ ...production, ...list, VERCEL_ENV: 'preview' })).toMatchObject({
+      EMAIL_ALLOWLIST: ['a@uqu.edu.sa'],
+    });
+    expect(() => parseServerEnv({ ...production, ...list, VERCEL_ENV: 'production' })).toThrow(
+      /EMAIL_ALLOWLIST must not be set in production/,
+    );
+    expect(parseServerEnv({ ...production, VERCEL_ENV: 'production' })).toMatchObject({
+      EMAIL_ALLOWLIST: null,
+    });
+  });
+
   it('keeps self sign-up on in development and tests unless it is turned off', () => {
     for (const NODE_ENV of ['development', 'test']) {
       expect(parseServerEnv({ ...valid, NODE_ENV })).toMatchObject({ AUTH_SELF_SIGNUP: true });

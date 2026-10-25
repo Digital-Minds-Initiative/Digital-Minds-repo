@@ -13,8 +13,8 @@ describe('isAllowedEmailDomain', () => {
 
   it('accepts the domain and its subdomains', () => {
     expect(isAllowedEmailDomain('staff@uqu.edu.sa', allowed)).toBe(true);
-    expect(isAllowedEmailDomain('s443001102@st.uqu.edu.sa', allowed)).toBe(true);
-    expect(isAllowedEmailDomain('S443001102@ST.UQU.EDU.SA', allowed)).toBe(true);
+    expect(isAllowedEmailDomain('s000000001@st.uqu.edu.sa', allowed)).toBe(true);
+    expect(isAllowedEmailDomain('S000000001@ST.UQU.EDU.SA', allowed)).toBe(true);
   });
 
   it('rejects look-alike and unrelated domains', () => {

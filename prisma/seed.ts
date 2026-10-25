@@ -2,11 +2,21 @@
  * Development seed: REPLACES all data with the demo dataset (src/shared/demo), the same one the
  * MSW mocks use, so the seeded accounts match the mock personas. Run with `pnpm db:seed`
  * (or `pnpm db:reset` to also re-apply migrations).
+ *
+ * It connects with DIRECT_URL when set (TRUNCATE needs the owner role), else DATABASE_URL. A hosted
+ * database — the Neon dev branch — is seeded only with ALLOW_SEED=true **and** when the database
+ * itself says it is dev (scripts/lib/database-target.ts); the README runbook has the command.
  */
 import nextEnv from '@next/env';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 import { truncateAllTables } from './truncate';
+import {
+  assertDevDatabase,
+  describeDatabase,
+  isLocalDatabase,
+  scriptDatabaseUrl,
+} from '../scripts/lib/database-target';
 import { PrismaClient, type Prisma } from '../src/server/db/generated/client';
 import {
   demoClubs,
@@ -37,8 +47,13 @@ function assertSafeToSeed(): string {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Refusing to seed: NODE_ENV is production. The seed deletes all data.');
   }
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL is not set. Copy .env.example to .env first.');
+  const url = scriptDatabaseUrl();
+  if (!isLocalDatabase(url) && process.env.ALLOW_SEED !== 'true') {
+    throw new Error(
+      `Refusing to seed ${describeDatabase(url)}: it is not a local database. The seed deletes all ` +
+        'data; set ALLOW_SEED=true to seed the hosted dev database.',
+    );
+  }
 
   const domains = parseEmailDomains(process.env.ALLOWED_EMAIL_DOMAINS ?? '');
   const rejected = demoPeople.filter((person) => !isAllowedEmailDomain(person.uniEmail, domains));
@@ -52,7 +67,8 @@ function assertSafeToSeed(): string {
 }
 
 async function main(): Promise<void> {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: assertSafeToSeed() }) });
+  const url = assertSafeToSeed();
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
   const now = new Date();
   const today = todayInAppTimeZone(now);
 
@@ -71,6 +87,7 @@ async function main(): Promise<void> {
     );
 
   try {
+    await assertDevDatabase(db, url, 'seed');
     await db.$transaction(async (tx) => {
       await truncateAllTables(tx);
 

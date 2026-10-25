@@ -54,6 +54,7 @@ export default defineConfig({
           hookTimeout: 60_000,
           env: {
             DATABASE_URL: process.env.TEST_DATABASE_URL ?? '',
+            DIRECT_URL: process.env.TEST_DATABASE_URL ?? '',
             DEV_ACTOR_SWITCHER: 'true',
             // Requests in tests are built for http://localhost; emails stay in memory.
             APP_ORIGIN: 'http://localhost',
@@ -62,6 +63,8 @@ export default defineConfig({
             // Sending real email from a test run would be a surprise; a developer who has
             // set EMAIL_TRANSPORT=resend in .env.local does not get one.
             EMAIL_TRANSPORT: 'console',
+            // Tests read every email they cause; a developer's dev allowlist must not swallow them.
+            EMAIL_ALLOWLIST: '',
           },
         },
       },
