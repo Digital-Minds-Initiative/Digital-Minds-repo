@@ -30,9 +30,9 @@ const as = (uniEmail: string) =>
   });
 
 /** Demo personas (README "Seeded accounts"). */
-const admin = as('s443001102@st.uqu.edu.sa');
-const lead = as('s444002216@st.uqu.edu.sa');
-const plainMember = as('s445001301@st.uqu.edu.sa');
+const admin = as('s000000001@st.uqu.edu.sa');
+const lead = as('s000000005@st.uqu.edu.sa');
+const plainMember = as('s000000011@st.uqu.edu.sa');
 const anonymous = createApiClient({ baseUrl: BASE_URL });
 
 /** The committee the demo data gives a link to: the first of the computing club. */

@@ -36,11 +36,11 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-const ADMIN = 'aalghamdi@uqu.edu.sa';
+const ADMIN = 'demo-staff-01@uqu.edu.sa';
 /** Officer of نادي الحاسبات. */
-const OFFICER = 's443001102@st.uqu.edu.sa';
+const OFFICER = 's000000001@st.uqu.edu.sa';
 /** Leads لجنة البرمجة in نادي الحاسبات. */
-const LEAD = 's444001205@st.uqu.edu.sa';
+const LEAD = 's000000004@st.uqu.edu.sa';
 
 /** A member of لجنة البرمجة, so the officer and the lead both see them. */
 const MEMBER_NAME = 'بندر عادل الزهراني';
@@ -314,7 +314,7 @@ describe('members page — numbers and table', { timeout: 30_000 }, () => {
   it('copies a member’s email from the button beside it', async () => {
     const user = await renderTable(OFFICER);
     await user.click(screen.getByRole('button', { name: `نسخ بريد ${MEMBER_NAME}` }));
-    expect(await navigator.clipboard.readText()).toBe('s445004389@st.uqu.edu.sa');
+    expect(await navigator.clipboard.readText()).toBe('s000000019@st.uqu.edu.sa');
   });
 });
 

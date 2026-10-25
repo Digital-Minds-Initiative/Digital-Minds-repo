@@ -48,4 +48,5 @@ The build comes first, so a commit that does not build never touches the databas
 - `src/server/db/client.ts` hands its `pg.Pool` to Vercel's `attachDatabasePool`, so a suspended Fluid-compute instance closes its idle connections instead of leaking them. It does nothing anywhere else.
 - The client IP for rate limits is `x-real-ip`, which Vercel overwrites with the connecting address (`CLIENT_IP_HEADER`).
 - Vercel caps request bodies at 4.5 MB, above the app's own 2 MB.
+- Dev sends real email but holds demo data, so `EMAIL_ALLOWLIST` limits it to the testers' addresses; every other send is skipped invisibly. A production deployment (`VERCEL_ENV=production`) refuses to start with it set. The demo dataset's university addresses are patterns no person has (`s000000001@st.uqu.edu.sa`, `demo-staff-01@uqu.edu.sa`).
 - The repository is public, so the workflow logs and backup artifacts are readable by anyone. The workflows print no secret (GitHub also masks them). `prisma migrate deploy` does print the database host, which is not a credential. A backup's only protection is its passphrase; an off-GitHub bucket is the better long-term place for them.

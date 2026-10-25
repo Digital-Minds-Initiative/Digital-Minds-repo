@@ -30,10 +30,10 @@ afterEach(() => {
 afterAll(() => server.close());
 
 // The mocks keep a resend cooldown per address, so tests that do not finish the sign-in use their own.
-const REGISTERED = 's443001102@st.uqu.edu.sa';
-const FOR_WRONG_CODE = 's442002118@st.uqu.edu.sa';
-const FOR_EXPIRED_CODE = 's443003127@st.uqu.edu.sa';
-const UNREGISTERED = 's446001356@st.uqu.edu.sa';
+const REGISTERED = 's000000001@st.uqu.edu.sa';
+const FOR_WRONG_CODE = 's000000002@st.uqu.edu.sa';
+const FOR_EXPIRED_CODE = 's000000003@st.uqu.edu.sa';
+const UNREGISTERED = 's000000016@st.uqu.edu.sa';
 
 async function requestCode(email: string) {
   const user = userEvent.setup();
@@ -127,7 +127,7 @@ describe('SignInFlow with sign-up off (invite-only, ADR 0027)', () => {
 
   it('says the same after asking for a code, whoever the address is', async () => {
     const texts: string[] = [];
-    for (const email of ['s444001205@st.uqu.edu.sa', 's449999999@st.uqu.edu.sa']) {
+    for (const email of ['s000000004@st.uqu.edu.sa', 's449999999@st.uqu.edu.sa']) {
       const user = userEvent.setup();
       const view = renderWithProviders(<SignInFlow mode="login" selfSignup={false} />);
       await user.type(await screen.findByLabelText(/البريد الجامعي/), email);

@@ -34,9 +34,9 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 /** Officer of نادي الحاسبات. */
-const OFFICER = 's443001102@st.uqu.edu.sa';
+const OFFICER = 's000000001@st.uqu.edu.sa';
 /** Leads لجنة البرمجة in نادي الحاسبات. */
-const LEAD = 's444001205@st.uqu.edu.sa';
+const LEAD = 's000000004@st.uqu.edu.sa';
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: 'error' });

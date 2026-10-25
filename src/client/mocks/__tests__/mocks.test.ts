@@ -75,17 +75,17 @@ describe('mock scoping mirrors the real rules', () => {
   const clubOf = (key: string) => demoClubs.find((club) => club.key === key)?.name;
 
   it('full admin sees every membership', () => {
-    expect(membersVisibleTo('aalghamdi@uqu.edu.sa').total).toBe(db.memberships.length);
+    expect(membersVisibleTo('demo-staff-01@uqu.edu.sa').total).toBe(db.memberships.length);
   });
 
   it('a club officer sees only their club', () => {
-    const page = membersVisibleTo('s443001102@st.uqu.edu.sa'); // sara, officer of computing
+    const page = membersVisibleTo('s000000001@st.uqu.edu.sa'); // sara, officer of computing
     expect(page.total).toBeGreaterThan(0);
     expect(page.items.every((member) => member.club.name === clubOf('computing'))).toBe(true);
   });
 
   it('a lead sees only members of their committee, and only that committee', () => {
-    const page = membersVisibleTo('s444002216@st.uqu.edu.sa'); // reem, lead of design
+    const page = membersVisibleTo('s000000005@st.uqu.edu.sa'); // reem, lead of design
     expect(page.total).toBeGreaterThan(0);
     for (const member of page.items) {
       expect(member.committees.map((committee) => committee.name)).toEqual(['لجنة التصميم']);
@@ -93,12 +93,12 @@ describe('mock scoping mirrors the real rules', () => {
   });
 
   it('a person with mixed roles gets officer scope in one club only', () => {
-    const page = membersVisibleTo('s443003127@st.uqu.edu.sa'); // noura: officer computing, member tuwaiq
+    const page = membersVisibleTo('s000000003@st.uqu.edu.sa'); // noura: officer computing, member tuwaiq
     expect(page.items.every((member) => member.club.name === clubOf('computing'))).toBe(true);
   });
 
   it('plain members and people without memberships see nothing', () => {
-    expect(membersVisibleTo('s445001301@st.uqu.edu.sa').total).toBe(0); // faisal
-    expect(membersVisibleTo('s445008468@st.uqu.edu.sa').total).toBe(0); // mashael
+    expect(membersVisibleTo('s000000011@st.uqu.edu.sa').total).toBe(0); // faisal
+    expect(membersVisibleTo('s000000027@st.uqu.edu.sa').total).toBe(0); // mashael
   });
 });

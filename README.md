@@ -149,21 +149,21 @@ Other things to try:
 
 | Persona                | Name                    | University email           | Role and scope                                                                                     |
 | ---------------------- | ----------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
-| Full admin             | عبدالله محمد الغامدي    | `aalghamdi@uqu.edu.sa`     | Everything, in every club.                                                                         |
-| Officer — Computing    | سارة عبدالرحمن القحطاني | `s443001102@st.uqu.edu.sa` | Everything in نادي الحاسبات.                                                                       |
-| Officer — Tuwaiq       | فهد سعد العنزي          | `s442002118@st.uqu.edu.sa` | Everything in نادي طويق.                                                                           |
-| **Mixed roles**        | نورة خالد الحربي        | `s443003127@st.uqu.edu.sa` | Officer of نادي الحاسبات; plain member of نادي طويق (in التطوير and المحتوى). Sees only Computing. |
-| **Mixed roles**        | عبدالرحمن فيصل القرشي   | `s443005244@st.uqu.edu.sa` | Lead of Tuwaiq / التطوير; plain member of Computing / البرمجة.                                     |
-| Lead                   | محمد عبدالله العتيبي    | `s444001205@st.uqu.edu.sa` | Lead of Computing / البرمجة (also a member of التصميم).                                            |
-| Lead                   | ريم ناصر الشهري         | `s444002216@st.uqu.edu.sa` | Lead of Computing / التصميم.                                                                       |
-| Lead of two committees | خالد إبراهيم المالكي    | `s443004231@st.uqu.edu.sa` | Lead of Computing / الفعاليات and الإعلام.                                                         |
-| Co-lead                | إبراهيم يوسف الصاعدي    | `s444004278@st.uqu.edu.sa` | Second lead of Computing / البرمجة.                                                                |
-| Lead                   | جود سلطان الأحمدي       | `s444003252@st.uqu.edu.sa` | Lead of Tuwaiq / المحتوى.                                                                          |
-| Lead                   | ماجد حسن السلمي         | `s442006263@st.uqu.edu.sa` | Lead of Tuwaiq / العلاقات العامة.                                                                  |
-| Member of both clubs   | يوسف علي الشمراني       | `s444006345@st.uqu.edu.sa` | Plain member; no dashboard access.                                                                 |
-| Plain member           | فيصل أحمد الدوسري       | `s445001301@st.uqu.edu.sa` | Plain member of two committees; no dashboard access.                                               |
-| Removed                | منى سعيد الحازمي        | `s443006378@st.uqu.edu.sa` | Removed from Computing (was a design lead — rights gone); still a member of Tuwaiq.                |
-| No memberships         | مشاعل راشد اليامي       | `s445008468@st.uqu.edu.sa` | Registered, in no club.                                                                            |
+| Full admin             | عبدالله محمد الغامدي    | `demo-staff-01@uqu.edu.sa` | Everything, in every club.                                                                         |
+| Officer — Computing    | سارة عبدالرحمن القحطاني | `s000000001@st.uqu.edu.sa` | Everything in نادي الحاسبات.                                                                       |
+| Officer — Tuwaiq       | فهد سعد العنزي          | `s000000002@st.uqu.edu.sa` | Everything in نادي طويق.                                                                           |
+| **Mixed roles**        | نورة خالد الحربي        | `s000000003@st.uqu.edu.sa` | Officer of نادي الحاسبات; plain member of نادي طويق (in التطوير and المحتوى). Sees only Computing. |
+| **Mixed roles**        | عبدالرحمن فيصل القرشي   | `s000000007@st.uqu.edu.sa` | Lead of Tuwaiq / التطوير; plain member of Computing / البرمجة.                                     |
+| Lead                   | محمد عبدالله العتيبي    | `s000000004@st.uqu.edu.sa` | Lead of Computing / البرمجة (also a member of التصميم).                                            |
+| Lead                   | ريم ناصر الشهري         | `s000000005@st.uqu.edu.sa` | Lead of Computing / التصميم.                                                                       |
+| Lead of two committees | خالد إبراهيم المالكي    | `s000000006@st.uqu.edu.sa` | Lead of Computing / الفعاليات and الإعلام.                                                         |
+| Co-lead                | إبراهيم يوسف الصاعدي    | `s000000010@st.uqu.edu.sa` | Second lead of Computing / البرمجة.                                                                |
+| Lead                   | جود سلطان الأحمدي       | `s000000008@st.uqu.edu.sa` | Lead of Tuwaiq / المحتوى.                                                                          |
+| Lead                   | ماجد حسن السلمي         | `s000000009@st.uqu.edu.sa` | Lead of Tuwaiq / العلاقات العامة.                                                                  |
+| Member of both clubs   | يوسف علي الشمراني       | `s000000015@st.uqu.edu.sa` | Plain member; no dashboard access.                                                                 |
+| Plain member           | فيصل أحمد الدوسري       | `s000000011@st.uqu.edu.sa` | Plain member of two committees; no dashboard access.                                               |
+| Removed                | منى سعيد الحازمي        | `s000000018@st.uqu.edu.sa` | Removed from Computing (was a design lead — rights gone); still a member of Tuwaiq.                |
+| No memberships         | مشاعل راشد اليامي       | `s000000027@st.uqu.edu.sa` | Registered, in no club.                                                                            |
 
 Four more people (رهف، تركي، سلمان، ليان) were added by admins but have **not registered**, so they appear in member lists but cannot be selected as the current user — exactly like real unregistered accounts.
 
@@ -173,7 +173,7 @@ Four more people (رهف، تركي، سلمان، ليان) were added by admin
 - From the command line: send the `X-Dev-Actor` header with the university email:
 
   ```bash
-  curl -H "X-Dev-Actor: s443001102@st.uqu.edu.sa" "http://localhost:3000/api/v1/members?pageSize=5"
+  curl -H "X-Dev-Actor: s000000001@st.uqu.edu.sa" "http://localhost:3000/api/v1/members?pageSize=5"
   ```
 
 The switcher needs `DEV_ACTOR_SWITCHER=true` in `.env` (the default in `.env.example`) and only works with `pnpm dev` and in tests: it is compiled out of production builds, and a production server refuses to start with the flag set. A real session (below) always wins over the switcher.
@@ -197,11 +197,11 @@ Until the sign-in screens exist, use curl (any seeded email, or any `@uqu.edu.sa
 
 ```bash
 # 1. Ask for a code. Every POST needs an Origin equal to APP_ORIGIN (http://localhost:3000 by default).
-curl -X POST http://localhost:3000/api/v1/auth/otp/request   -H "Origin: http://localhost:3000" -H "Content-Type: application/json"   -d '{"email":"s443001102@st.uqu.edu.sa"}'
+curl -X POST http://localhost:3000/api/v1/auth/otp/request   -H "Origin: http://localhost:3000" -H "Content-Type: application/json"   -d '{"email":"s000000001@st.uqu.edu.sa"}'
 
 # 2. The pnpm dev terminal shows:  [dev email] to s44***@st.uqu.edu.sa — رمز الدخول إلى Digital Minds … رمز الدخول: 123456
 #    Send it back and keep the session cookie:
-curl -X POST http://localhost:3000/api/v1/auth/otp/verify -c cookies.txt   -H "Origin: http://localhost:3000" -H "Content-Type: application/json"   -d '{"email":"s443001102@st.uqu.edu.sa","code":"123456"}'
+curl -X POST http://localhost:3000/api/v1/auth/otp/verify -c cookies.txt   -H "Origin: http://localhost:3000" -H "Content-Type: application/json"   -d '{"email":"s000000001@st.uqu.edu.sa","code":"123456"}'
 # → {"step":"signed_in"}   (an unregistered persona gets "confirm_name", a new address "enter_name":
 #    finish with POST /api/v1/auth/profile/name {"fullName":"…"} using -b cookies.txt -c cookies.txt)
 
@@ -228,29 +228,29 @@ Restart `pnpm dev` after changing it. Pick an account from **«حساب التج
 
 ## 5. Scripts
 
-| Script                  | What it does                                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`              | Starts the app at http://localhost:3000 with hot reload.                                                    |
-| `pnpm build`            | Production build (also type-checks).                                                                        |
-| `pnpm start`            | Serves the production build (needs `DEV_ACTOR_SWITCHER=false`).                                             |
-| `pnpm lint`             | ESLint, including the architecture boundary rules. `pnpm lint:fix` fixes what it can.                       |
-| `pnpm format`           | Formats everything with Prettier. `pnpm format:check` only checks.                                          |
-| `pnpm knip`             | Finds unused files, exports and dependencies (configured in `knip.jsonc`; runs in CI).                      |
-| `pnpm typecheck`        | Generates Next.js route types, then runs the TypeScript compiler.                                           |
-| `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                         |
-| `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).              |
-| `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded).         |
-| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                                    |
-| `pnpm db:deploy`        | Applies pending migrations without creating new ones (the deploy workflow runs it).                         |
-| `pnpm db:seed`          | Replaces all data in your local database with the demo data (hosted: dev only, §12.6).                      |
-| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds.                                           |
-| `pnpm db:studio`        | Opens Prisma Studio to browse the database.                                                                 |
-| `pnpm db:generate`      | Regenerates the Prisma client (runs automatically after `pnpm install`).                                    |
-| `pnpm db:backup`        | Encrypted `pg_dump` of a hosted database ([§12.9](#129-backups)).                                           |
-| `pnpm db:restore`       | Restores such a backup into a database, after you type its host ([§12.9](#129-backups)).                    |
-| `pnpm admin:grant`      | Makes a university address a full admin, creating the account if needed ([§12.6](#126-first-deploy)).       |
-| `pnpm measure:bulk`     | Times concurrent 5000-entry bulk-points batches against dev ([§12.10](#1210-measuring-bulk-points-on-dev)). |
-| `pnpm storybook`        | Design system and components at http://localhost:6006. `pnpm storybook:build` builds it statically.         |
+| Script                  | What it does                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`              | Starts the app at http://localhost:3000 with hot reload.                                                                             |
+| `pnpm build`            | Production build (also type-checks).                                                                                                 |
+| `pnpm start`            | Serves the production build (needs `DEV_ACTOR_SWITCHER=false`).                                                                      |
+| `pnpm lint`             | ESLint, including the architecture boundary rules. `pnpm lint:fix` fixes what it can.                                                |
+| `pnpm format`           | Formats everything with Prettier. `pnpm format:check` only checks.                                                                   |
+| `pnpm knip`             | Finds unused files, exports and dependencies (configured in `knip.jsonc`; runs in CI).                                               |
+| `pnpm typecheck`        | Generates Next.js route types, then runs the TypeScript compiler.                                                                    |
+| `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                                                  |
+| `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).                                       |
+| `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded).                                  |
+| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                                                             |
+| `pnpm db:deploy`        | Applies pending migrations without creating new ones (the deploy workflow runs it).                                                  |
+| `pnpm db:seed`          | Replaces all data in your local database with the demo data (hosted: dev only, §12.6).                                               |
+| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds.                                                                    |
+| `pnpm db:studio`        | Opens Prisma Studio to browse the database.                                                                                          |
+| `pnpm db:generate`      | Regenerates the Prisma client (runs automatically after `pnpm install`).                                                             |
+| `pnpm db:backup`        | Encrypted `pg_dump` of a hosted database ([§12.9](#129-backups)).                                                                    |
+| `pnpm db:restore`       | Restores such a backup into a database, after you type its host ([§12.9](#129-backups)).                                             |
+| `pnpm admin:grant`      | Makes a university address a full admin, creating the account if needed ([§12.6](#126-first-deploy)).                                |
+| `pnpm measure:bulk`     | Times concurrent full-size bulk-points batches against dev, before raising the limit ([§12.10](#1210-measuring-bulk-points-on-dev)). |
+| `pnpm storybook`        | Design system and components at http://localhost:6006. `pnpm storybook:build` builds it statically.                                  |
 
 ---
 
@@ -536,7 +536,9 @@ The same names in **Production** and **Preview**. The app refuses to start, nami
 | `EMAIL_FROM`              | `Digital Minds <no-reply@auth.digitalmindsint.org>` | `Digital Minds <no-reply@auth.digitalmindsint.org>` |
 | `DEV_ACTOR_SWITCHER`      | `false`                                             | `false`                                             |
 | `NEXT_PUBLIC_API_MOCKING` | `disabled`                                          | `disabled`                                          |
+| `EMAIL_ALLOWLIST`         | **never set**                                       | the testers' addresses, comma-separated             |
 
+- **`EMAIL_ALLOWLIST` (dev only):** with it set, only the listed addresses receive email (sign-in codes and invitations). Every other send is logged as `Email skipped: the recipient is not on EMAIL_ALLOWLIST.`, without the address, and the API answers exactly as if it had gone out. So on dev, nobody outside the list is ever emailed, whatever address someone types or grants a role to. Add each tester (and yourself) before they sign in, then start a new dev deployment for the change to apply (Actions → the latest **Deploy** run on `develop` → **Re-run all jobs**). Vercel applies changed variables only to new deployments. A production deployment refuses to start with it set: the check uses `VERCEL_ENV`, which Vercel sets to `production` only there, so leave **Settings → Environment Variables → Automatically expose System Environment Variables** on.
 - **Do not set** `DIRECT_URL` (it lives only in GitHub), `EMAIL_TRANSPORT` (production defaults to `resend` and refuses `console`), `NODE_ENV` (Vercel sets it) or `TEST_DATABASE_URL`.
 - **Generate** each secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`, a different value per variable and per environment. Changing `AUTH_SECRET` later invalidates pending sign-in codes; changing `VIEW_LINK_SECRET` invalidates every committee view link.
 - **`CLIENT_IP_HEADER=x-real-ip`:** Vercel sets `x-real-ip` to the address that connected and replaces whatever the client sent, so the per-IP limits on sign-in and on the public view cannot be dodged by forging it.
@@ -577,7 +579,7 @@ Vercel shows each domain as _Valid Configuration_ once DNS has propagated (minut
    pnpm admin:grant s44xxxxxxx@st.uqu.edu.sa --name "الاسم الكامل"
    ```
 
-   It prints the database (host and `app.environment`) and what it did: _Created and granted_, _Granted_ or _No change_. `--name` is needed only for an address with no account yet; it is the name you confirm at your first sign-in. Seeding dev again wipes this, so run it again after every seed. The demo personas cannot sign in on dev, since their addresses are not real inboxes.
+   It prints the database (host and `app.environment`) and what it did: _Created and granted_, _Granted_ or _No change_. `--name` is needed only for an address with no account yet; it is the name you confirm at your first sign-in. Seeding dev again wipes this, so run it again after every seed. On dev your address must also be in `EMAIL_ALLOWLIST`, or the code is never sent. The demo personas cannot sign in on dev: their addresses (`s000000001@st.uqu.edu.sa`, `demo-staff-01@uqu.edu.sa`…) are deliberately ones no person has.
 
 5. Run the smoke test (§12.7) on dev, then on production.
 
@@ -596,7 +598,6 @@ Run it on **dev** first, then on **production** with real but harmless data. On 
 - [ ] Open the browser console on a few pages: no Content-Security-Policy errors.
 - [ ] Response headers (DevTools → Network → the page request): `content-security-policy` with a nonce, `strict-transport-security`, `x-content-type-options: nosniff`, `x-frame-options: DENY`, `referrer-policy`. On the view link's API calls: `referrer-policy: no-referrer` and `x-robots-tag: noindex`.
 - [ ] `https://www.digitalmindsint.org` redirects to `https://digitalmindsint.org`.
-- [ ] **Dev only, once:** the bulk measurement (§12.10).
 
 ### 12.8 Rollback
 
@@ -650,15 +651,15 @@ pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump
 
 ### 12.10 Measuring bulk points on dev
 
-To decide whether 5000 entries per club batch stays (`CLUB_POINTS_BULK_MAX`), measure 2–3 concurrent batches against dev, never production:
+Not part of the launch: the club limit is already 2000 pairs with a 20 s transaction ([ADR 0022](docs/adr/0022-bulk-points.md), amendment). Run this against dev, never production, **before raising** `CLUB_POINTS_BULK_MAX` or the bulk transaction's timeout:
 
 ```bash
 read -rs DIRECT_URL && export DIRECT_URL            # the dev direct URL (the script refuses non-dev databases)
-pnpm measure:bulk setup                             # scratch club «قياس الحمل (مؤقت)»: 2500 people × 2 committees
+pnpm measure:bulk setup                             # scratch club «قياس الحمل (مؤقت)»: CLUB_POINTS_BULK_MAX / 2 people × 2 committees
 export MEASURE_ORIGIN=https://dev.digitalmindsint.org
 read -rs MEASURE_SESSION && export MEASURE_SESSION  # your __Host-dm-session cookie value on dev (DevTools → Application → Cookies)
 pnpm measure:bulk run 3                             # then `run 2`; prints each request's status and time
 pnpm measure:bulk teardown                          # removes the scratch club, its people and its points
 ```
 
-Use **teardown**, not the full-admin club delete: that refuses a club that ever had members. A request that takes longer than about 5 seconds inside its transaction fails with a 500 and writes nothing. That is the limit the measurement is looking for.
+Use **teardown**, not the full-admin club delete: that refuses a club that ever had members. A request that takes longer than 20 seconds inside its transaction fails with a 500 and writes nothing. That is the edge the measurement is looking for.

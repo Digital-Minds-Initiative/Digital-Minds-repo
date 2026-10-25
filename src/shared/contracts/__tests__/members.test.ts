@@ -84,11 +84,11 @@ describe('listMembersQuerySchema', () => {
 describe('createMemberBodySchema', () => {
   it('normalises the person', () => {
     const parsed = createMemberBodySchema.parse({
-      person: { uniEmail: '  S443001102@ST.UQU.EDU.SA ', fullName: ' سارة   القحطاني ' },
+      person: { uniEmail: '  S000000001@ST.UQU.EDU.SA ', fullName: ' سارة   القحطاني ' },
       profile: { phone: '0551234567' },
     });
     expect(parsed.person).toEqual({
-      uniEmail: 's443001102@st.uqu.edu.sa',
+      uniEmail: 's000000001@st.uqu.edu.sa',
       fullName: 'سارة القحطاني',
     });
     expect(parsed.profile).toEqual({ phone: '+966551234567' });
@@ -97,7 +97,7 @@ describe('createMemberBodySchema', () => {
 
   it('rejects anything the body does not define — the club comes from the path', () => {
     const body = {
-      person: { uniEmail: 's443001102@st.uqu.edu.sa', fullName: 'سارة القحطاني' },
+      person: { uniEmail: 's000000001@st.uqu.edu.sa', fullName: 'سارة القحطاني' },
     };
     expect(createMemberBodySchema.safeParse(body).success).toBe(true);
     expect(createMemberBodySchema.safeParse({ ...body, clubId: ID }).success).toBe(false);

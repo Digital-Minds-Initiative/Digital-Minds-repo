@@ -32,11 +32,11 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-const ADMIN = 'aalghamdi@uqu.edu.sa';
-const OFFICER = 's443001102@st.uqu.edu.sa';
-const LEAD = 's444001205@st.uqu.edu.sa';
+const ADMIN = 'demo-staff-01@uqu.edu.sa';
+const OFFICER = 's000000001@st.uqu.edu.sa';
+const LEAD = 's000000004@st.uqu.edu.sa';
 /** A registered member with no role. */
-const MEMBER = 's445001301@st.uqu.edu.sa';
+const MEMBER = 's000000011@st.uqu.edu.sa';
 
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => resetMockDb());

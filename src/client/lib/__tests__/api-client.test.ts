@@ -10,7 +10,7 @@ import { ApiError, createApiClient, filenameFromDisposition } from '../api-clien
 const BASE_URL = 'http://localhost:3000';
 const asOfficer = createApiClient({
   baseUrl: BASE_URL,
-  headers: { cookie: `${DEV_ACTOR_COOKIE}=${encodeURIComponent('s443001102@st.uqu.edu.sa')}` },
+  headers: { cookie: `${DEV_ACTOR_COOKIE}=${encodeURIComponent('s000000001@st.uqu.edu.sa')}` },
 });
 const anonymous = createApiClient({ baseUrl: BASE_URL });
 
@@ -21,7 +21,7 @@ afterAll(() => server.close());
 describe('api client (against the MSW mocks)', () => {
   it('returns contract-validated data', async () => {
     const me = await asOfficer.request(meEndpoint, {});
-    expect(me.user.uniEmail).toBe('s443001102@st.uqu.edu.sa');
+    expect(me.user.uniEmail).toBe('s000000001@st.uqu.edu.sa');
 
     const page = await asOfficer.request(listMembersEndpoint, {
       query: { pageSize: 5, sort: 'joinedAt', order: 'desc' },

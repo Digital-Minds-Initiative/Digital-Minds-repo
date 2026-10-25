@@ -4,8 +4,8 @@ import { readCookie } from '../cookies';
 
 describe('readCookie', () => {
   it('finds a cookie by exact name and decodes its value', () => {
-    const header = 'dm-theme=dark; dm-dev-actor=s443001102%40st.uqu.edu.sa';
-    expect(readCookie(header, 'dm-dev-actor')).toBe('s443001102@st.uqu.edu.sa');
+    const header = 'dm-theme=dark; dm-dev-actor=s000000001%40st.uqu.edu.sa';
+    expect(readCookie(header, 'dm-dev-actor')).toBe('s000000001@st.uqu.edu.sa');
     expect(readCookie(header, 'dm-theme')).toBe('dark');
     expect(readCookie(header, 'theme')).toBeNull();
   });

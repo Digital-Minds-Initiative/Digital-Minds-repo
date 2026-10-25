@@ -31,7 +31,7 @@ function PersonForm() {
         control={form.control}
         name="uniEmail"
         label="البريد الجامعي"
-        description="مثال: s443001102@st.uqu.edu.sa"
+        description="مثال: s000000001@st.uqu.edu.sa"
         required
         render={({ field, controlProps }) => (
           <Input type="email" dir="ltr" {...field} {...controlProps} />
