@@ -499,6 +499,22 @@ describe('committee mode (docs/adr/0029-leads-add-members.md)', () => {
     ).checksum;
     expect(new Set([club, media, tech]).size).toBe(3);
   });
+
+  it('differs per committee even for a file in which no row writes', () => {
+    const invalid = () => [
+      row({ uniEmail: null, issues: [{ field: 'uniEmail', code: 'required' }] }),
+    ];
+    line = 1;
+    const media = buildImportPlan(invalid(), inMedia()).checksum;
+    line = 1;
+    const tech = buildImportPlan(
+      invalid(),
+      clubState({ committee: { id: TECH, name: 'لجنة التقنية' } }),
+    ).checksum;
+    line = 1;
+    const club = buildImportPlan(invalid(), clubState()).checksum;
+    expect(new Set([club, media, tech]).size).toBe(3);
+  });
 });
 
 describe('the «عضو» type', () => {
