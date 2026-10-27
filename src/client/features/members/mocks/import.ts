@@ -49,7 +49,9 @@ const invalidFile = (code: string, field?: string) =>
 const conflict = (reason: string) => mockError('CONFLICT', reason, { reason });
 
 interface MockImportRow extends MemberImportRow {
-  /** What importing this row would do; absent for `existing` and `invalid`. */
+  /** `join` rows: the active membership and the committees it goes into. */
+  join?: { membership: MockMembership; committeeIds: string[] };
+  /** What importing this row would do; absent for `join`, `existing` and `invalid`. */
   write?: {
     uniEmail: string;
     fullName: string;
@@ -93,7 +95,12 @@ export const memberImportHandlers = [
     const db = getMockDb();
     let added = 0;
     let restored = 0;
+    let joined = 0;
     for (const row of plan.rows) {
+      if (row.join) {
+        joinCommittees(row.join.membership, row.join.committeeIds);
+        joined += 1;
+      }
       if (!row.write) continue;
       apply(db, params.clubId, row.write);
       if (row.status === 'restore') restored += 1;
@@ -102,6 +109,7 @@ export const memberImportHandlers = [
     return {
       added,
       restored,
+      joined,
       skippedExisting: plan.summary.existing,
       skippedInvalid: plan.summary.invalid,
     };
@@ -207,6 +215,7 @@ function buildPlan(
     total: dataLines.length,
     add: 0,
     restore: 0,
+    join: 0,
     existing: 0,
     invalid: 0,
   };
@@ -283,15 +292,24 @@ function buildPlan(
     // Only this club's own members have a name the officer may see; an account elsewhere is told
     // apart nowhere, not even by a warning (docs/adr/0012-member-profiles-per-club.md).
     const storedName = membership ? (db.usersById.get(membership.userId)?.fullName ?? null) : null;
+    // An active member goes into the committees the file names that they are not active in.
+    const joinIds =
+      membership && membership.removedAt === null
+        ? [...new Set(committeeIds)].filter(
+            (id) => !membership.committees.some((link) => link.committeeId === id && !link.removed),
+          )
+        : [];
     const status =
       issues.length > 0
         ? 'invalid'
         : !membership
           ? 'add'
-          : membership.removedAt === null
-            ? 'existing'
-            : 'restore';
-    if ((status === 'existing' || status === 'restore') && storedName && storedName !== fileName) {
+          : membership.removedAt !== null
+            ? 'restore'
+            : joinIds.length > 0
+              ? 'join'
+              : 'existing';
+    if (status !== 'add' && status !== 'invalid' && storedName && storedName !== fileName) {
       warnings.push({ field: 'fullName', code: 'name_differs' });
     }
     summary[status] += 1;
@@ -304,6 +322,12 @@ function buildPlan(
       issues,
       warnings,
     };
+    if (status === 'join' && membership) {
+      row.join = { membership, committeeIds: joinIds };
+      row.joinCommittees = joinIds.map(
+        (id) => committees.find((committee) => committee.id === id)?.name ?? '',
+      );
+    }
     if ((status === 'add' || status === 'restore') && uniEmail && fileName && type) {
       row.write = {
         uniEmail,
@@ -336,6 +360,7 @@ function toContractRow(row: MockImportRow): MemberImportRow {
     fullName: row.fullName,
     issues: row.issues,
     warnings: row.warnings,
+    ...(row.joinCommittees ? { joinCommittees: row.joinCommittees } : {}),
   };
 }
 
@@ -380,7 +405,12 @@ function apply(db: MockDb, clubId: string, write: NonNullable<MockImportRow['wri
     };
     db.memberships.push(membership);
   }
-  for (const committeeId of write.committeeIds) {
+  joinCommittees(membership, write.committeeIds);
+}
+
+/** New committee links, and removed ones back as plain members. */
+function joinCommittees(membership: MockMembership, committeeIds: readonly string[]): void {
+  for (const committeeId of committeeIds) {
     const link = membership.committees.find((candidate) => candidate.committeeId === committeeId);
     if (link) {
       link.removed = false;
@@ -405,7 +435,7 @@ function checksumOf(clubId: string, rows: readonly MockImportRow[]): string {
         row.issues.map((issue) => `${issue.field}:${issue.code}:${issue.value ?? ''}`).join(','),
         row.warnings.map((issue) => `${issue.field}:${issue.code}`).join(','),
         row.write?.typeId ?? '',
-        [...(row.write?.committeeIds ?? [])].sort().join(','),
+        [...(row.write?.committeeIds ?? row.join?.committeeIds ?? [])].sort().join(','),
         JSON.stringify(row.write?.profile ?? {}),
       ].join('\u001f'),
     ),

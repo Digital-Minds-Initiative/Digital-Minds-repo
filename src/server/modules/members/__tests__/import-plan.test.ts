@@ -49,6 +49,7 @@ function clubState(overrides: Partial<ImportClubState> = {}): ImportClubState {
     ],
     accounts: new Map(),
     storedNames: new Map(),
+    activeCommittees: new Map(),
     ...overrides,
   };
 }
@@ -57,9 +58,15 @@ function clubState(overrides: Partial<ImportClubState> = {}): ImportClubState {
 const accountElsewhere = (uniEmail: string) =>
   new Map([[uniEmail, { userId: USER, membership: null }]]);
 
-const membershipIn = (uniEmail: string, removed: boolean, name = 'أحمد علي') => ({
+const membershipIn = (
+  uniEmail: string,
+  removed: boolean,
+  name = 'أحمد علي',
+  activeIn: string[] = [],
+) => ({
   accounts: new Map([[uniEmail, { userId: USER, membership: { id: MEMBERSHIP, removed } }]]),
   storedNames: new Map([[MEMBERSHIP, name]]),
+  activeCommittees: new Map([[MEMBERSHIP, new Set(activeIn)]]),
 });
 
 describe('row states', () => {
@@ -105,7 +112,62 @@ describe('row states', () => {
     expect(plan.rows[0]?.status).toBe('existing');
     expect(plan.adds).toEqual([]);
     expect(plan.restores).toEqual([]);
-    expect(plan.summary).toMatchObject({ existing: 1 });
+    expect(plan.joins).toEqual([]);
+    expect(plan.summary).toMatchObject({ existing: 1, join: 0 });
+  });
+
+  it('is `existing` for an active member already in every committee the file names', () => {
+    const uniEmail = 's441000014@uqu.edu.sa';
+    const plan = buildImportPlan(
+      [row({ uniEmail, committeeNames: ['لجنة الإعلام'] })],
+      clubState(membershipIn(uniEmail, false, 'أحمد علي', [MEDIA])),
+    );
+    expect(plan.rows[0]?.status).toBe('existing');
+    expect(plan.rows[0]?.joinCommittees).toBeUndefined();
+    expect(plan.joins).toEqual([]);
+  });
+
+  it('is `join` for an active member the file puts in committees they are not active in', () => {
+    const uniEmail = 's441000015@uqu.edu.sa';
+    const plan = buildImportPlan(
+      [
+        row({
+          uniEmail,
+          membershipTypeName: 'عضو فعال',
+          profile: { phone: '+966551110000' },
+          committeeNames: ['لجنة الإعلام', 'لجنة التقنية', 'لجنة التقنية'],
+        }),
+      ],
+      clubState(membershipIn(uniEmail, false, 'أحمد علي', [MEDIA])),
+    );
+    expect(plan.rows[0]).toMatchObject({
+      status: 'join',
+      joinCommittees: ['لجنة التقنية'],
+      issues: [],
+    });
+    // Only the committee: no type, no profile, no name.
+    expect(plan.joins).toEqual([
+      { line: plan.rows[0]?.line, membershipId: MEMBERSHIP, committeeIds: [TECH] },
+    ]);
+    expect(plan.adds).toEqual([]);
+    expect(plan.restores).toEqual([]);
+    expect(plan.summary).toMatchObject({ join: 1, existing: 0 });
+  });
+
+  it('is `invalid`, not `join`, when an active member’s committee cannot be used', () => {
+    const uniEmail = 's441000016@uqu.edu.sa';
+    const plan = buildImportPlan(
+      [row({ uniEmail, committeeNames: ['لجنة التقنية', 'لجنة قديمة', 'لجنة لا توجد'] })],
+      clubState(membershipIn(uniEmail, false)),
+    );
+    expect(plan.rows[0]).toMatchObject({
+      status: 'invalid',
+      issues: [
+        { code: 'committee_archived', value: 'لجنة قديمة' },
+        { code: 'unknown_committee', value: 'لجنة لا توجد' },
+      ],
+    });
+    expect(plan.joins).toEqual([]);
   });
 
   it('is `invalid` when the file itself gave the row a problem', () => {
@@ -295,6 +357,16 @@ describe('the checksum', () => {
     const before = planOf([row({ uniEmail })]);
     line = 1;
     const after = planOf([row({ uniEmail })], clubState(membershipIn(uniEmail, false)));
+    expect(after).not.toBe(before);
+  });
+
+  it('changes when a member joins one of the file’s committees meanwhile', () => {
+    const uniEmail = 's441000017@uqu.edu.sa';
+    const rows = () => [row({ uniEmail, committeeNames: ['لجنة الإعلام', 'لجنة التقنية'] })];
+    line = 1;
+    const before = planOf(rows(), clubState(membershipIn(uniEmail, false)));
+    line = 1;
+    const after = planOf(rows(), clubState(membershipIn(uniEmail, false, 'أحمد علي', [MEDIA])));
     expect(after).not.toBe(before);
   });
 

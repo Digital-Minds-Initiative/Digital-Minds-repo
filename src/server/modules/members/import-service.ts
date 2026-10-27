@@ -2,6 +2,7 @@ import 'server-only';
 
 import {
   clubsScope,
+  committeeMembershipsScope,
   committeesScope,
   membersScope,
   membershipTypesScope,
@@ -22,9 +23,10 @@ import {
   type ImportAdd,
   type ImportRestore,
 } from './import-plan';
-import { assertCanImportMembers } from './policies';
+import { assertCanAddToCommittee, assertCanImportMembers } from './policies';
 import {
   findAccountsByUniEmails,
+  findActiveCommitteeIds,
   findClubForMembers,
   findCommitteesInClub,
   findMemberNames,
@@ -81,8 +83,9 @@ export async function previewMemberImport(
 }
 
 /**
- * Imports the file the preview described. `invalid` and `existing` rows are skipped and everything
- * else is written in one transaction, so a failure anywhere leaves the club exactly as it was.
+ * Imports the file the preview described. `invalid` and `existing` rows are skipped, `join` rows
+ * write only their committee memberships, and everything is written in one transaction, so a
+ * failure anywhere leaves the club exactly as it was.
  *
  * The plan is built a second time inside that transaction and its checksum compared with the one
  * the client sends back. Anything that changed in between — a person added or removed by somebody
@@ -100,6 +103,9 @@ export async function confirmMemberImport(
   });
   const plan = await planFor(actor, club.id, file.rows);
   if (plan.checksum !== body.checksum) throw importChanged();
+  // A `join` row is adding an existing member to a committee, so it answers to that rule too.
+  // Today it is the same rule as importing, so this never refuses — it keeps the two tied.
+  if (plan.joins.length > 0) assertCanAddToCommittee(actor, club.id);
 
   await saveImportedMembers(
     {
@@ -107,13 +113,19 @@ export async function confirmMemberImport(
       committees: committeesScope(actor),
       members: membersScope(actor),
     },
-    { clubId: club.id, adds: plan.adds.map(toAddWrite), restores: plan.restores.map(toRestore) },
+    {
+      clubId: club.id,
+      adds: plan.adds.map(toAddWrite),
+      restores: plan.restores.map(toRestore),
+      joins: plan.joins.map(({ membershipId, committeeIds }) => ({ membershipId, committeeIds })),
+    },
     async (tx) => (await planFor(actor, club.id, file.rows, tx)).checksum === body.checksum,
   );
 
   return {
     added: plan.adds.length,
     restored: plan.restores.length,
+    joined: plan.joins.length,
     skippedExisting: plan.summary.existing,
     skippedInvalid: plan.summary.invalid,
   };
@@ -157,6 +169,13 @@ async function planFor(
     ),
     client,
   );
+  const activeCommittees = await findActiveCommitteeIds(
+    committeeMembershipsScope(actor),
+    [...accounts.values()].flatMap((account) =>
+      account.membership && !account.membership.removed ? [account.membership.id] : [],
+    ),
+    client,
+  );
 
   const club: ImportClubState = {
     clubId,
@@ -165,6 +184,7 @@ async function planFor(
     committees,
     accounts,
     storedNames,
+    activeCommittees,
   };
   return buildImportPlan(rows, club);
 }

@@ -1,6 +1,6 @@
 # 0021. Import members from a CSV behind a preview the import must match
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-27 — an active member whose row names committees they are not in joins them ([below](#amendment-2026-10-27-existing-members-join-the-files-committees))
 - Date: 2026-10-17
 
 ## Context
@@ -164,5 +164,38 @@ import back.
 - The mocks imitate all of this well enough to build the screens against, with a simpler parser and
   a string hash instead of SHA-256 ([ADR 0009](0009-demo-dataset-and-mocks.md)).
 - Still open, deliberately: nobody is emailed about being imported (they meet the platform when
-  they sign in), the import cannot update the profiles of people who are already members, and
+  they sign in), the import cannot update the profiles or membership types of people who are already members (it can only add them to committees — see the amendment), and
   there is no undo — removing them again is the officer's own action, one at a time.
+
+## Amendment (2026-10-27): existing members join the file's committees
+
+The commonest reason to import turned out to be putting people who are **already** members of the
+club into a new committee. As decided above, every active member was `existing` and skipped
+whole, so an officer had to add each of them by hand.
+
+A fifth state, between `restore` and `existing`:
+
+| State  | Meaning                                                                            | What the import writes                                                 |
+| ------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `join` | an active membership, and the committees cell names committees it is not active in | only those committee memberships: new rows, or removed ones back by id |
+
+- `existing` now means an active member who is already active in every committee the row names
+  (or the row names none). It still writes nothing.
+- A committee membership the member was removed from comes back the way `restore` brings back a
+  removed club membership: the same row, so its points count again, with role `MEMBER` — a lead
+  who was removed comes back as a member, exactly as `PUT members/:id/committees/:cid` does.
+- Nothing on the membership or the account changes: not the profile cells, not the membership
+  type, not the name. `name_differs` is shown on `join` rows as it is on `existing` ones; the
+  other cells are ignored without a warning, as they were.
+- A committee the row cannot use — unknown, another club's (which is the same thing: it is not
+  among this club's committees), archived — makes the row `invalid` with the same issue a new
+  person's row gets, and nothing of that row is written, its usable committees included.
+- Permissions are those of adding a member to a committee by hand (`assertCanAddToCommittee`):
+  officers and full admins. Since that is also who may import at all, the check never refuses
+  today; it is there so the two rules stay tied if either changes.
+- The row's `joinCommittees` lists the committees it will join, by their names on record, and
+  the checksum covers them together with the membership id, so a member who joined one of those
+  committees between the preview and the import refuses it with `import_changed`. Inside the
+  transaction the joining memberships are counted through the members scope (still active, still
+  in this club) before anything is written.
+- The summary counts `join`, and the result says `joined` (rows, not committee memberships).

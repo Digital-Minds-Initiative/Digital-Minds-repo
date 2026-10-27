@@ -63,7 +63,13 @@ describe('the CSV import on mocks', () => {
       params: { clubId },
       body: { file: csv, checksum: planned.checksum },
     });
-    expect(result).toEqual({ added: 2, restored: 0, skippedExisting: 0, skippedInvalid: 0 });
+    expect(result).toEqual({
+      added: 2,
+      restored: 0,
+      joined: 0,
+      skippedExisting: 0,
+      skippedInvalid: 0,
+    });
     expect(getMockDb().memberships).toHaveLength(before + 2);
 
     // Previewing the same file again now shows them as members, so the old checksum is stale.
@@ -79,6 +85,27 @@ describe('the CSV import on mocks', () => {
       code: 'CONFLICT',
       details: { reason: 'import_changed' },
     });
+  });
+
+  it('adds an existing member to the committees they are not in, and nothing else', async () => {
+    const other = club.committees[1]?.name ?? '';
+    const csv = file(`طالب اللجان,s441900401@uqu.edu.sa,,,${committeeName}`);
+    const first = await preview(csv);
+    await officer.request(confirmMemberImportEndpoint, {
+      params: { clubId },
+      body: { file: csv, checksum: first.checksum },
+    });
+
+    const again = file(`طالب اللجان,s441900401@uqu.edu.sa,,,${committeeName}،${other}`);
+    const planned = await preview(again);
+    expect(planned.rows[0]).toMatchObject({ status: 'join', joinCommittees: [other] });
+    expect(planned.summary).toMatchObject({ join: 1, existing: 0 });
+    const result = await officer.request(confirmMemberImportEndpoint, {
+      params: { clubId },
+      body: { file: again, checksum: planned.checksum },
+    });
+    expect(result).toMatchObject({ added: 0, joined: 1 });
+    expect((await preview(again)).rows[0]?.status).toBe('existing');
   });
 
   it('reports the problems a row has, with the names it could not match', async () => {
