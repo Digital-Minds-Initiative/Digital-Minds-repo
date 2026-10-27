@@ -684,6 +684,29 @@ export async function findMemberNames(
   return new Map(rows.map((row) => [row.id, row.user.fullName]));
 }
 
+/**
+ * The committees each of these members is active in, per membership id. Scoped like every nested
+ * committee list, so a committee the actor cannot see is never reported as one the member is in.
+ */
+export async function findActiveCommitteeIds(
+  scope: CommitteeMembershipScope,
+  memberIds: readonly string[],
+  client: TransactionClient = db,
+): Promise<Map<string, Set<string>>> {
+  if (memberIds.length === 0) return new Map();
+  const rows = await client.committeeMembership.findMany({
+    where: { AND: [scope, { membershipId: { in: [...memberIds] }, removedAt: null }] },
+    select: { membershipId: true, committeeId: true },
+  });
+  const byMember = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const committees = byMember.get(row.membershipId) ?? new Set<string>();
+    committees.add(row.committeeId);
+    byMember.set(row.membershipId, committees);
+  }
+  return byMember;
+}
+
 /** The club's membership types, in their display order: the first one is the default. */
 export async function findMembershipTypesInClub(
   scope: MembershipTypeScope,
@@ -735,6 +758,12 @@ export interface ImportRestoreWrite extends ImportWrite {
   membershipId: string;
 }
 
+/** An active member going into committees; nothing on the membership itself is written. */
+export interface ImportJoinWrite {
+  membershipId: string;
+  committeeIds: readonly string[];
+}
+
 /**
  * The whole import, in one transaction: nothing is saved unless everything is.
  *
@@ -750,6 +779,7 @@ export async function saveImportedMembers(
     clubId: string;
     adds: readonly ImportAddWrite[];
     restores: readonly ImportRestoreWrite[];
+    joins: readonly ImportJoinWrite[];
   },
   plan: (client: TransactionClient) => Promise<boolean>,
 ): Promise<void> {
@@ -763,7 +793,11 @@ export async function saveImportedMembers(
     if (club !== 1) throw new NotFoundError('Club');
 
     const committeeIds = [
-      ...new Set([...input.adds, ...input.restores].flatMap((write) => [...write.committeeIds])),
+      ...new Set(
+        [...input.adds, ...input.restores, ...input.joins].flatMap((write) => [
+          ...write.committeeIds,
+        ]),
+      ),
     ];
     if (committeeIds.length > 0) {
       const committees = await tx.committee.count({
@@ -783,8 +817,25 @@ export async function saveImportedMembers(
     const membershipIdByUser = await createMemberships(tx, input.clubId, input.adds, userIdByEmail);
     const restored = await restoreMemberships(tx, scopes.members, input.restores);
     if (restored !== input.restores.length) throw importChanged();
+    // The members a `join` row writes for must still be active members of this club, in scope.
+    if (input.joins.length > 0) {
+      const active = await tx.membership.count({
+        where: {
+          AND: [
+            scopes.members,
+            {
+              id: { in: input.joins.map((join) => join.membershipId) },
+              clubId: input.clubId,
+              removedAt: null,
+            },
+          ],
+        },
+      });
+      if (active !== input.joins.length) throw importChanged();
+    }
 
     await joinCommittees(tx, input.clubId, [
+      ...input.joins,
       ...input.adds.map((add) => ({
         membershipId: membershipIdByUser.get(userIdOf(add, userIdByEmail)),
         committeeIds: add.committeeIds,

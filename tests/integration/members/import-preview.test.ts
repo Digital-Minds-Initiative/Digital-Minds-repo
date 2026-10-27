@@ -59,7 +59,14 @@ describe('previewing a members CSV', () => {
     it('reads a UTF-8 file with Arabic headers', async () => {
       const result = await preview(officerA, importFixture('arabic-headers.csv'));
 
-      expect(result.summary).toEqual({ total: 3, add: 3, restore: 0, existing: 0, invalid: 0 });
+      expect(result.summary).toEqual({
+        total: 3,
+        add: 3,
+        restore: 0,
+        join: 0,
+        existing: 0,
+        invalid: 0,
+      });
       expect(result.rows).toEqual([
         {
           line: 2,
@@ -235,7 +242,14 @@ describe('previewing a members CSV', () => {
       expect(codes(result.rows[4])).toEqual(['committees:unknown_committee']);
       expect(result.rows[4]?.issues[0]?.value).toBe('لجنة ب1');
       expect(codes(result.rows[5])).toEqual(['committees:committee_archived']);
-      expect(result.summary).toEqual({ total: 7, add: 2, restore: 0, existing: 0, invalid: 5 });
+      expect(result.summary).toEqual({
+        total: 7,
+        add: 2,
+        restore: 0,
+        join: 0,
+        existing: 0,
+        invalid: 5,
+      });
     });
 
     it('matches a type and a committee by name, and refuses an unknown one', async () => {

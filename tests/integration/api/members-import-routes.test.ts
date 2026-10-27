@@ -194,6 +194,7 @@ describe('the CSV import endpoints', () => {
       expect(memberImportResultSchema.parse(await response.json())).toEqual({
         added: 3,
         restored: 0,
+        joined: 0,
         skippedExisting: 0,
         skippedInvalid: 0,
       });

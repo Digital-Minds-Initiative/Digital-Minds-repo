@@ -69,6 +69,7 @@ type Step =
 const STATUS_VARIANT: Record<MemberImportStatus, 'success' | 'info' | 'neutral' | 'danger'> = {
   add: 'success',
   restore: 'info',
+  join: 'info',
   existing: 'neutral',
   invalid: 'danger',
 };
@@ -342,6 +343,7 @@ function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
               {t('done.added', { count: step.result.added })}
             </li>
             <li>{t('done.restored', { count: step.result.restored })}</li>
+            <li>{t('done.joined', { count: step.result.joined })}</li>
             <li className="text-fg-muted">
               {t('done.skippedExisting', { count: step.result.skippedExisting })}
             </li>
@@ -383,15 +385,13 @@ function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
               </Button>
               <Button
                 type="button"
-                disabled={step.preview.summary.add + step.preview.summary.restore === 0}
+                disabled={writtenRows(step.preview) === 0}
                 loading={confirm.isPending || preview.isPending}
                 onClick={() => void runConfirm(step.preview)}
               >
-                {step.preview.summary.add + step.preview.summary.restore === 0
+                {writtenRows(step.preview) === 0
                   ? t('nothingToImport')
-                  : t('confirm', {
-                      count: step.preview.summary.add + step.preview.summary.restore,
-                    })}
+                  : t('confirm', { count: writtenRows(step.preview) })}
               </Button>
             </>
           ) : null}
@@ -404,6 +404,11 @@ function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The rows the import would write something for: everyone but the skipped. */
+function writtenRows({ summary }: PreviewMemberImportResponse): number {
+  return summary.add + summary.restore + summary.join;
 }
 
 function PreviewStep({
@@ -437,9 +442,9 @@ function PreviewStep({
       ) : null}
       <ul
         aria-label={t('summary.label')}
-        className="m-0 grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-4"
+        className="m-0 grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-5"
       >
-        {(['add', 'restore', 'existing', 'invalid'] as const).map((key) => (
+        {(['add', 'restore', 'join', 'existing', 'invalid'] as const).map((key) => (
           <li key={key} className="grid gap-0.5 rounded-md border border-border bg-surface-1 p-3">
             <span className="text-xs text-fg-muted">{t(`summary.${key}`)}</span>
             <span
@@ -519,6 +524,9 @@ function PreviewRow({
       </TableCell>
       <TableCell className="text-xs">
         <ul className="m-0 grid list-none gap-0.5 p-0">
+          {row.joinCommittees?.length ? (
+            <li>{t('joinCommittees', { names: row.joinCommittees.join('، ') })}</li>
+          ) : null}
           {row.issues.map((issue) => (
             <li key={`${issue.field}:${issue.code}:${issue.value ?? ''}`} className="text-danger">
               {issueText(issue)}

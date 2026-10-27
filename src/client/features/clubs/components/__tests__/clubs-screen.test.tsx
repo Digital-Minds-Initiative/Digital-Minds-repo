@@ -5,8 +5,10 @@ import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as ApiClientModule from '@/client/lib/api-client';
+import { apiClient } from '@/client/lib/api-client';
 import { getMockDb, resetMockDb } from '@/client/mocks/db';
 import { server } from '@/client/mocks/node';
+import { createCommitteeEndpoint } from '@/shared/contracts/clubs';
 import { renderWithProviders } from '@tests/utils/render';
 
 import { ClubsScreen } from '../clubs-screen';
@@ -325,14 +327,14 @@ describe('ClubsScreen — who may add clubs and committees', { timeout: 30_000 }
     await screen.findByRole('heading', { name: 'نادي الحاسبات' });
     expect(screen.queryByRole('button', { name: 'إضافة نادٍ' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'إضافة لجنة' })).toBeNull();
-    // The same person asking the API directly is told it is for full admins.
+    // The same person asking the API directly is told it is for full admins — through the same
+    // client the screen uses, so the request is answered by the MSW handlers and never leaves.
     const club = getMockDb().clubs.find((candidate) => candidate.name === 'نادي الحاسبات');
-    const response = await fetch(`http://localhost:3000/api/v1/clubs/${club?.id}/committees`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: `dm-dev-actor=${OFFICER}` },
-      body: JSON.stringify({ name: 'لجنة جديدة' }),
-    });
-    expect(response.status).toBe(403);
-    expect((await response.json()).error.reason).toBe('full_admin_required');
+    await expect(
+      apiClient.request(createCommitteeEndpoint, {
+        params: { clubId: club?.id ?? '' },
+        body: { name: 'لجنة جديدة' },
+      }),
+    ).rejects.toMatchObject({ status: 403, details: { reason: 'full_admin_required' } });
   });
 });
