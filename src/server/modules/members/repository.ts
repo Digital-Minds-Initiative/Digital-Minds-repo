@@ -353,7 +353,7 @@ export function alreadyInClub(memberId: string): ConflictError {
 }
 
 /** 409 for someone who is already active in the committee they are being brought into. */
-export function alreadyInCommittee(memberId: string): ConflictError {
+function alreadyInCommittee(memberId: string): ConflictError {
   return new ConflictError(
     'The person is already a member of this committee.',
     'already_in_committee',

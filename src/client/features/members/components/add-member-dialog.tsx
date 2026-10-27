@@ -26,14 +26,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/toaster';
-import { createMemberBodySchema } from '@/shared/contracts/members';
+import { admitMemberBodySchema, createMemberBodySchema } from '@/shared/contracts/members';
 import { toLatinDigits } from '@/shared/lib/arabic';
 
-import { useClubCommittees, useClubTypes, useCreateMember } from '../hooks/use-member-actions';
-import { applyIssues, blankToUndefined } from '../lib/form';
+import {
+  useAdmitMember,
+  useClubCommittees,
+  useClubTypes,
+  useCreateMember,
+} from '../hooks/use-member-actions';
+import type { AdmittingCommittee } from '../lib/access';
+import { useCommitteeLabel } from '../lib/committee-label';
+import { applyIssues, blankToUndefined, type FormIssue } from '../lib/form';
 
 interface Values {
   clubId: string;
+  /** Committee mode only: the committee the person is brought into. */
+  committeeId: string;
   uniEmail: string;
   fullName: string;
   /** Empty means the club's first membership type. */
@@ -63,6 +72,11 @@ export interface AddMemberDialogProps {
   onOpenChange: (open: boolean) => void;
   /** The clubs the person may add members to. */
   clubs: ReadonlyArray<{ id: string; name: string }>;
+  /**
+   * Without a club to add to: the committees the person leads. The dialog then brings a person
+   * into one of them, always with «عضو» (docs/adr/0029-leads-add-members.md).
+   */
+  committees?: readonly AdmittingCommittee[];
   /** Called with the member's id when the person asks to open an existing member's file. */
   onOpenMember: (memberId: string) => void;
 }
@@ -79,6 +93,14 @@ export function AddMemberDialog(props: AddMemberDialogProps) {
   return props.open ? <AddMemberForm {...props} /> : null;
 }
 
+/** A parsed body ready to send, or the issues that kept it from being sent. */
+function withParsed<T>(
+  parsed: { success: true; data: T } | { success: false; error: { issues: FormIssue[] } },
+  send: (body: T) => Promise<unknown>,
+): { send: () => Promise<unknown> } | { issues: FormIssue[] } {
+  return parsed.success ? { send: () => send(parsed.data) } : { issues: parsed.error.issues };
+}
+
 /** A titled group of fields: a light heading and one gap, no box around it. */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -91,8 +113,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogProps) {
+function AddMemberForm({
+  onOpenChange,
+  clubs,
+  committees = [],
+  onOpenMember,
+}: AddMemberDialogProps) {
   const t = useTranslations('members.form');
+  const committeeLabel = useCommitteeLabel(committees);
+  // A club to add to wins; a lead without one adds to a committee they lead.
+  const intoCommittee = clubs.length === 0;
   const errorText = useErrorText();
   const [formError, setFormError] = useState<string | null>(null);
   const [existingId, setExistingId] = useState<string | null>(null);
@@ -100,6 +130,7 @@ function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogPro
   const form = useForm<Values>({
     defaultValues: {
       clubId: clubs[0]?.id ?? '',
+      committeeId: committees[0]?.id ?? '',
       uniEmail: '',
       fullName: '',
       membershipTypeId: DEFAULT_TYPE,
@@ -112,41 +143,52 @@ function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogPro
     },
   });
   const clubId = useWatch({ control: form.control, name: 'clubId' });
+  const committeeId = useWatch({ control: form.control, name: 'committeeId' });
   const committeeIds = useWatch({ control: form.control, name: 'committeeIds' });
   const types = useClubTypes(clubId || undefined);
-  const committees = useClubCommittees(clubId || undefined);
+  const clubCommittees = useClubCommittees(clubId || undefined);
   const create = useCreateMember(clubId);
+  const admit = useAdmitMember(committeeId);
 
   const submit = form.handleSubmit(async (values) => {
     setFormError(null);
     setExistingId(null);
     const level = blankToUndefined(toLatinDigits(values.level));
-    const body = {
-      person: { uniEmail: values.uniEmail, fullName: values.fullName },
-      profile: {
-        personalEmail: blankToUndefined(values.personalEmail),
-        phone: blankToUndefined(values.phone),
-        college: blankToUndefined(values.college),
-        major: blankToUndefined(values.major),
-        level: level === undefined ? undefined : Number(level),
-      },
-      membershipTypeId:
-        values.membershipTypeId === DEFAULT_TYPE ? undefined : values.membershipTypeId,
-      committeeIds: values.committeeIds,
+    const person = { uniEmail: values.uniEmail, fullName: values.fullName };
+    const profile = {
+      personalEmail: blankToUndefined(values.personalEmail),
+      phone: blankToUndefined(values.phone),
+      college: blankToUndefined(values.college),
+      major: blankToUndefined(values.major),
+      level: level === undefined ? undefined : Number(level),
     };
     // The same schema the API uses decides what is valid, so the person is told before a request.
-    const parsed = createMemberBodySchema.safeParse(body);
-    if (!parsed.success) {
-      if (!applyIssues(form, parsed.error.issues, FIELDS)) setFormError(t('add.genericError'));
+    // A committee's add takes no type and no committees: the server gives «عضو» and the URL's.
+    const request = intoCommittee
+      ? withParsed(admitMemberBodySchema.safeParse({ person, profile }), admit.mutateAsync)
+      : withParsed(
+          createMemberBodySchema.safeParse({
+            person,
+            profile,
+            membershipTypeId:
+              values.membershipTypeId === DEFAULT_TYPE ? undefined : values.membershipTypeId,
+            committeeIds: values.committeeIds,
+          }),
+          create.mutateAsync,
+        );
+    if ('issues' in request) {
+      if (!applyIssues(form, request.issues, FIELDS)) setFormError(t('add.genericError'));
       return;
     }
     try {
-      await create.mutateAsync(parsed.data);
+      await request.send();
       toast.success(t('add.added'));
       onOpenChange(false);
     } catch (error) {
       if (error instanceof ApiError) {
-        if (error.details.reason === 'already_in_club' && error.details.ids?.memberId) {
+        const existing =
+          error.details.reason === (intoCommittee ? 'already_in_committee' : 'already_in_club');
+        if (existing && error.details.ids?.memberId) {
           setExistingId(error.details.ids.memberId);
           return;
         }
@@ -197,13 +239,39 @@ function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogPro
     >
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="px-6 pe-12 pt-6 pb-4">
-          <DialogTitle>{t('add.title')}</DialogTitle>
-          <DialogDescription>{t('add.description')}</DialogDescription>
+          <DialogTitle>{intoCommittee ? t('add.committeeTitle') : t('add.title')}</DialogTitle>
+          <DialogDescription>
+            {intoCommittee ? t('add.committeeDescription') : t('add.description')}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={onFormSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="grid gap-6 overflow-y-auto px-6 py-5">
             <Section title={t('add.sections.basic')}>
-              {clubs.length > 1 ? (
+              {intoCommittee && committees.length > 1 ? (
+                <FormField
+                  control={form.control}
+                  name="committeeId"
+                  label={t('fields.committee')}
+                  render={({ field, controlProps }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id={controlProps.id} className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {committees.map((committee) => (
+                          <SelectItem key={committee.id} value={committee.id}>
+                            {committeeLabel(committee)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              ) : intoCommittee ? (
+                <p className="text-sm font-medium">
+                  {committees[0] ? committeeLabel(committees[0]) : null}
+                </p>
+              ) : clubs.length > 1 ? (
                 <FormField
                   control={form.control}
                   name="clubId"
@@ -262,61 +330,72 @@ function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogPro
               />
             </Section>
 
-            <Section title={t('add.sections.membership')}>
-              <FormField
-                control={form.control}
-                name="membershipTypeId"
-                label={t('fields.membershipType')}
-                render={({ field, controlProps }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id={controlProps.id} className="h-11">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={DEFAULT_TYPE}>{t('defaultType')}</SelectItem>
-                      {(types.data?.items ?? []).map((type) => (
-                        <SelectItem key={type.id} value={type.id}>
-                          {type.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {(committees.data?.items.length ?? 0) > 0 ? (
-                <fieldset className="m-0 grid gap-2 border-0 p-0">
-                  <legend className="mb-2 text-sm font-medium">{t('fields.committees')}</legend>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {committees.data?.items.map((committee) => {
-                      const id = `add-member-committee-${committee.id}`;
-                      return (
-                        <label
-                          key={committee.id}
-                          htmlFor={id}
-                          className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border bg-surface-1 px-3 text-sm transition-colors hover:bg-surface-2 has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary-subtle has-data-[state=checked]:font-medium has-data-[state=checked]:text-primary-subtle-fg"
-                        >
-                          <Checkbox
-                            id={id}
-                            checked={committeeIds.includes(committee.id)}
-                            onCheckedChange={(checked) =>
-                              form.setValue(
-                                'committeeIds',
-                                checked === true
-                                  ? [...committeeIds, committee.id]
-                                  : committeeIds.filter((existing) => existing !== committee.id),
-                              )
-                            }
-                          />
-                          <span className="truncate">{committee.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              ) : null}
-            </Section>
+            {intoCommittee ? (
+              <Section title={t('add.sections.membership')}>
+                <p className="m-0 rounded-md bg-surface-3 p-3 text-sm text-fg-muted">
+                  {t('add.committeeTypeNote')}
+                </p>
+              </Section>
+            ) : (
+              <Section title={t('add.sections.membership')}>
+                <FormField
+                  control={form.control}
+                  name="membershipTypeId"
+                  label={t('fields.membershipType')}
+                  render={({ field, controlProps }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id={controlProps.id} className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={DEFAULT_TYPE}>{t('defaultType')}</SelectItem>
+                        {(types.data?.items ?? []).map((type) => (
+                          <SelectItem key={type.id} value={type.id}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {(clubCommittees.data?.items.length ?? 0) > 0 ? (
+                  <fieldset className="m-0 grid gap-2 border-0 p-0">
+                    <legend className="mb-2 text-sm font-medium">{t('fields.committees')}</legend>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {clubCommittees.data?.items.map((committee) => {
+                        const id = `add-member-committee-${committee.id}`;
+                        return (
+                          <label
+                            key={committee.id}
+                            htmlFor={id}
+                            className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border bg-surface-1 px-3 text-sm transition-colors hover:bg-surface-2 has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary-subtle has-data-[state=checked]:font-medium has-data-[state=checked]:text-primary-subtle-fg"
+                          >
+                            <Checkbox
+                              id={id}
+                              checked={committeeIds.includes(committee.id)}
+                              onCheckedChange={(checked) =>
+                                form.setValue(
+                                  'committeeIds',
+                                  checked === true
+                                    ? [...committeeIds, committee.id]
+                                    : committeeIds.filter((existing) => existing !== committee.id),
+                                )
+                              }
+                            />
+                            <span className="truncate">{committee.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                ) : null}
+              </Section>
+            )}
 
             <Section title={t('add.sections.extra')}>
+              {intoCommittee ? (
+                <p className="m-0 text-xs text-fg-muted">{t('add.committeeProfileNote')}</p>
+              ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 {textFields.map((spec) => (
                   <FormField
@@ -341,7 +420,9 @@ function AddMemberForm({ onOpenChange, clubs, onOpenMember }: AddMemberDialogPro
 
             {existingId ? (
               <div role="alert" className="grid gap-2 rounded-md bg-warning-subtle p-3 text-sm">
-                <p className="font-medium text-warning-subtle-fg">{t('add.alreadyIn')}</p>
+                <p className="font-medium text-warning-subtle-fg">
+                  {intoCommittee ? t('add.alreadyInCommittee') : t('add.alreadyIn')}
+                </p>
                 <Button
                   type="button"
                   variant="outline"

@@ -250,3 +250,46 @@ describe('ImportMembersDialog — confirming', { timeout: 30_000 }, () => {
     expect(getMockDb().users.some((candidate) => candidate.uniEmail === NEW_EMAIL)).toBe(false);
   });
 });
+
+describe('ImportMembersDialog — into a committee', { timeout: 30_000 }, () => {
+  /** Leads لجنة البرمجة in نادي الحاسبات. */
+  const LEAD = 's000000004@st.uqu.edu.sa';
+
+  function renderForLead(committees: Array<{ id: string; name: string; clubName: string }>) {
+    actor.email = LEAD;
+    renderWithProviders(
+      <ImportMembersDialog open onOpenChange={vi.fn()} clubs={[]} committees={committees} />,
+    );
+    return userEvent.setup();
+  }
+
+  const programming = () => {
+    const committee = getMockDb().committees.find((c) => c.name === 'لجنة البرمجة');
+    if (!committee) throw new Error('demo committee missing');
+    return { id: committee.id, name: committee.name, clubName: 'نادي الحاسبات' };
+  };
+
+  it('says the type column was ignored and refuses another committee’s name', async () => {
+    const user = renderForLead([programming()]);
+    const table = await chooseAndPreview(
+      user,
+      [
+        HEADER,
+        `منضم للجنة,s999000101@st.uqu.edu.sa,,عضو فعال,`,
+        `في لجنة أخرى,s999000102@st.uqu.edu.sa,,,لجنة التصميم`,
+      ].join('\n'),
+    );
+    expect(screen.getByRole('note').textContent).toMatch(/تجاهلنا عمود «نوع العضوية»/);
+    expect(within(table).getByText(/لجنة أخرى: لجنة التصميم/)).toBeTruthy();
+    expect(summary('add')).toBe('1');
+    expect(summary('invalid')).toBe('1');
+  });
+
+  it('asks which committee when the lead leads more than one', async () => {
+    const other = getMockDb().committees.find((c) => c.name === 'لجنة التصميم');
+    if (!other) throw new Error('demo committee missing');
+    renderForLead([programming(), { id: other.id, name: other.name, clubName: 'نادي الحاسبات' }]);
+    expect(screen.getByRole('combobox', { name: 'اللجنة' })).toBeTruthy();
+    expect(screen.getByText(/ليُضافوا إلى «لجنة البرمجة»/)).toBeTruthy();
+  });
+});
