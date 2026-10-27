@@ -12,8 +12,11 @@ export {
 } from './service';
 export { exportMembers } from './export-service';
 export {
+  confirmCommitteeMemberImport,
   confirmMemberImport,
+  getCommitteeMemberImportTemplate,
   getMemberImportTemplate,
+  previewCommitteeMemberImport,
   previewMemberImport,
 } from './import-service';
 /*

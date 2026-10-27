@@ -2,8 +2,10 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
+import { COMMITTEE_ADMISSION_TYPE_NAME } from '@/shared/contracts/members';
 import type {
   MemberImportIssue,
+  MemberImportNotice,
   MemberImportRow,
   MemberImportStatus,
   MemberImportSummary,
@@ -29,8 +31,17 @@ type ImportProfile = ParsedImportRow['profile'];
 /** What the club holds, read through the actor's scopes before the plan is built. */
 export interface ImportClubState {
   clubId: string;
-  /** Used by rows that name no type: the club's first type by order. */
+  /**
+   * Used by rows that name no type: the club's first type by order. In committee mode the club's
+   * «عضو» type, used by every row whatever its type cell says.
+   */
   defaultMembershipTypeId: string;
+  /**
+   * Committee mode (docs/adr/0029-leads-add-members.md): the import is for this one committee.
+   * Every row that writes goes into it, a committees cell may name it and nothing else, and the
+   * type cell is ignored. Null for an import into the whole club.
+   */
+  committee: { id: string; name: string } | null;
   membershipTypes: ReadonlyArray<{ id: string; name: string }>;
   committees: ReadonlyArray<{ id: string; name: string; archived: boolean }>;
   /**
@@ -87,6 +98,8 @@ export interface ImportPlan {
   /** Exactly what the preview answers with, in file order. */
   rows: MemberImportRow[];
   summary: MemberImportSummary;
+  /** About the whole file; today only that its type column was ignored. */
+  notices: MemberImportNotice[];
   checksum: string;
   adds: ImportAdd[];
   restores: ImportRestore[];
@@ -97,6 +110,7 @@ export function buildImportPlan(rows: ParsedImportRow[], club: ImportClubState):
   const plan: ImportPlan = {
     rows: [],
     summary: { total: rows.length, add: 0, restore: 0, join: 0, existing: 0, invalid: 0 },
+    notices: [],
     checksum: '',
     adds: [],
     restores: [],
@@ -115,8 +129,20 @@ export function buildImportPlan(rows: ParsedImportRow[], club: ImportClubState):
     if (row.uniEmail && !firstSeen.has(row.uniEmail)) firstSeen.set(row.uniEmail, row.line);
   }
 
-  plan.checksum = checksumOf(plan, club.clubId);
+  // Said, not done silently: a committee import gives every new person «عضو», whatever the file.
+  if (club.committee && rows.some((row) => row.membershipTypeName !== null)) {
+    plan.notices.push('membership_type_ignored');
+  }
+  plan.checksum = checksumOf(plan, club);
   return plan;
+}
+
+/**
+ * The type a person brought in through one committee gets: the club's «عضو», matched the way a
+ * type cell is. Null when the club has none (docs/adr/0029-leads-add-members.md).
+ */
+export function admissionTypeId(types: ReadonlyArray<{ id: string; name: string }>): string | null {
+  return matchByName(types, normalizeEntityName(COMMITTEE_ADMISSION_TYPE_NAME))?.id ?? null;
 }
 
 interface ClassifiedRow {
@@ -232,7 +258,7 @@ function resolveMembershipType(
   club: ImportClubState,
   issues: MemberImportIssue[],
 ): string | null {
-  if (parsed.membershipTypeName === null) return club.defaultMembershipTypeId;
+  if (parsed.membershipTypeName === null || club.committee) return club.defaultMembershipTypeId;
   const type = matchByName(club.membershipTypes, parsed.membershipTypeName);
   if (!type) {
     issues.push({
@@ -250,6 +276,7 @@ function resolveCommittees(
   club: ImportClubState,
   issues: MemberImportIssue[],
 ): string[] {
+  if (club.committee) return resolveTargetCommittee(parsed, club.committee, issues);
   const ids: string[] = [];
   for (const name of parsed.committeeNames) {
     const committee = matchByName(club.committees, name);
@@ -268,15 +295,31 @@ function resolveCommittees(
 }
 
 /**
+ * Committee mode: the row goes into the import's committee, whether its cell is empty or names
+ * it. Any other name is refused as `committee_not_target`, never as unknown — the importer may not
+ * be able to see the club's other committees, and the code must not tell them which exist. The
+ * service has already refused an archived target, so there is nothing to check about it here.
+ */
+function resolveTargetCommittee(
+  parsed: ParsedImportRow,
+  target: { id: string; name: string },
+  issues: MemberImportIssue[],
+): string[] {
+  for (const name of parsed.committeeNames) {
+    if (!matchByName([target], name)) {
+      issues.push({ field: 'committees', code: 'committee_not_target', value: name });
+    }
+  }
+  return [target.id];
+}
+
+/**
  * A name from the file → one of the club's own rows. Exactly how the uniqueness constraint
  * compares names first (`normalizeEntityName`); failing that, the Arabic-folded spelling, so
  * "لجنة الاعلام" finds "لجنة الإعلام" — but only when exactly one candidate folds to it, because
  * guessing between two real committees is worse than refusing the row.
  */
-export function matchByName<T extends { name: string }>(
-  candidates: readonly T[],
-  name: string,
-): T | null {
+function matchByName<T extends { name: string }>(candidates: readonly T[], name: string): T | null {
   const exact = candidates.find((candidate) => normalizeEntityName(candidate.name) === name);
   if (exact) return exact;
   const folded = normalizeForSearch(name);
@@ -292,9 +335,11 @@ export function matchByName<T extends { name: string }>(
  * membership is created either way and the stored name wins either way — so refusing the import
  * would only tell the officer that something happened to that address elsewhere.
  */
-function checksumOf(plan: ImportPlan, clubId: string): string {
+function checksumOf(plan: ImportPlan, club: ImportClubState): string {
   const hash = createHash('sha256');
-  hash.update(`v1\u001f${clubId}`);
+  hash.update(`v1\u001f${club.clubId}`);
+  // A club preview cannot be confirmed for a committee, nor the other way round.
+  if (club.committee) hash.update(`\u001fcommittee\u001f${club.committee.id}`);
   const adds = new Map(plan.adds.map((add) => [add.line, add]));
   const restores = new Map(plan.restores.map((restore) => [restore.line, restore]));
   const joins = new Map(plan.joins.map((join) => [join.line, join]));

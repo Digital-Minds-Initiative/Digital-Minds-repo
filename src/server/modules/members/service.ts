@@ -25,7 +25,6 @@ import { getActivePointsByMember, type MemberBalances } from '@/server/modules/p
 import { liveUniEmail } from '@/server/people';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import {
-  COMMITTEE_ADMISSION_TYPE_NAME,
   type AdmitMemberBody,
   type CreateMemberBody,
   type ListMembersQuery,
@@ -35,9 +34,9 @@ import {
   type UpdateMemberBody,
 } from '@/shared/contracts/members';
 import { normalizeEmail } from '@/shared/lib/email-domains';
-import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
+import { normalizePersonName } from '@/shared/lib/names';
 
-import { matchByName } from './import-plan';
+import { admissionTypeId } from './import-plan';
 import { toMember } from './mappers';
 import {
   assertCanAddMember,
@@ -68,7 +67,6 @@ import {
   findMembersPage,
   memberTypeMissing,
   membershipTypeBelongsToClub,
-  type ImportClient,
   type MemberFilters,
   removeFromClub,
   removeFromCommittee,
@@ -379,15 +377,11 @@ export async function admitMember(
  * The club's «عضو» type, matched the way an import matches a type cell. A club that has none —
  * renamed, deleted, never created — cannot take members through a committee, and says so.
  */
-export async function findAdmissionTypeId(
-  actor: Actor,
-  clubId: string,
-  client?: ImportClient,
-): Promise<string> {
-  const types = await findMembershipTypesInClub(membershipTypesScope(actor), clubId, client);
-  const type = matchByName(types, normalizeEntityName(COMMITTEE_ADMISSION_TYPE_NAME));
-  if (!type) throw memberTypeMissing();
-  return type.id;
+async function findAdmissionTypeId(actor: Actor, clubId: string): Promise<string> {
+  const types = await findMembershipTypesInClub(membershipTypesScope(actor), clubId);
+  const typeId = admissionTypeId(types);
+  if (!typeId) throw memberTypeMissing();
+  return typeId;
 }
 
 /**

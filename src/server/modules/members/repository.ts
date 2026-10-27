@@ -283,14 +283,27 @@ export async function findManageableCommittees(
 export async function findCommitteeForMember(
   scope: CommitteeScope,
   committeeId: string,
-): Promise<{ id: string; clubId: string; archived: boolean; clubArchived: boolean } | null> {
+): Promise<{
+  id: string;
+  name: string;
+  clubId: string;
+  archived: boolean;
+  clubArchived: boolean;
+} | null> {
   const row = await db.committee.findFirst({
     where: { AND: [scope, { id: committeeId }] },
-    select: { id: true, clubId: true, archivedAt: true, club: { select: { archivedAt: true } } },
+    select: {
+      id: true,
+      name: true,
+      clubId: true,
+      archivedAt: true,
+      club: { select: { archivedAt: true } },
+    },
   });
   return row
     ? {
         id: row.id,
+        name: row.name,
         clubId: row.clubId,
         archived: row.archivedAt !== null,
         clubArchived: row.club.archivedAt !== null,
@@ -809,7 +822,7 @@ export async function findAccountsByUniEmails(
  * member the actor can already see, which is what keeps an account outside the club invisible.
  */
 export async function findMemberNames(
-  scope: MemberScope,
+  scope: MemberScope | MemberAdmissionScope,
   memberIds: readonly string[],
   client: TransactionClient = db,
 ): Promise<Map<string, string>> {
@@ -874,7 +887,8 @@ export async function findCommitteesInClub(
 export interface ImportScopes {
   club: ClubScope;
   committees: CommitteeScope;
-  members: MemberScope;
+  /** The members scope for a club import, the admission scope for a committee import (ADR 0029). */
+  members: MemberScope | MemberAdmissionScope;
 }
 
 /** One row's worth of work for the writer: a new membership, or a removed one coming back. */
@@ -1048,7 +1062,7 @@ async function createMemberships(
  */
 async function restoreMemberships(
   tx: TransactionClient,
-  scope: MemberScope,
+  scope: MemberScope | MemberAdmissionScope,
   restores: readonly ImportRestoreWrite[],
 ): Promise<number> {
   let count = 0;

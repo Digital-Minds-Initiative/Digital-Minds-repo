@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ParsedImportRow } from '../import-csv';
-import { buildImportPlan, type ImportClubState } from '../import-plan';
+import { admissionTypeId, buildImportPlan, type ImportClubState } from '../import-plan';
 
 /*
  * What each row would do, and the checksum that makes the import match the preview
@@ -38,6 +38,7 @@ function clubState(overrides: Partial<ImportClubState> = {}): ImportClubState {
   return {
     clubId: CLUB,
     defaultMembershipTypeId: TYPE_MEMBER,
+    committee: null,
     membershipTypes: [
       { id: TYPE_MEMBER, name: 'عضو' },
       { id: TYPE_ACTIVE, name: 'عضو فعال' },
@@ -414,5 +415,100 @@ describe('the checksum', () => {
     line = 1;
     const after = planOf([row()], clubState({ clubId: '0192d000-0000-7000-8000-00000000c1b1' }));
     expect(after).not.toBe(before);
+  });
+});
+
+describe('committee mode (docs/adr/0029-leads-add-members.md)', () => {
+  const inMedia = (overrides: Partial<ImportClubState> = {}) =>
+    clubState({ committee: { id: MEDIA, name: 'لجنة الإعلام' }, ...overrides });
+
+  it('puts every row that writes into the committee, whether its cell is empty or names it', () => {
+    const plan = buildImportPlan(
+      [
+        row({ uniEmail: 's441000101@uqu.edu.sa' }),
+        row({ uniEmail: 's441000102@uqu.edu.sa', committeeNames: ['لجنة الاعلام'] }),
+      ],
+      inMedia(),
+    );
+    expect(plan.rows.map((r) => r.status)).toEqual(['add', 'add']);
+    expect(plan.adds.map((add) => add.committeeIds)).toEqual([[MEDIA], [MEDIA]]);
+  });
+
+  it('refuses a row naming any other committee — existing, archived or unknown alike', () => {
+    for (const name of ['لجنة التقنية', 'لجنة قديمة', 'لجنة لا وجود لها']) {
+      const plan = buildImportPlan([row({ committeeNames: ['لجنة الإعلام', name] })], inMedia());
+      expect(plan.rows[0]).toMatchObject({
+        status: 'invalid',
+        issues: [{ field: 'committees', code: 'committee_not_target', value: name }],
+      });
+      expect(plan.adds).toEqual([]);
+    }
+  });
+
+  it('ignores the type cell, gives «عضو», and says so once for the file', () => {
+    const plan = buildImportPlan(
+      [
+        row({ uniEmail: 's441000111@uqu.edu.sa', membershipTypeName: 'عضو فعال' }),
+        row({ uniEmail: 's441000112@uqu.edu.sa', membershipTypeName: 'نوع لا وجود له' }),
+      ],
+      inMedia(),
+    );
+    expect(plan.rows.map((r) => r.status)).toEqual(['add', 'add']);
+    expect(plan.adds.map((add) => add.membershipTypeId)).toEqual([TYPE_MEMBER, TYPE_MEMBER]);
+    expect(plan.notices).toEqual(['membership_type_ignored']);
+    // No type cells, nothing to say; and a club import never says it.
+    expect(buildImportPlan([row()], inMedia()).notices).toEqual([]);
+    expect(buildImportPlan([row({ membershipTypeName: 'عضو' })], clubState()).notices).toEqual([]);
+  });
+
+  it('joins an active member who is not in the committee, even with an empty cell', () => {
+    const uniEmail = 's441000121@uqu.edu.sa';
+    const plan = buildImportPlan([row({ uniEmail })], inMedia(membershipIn(uniEmail, false)));
+    expect(plan.rows[0]).toMatchObject({ status: 'join', joinCommittees: ['لجنة الإعلام'] });
+    expect(plan.joins).toEqual([
+      { line: plan.rows[0]?.line, membershipId: MEMBERSHIP, committeeIds: [MEDIA] },
+    ]);
+  });
+
+  it('skips an active member already in the committee, and restores a removed one into it', () => {
+    const uniEmail = 's441000131@uqu.edu.sa';
+    const existing = buildImportPlan(
+      [row({ uniEmail })],
+      inMedia(membershipIn(uniEmail, false, 'أحمد علي', [MEDIA])),
+    );
+    expect(existing.rows[0]?.status).toBe('existing');
+
+    const restored = buildImportPlan(
+      [row({ uniEmail, membershipTypeName: 'عضو فعال' })],
+      inMedia(membershipIn(uniEmail, true)),
+    );
+    expect(restored.restores).toMatchObject([
+      { membershipId: MEMBERSHIP, membershipTypeId: TYPE_MEMBER, committeeIds: [MEDIA] },
+    ]);
+  });
+
+  it('has a checksum of its own, per committee', () => {
+    line = 1;
+    const club = buildImportPlan([row()], clubState()).checksum;
+    line = 1;
+    const media = buildImportPlan([row()], inMedia()).checksum;
+    line = 1;
+    const tech = buildImportPlan(
+      [row()],
+      clubState({ committee: { id: TECH, name: 'لجنة التقنية' } }),
+    ).checksum;
+    expect(new Set([club, media, tech]).size).toBe(3);
+  });
+});
+
+describe('the «عضو» type', () => {
+  it('is found by name, also when spelled differently, and missing is null', () => {
+    expect(
+      admissionTypeId([
+        { id: TYPE_ACTIVE, name: 'عضو فعال' },
+        { id: TYPE_MEMBER, name: ' عضو ' },
+      ]),
+    ).toBe(TYPE_MEMBER);
+    expect(admissionTypeId([{ id: TYPE_ACTIVE, name: 'عضو فعال' }])).toBeNull();
   });
 });

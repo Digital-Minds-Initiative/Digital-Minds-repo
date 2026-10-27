@@ -82,6 +82,7 @@ export const memberImportHandlers = [
     return {
       checksum: plan.checksum,
       ignoredColumns: plan.ignoredColumns,
+      notices: [],
       summary: plan.summary,
       rows: plan.rows.map(toContractRow),
     };

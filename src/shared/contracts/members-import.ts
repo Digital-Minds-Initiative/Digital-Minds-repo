@@ -13,8 +13,9 @@ import { defineEndpoint, idSchema } from '@/shared/contracts/core';
  *      never confirm something other than what they saw (409 `import_changed` otherwise).
  *
  * Who: the club's officers and full admins — the same rule as adding one member, including the
- * club coming from the URL, so a file can never reach another club. Committee leads cannot
- * import (403 `club_management_required`).
+ * club coming from the URL, so a file can never reach another club. A committee lead cannot
+ * import into the club (403 `club_management_required`); they import into a committee they lead,
+ * through the committee endpoints at the end of this file.
  */
 
 // ─── The file ────────────────────────────────────────────────
@@ -137,6 +138,13 @@ export const memberImportSummarySchema = z.object({
 });
 export type MemberImportSummary = z.infer<typeof memberImportSummarySchema>;
 
+/**
+ * `membership_type_ignored`: a committee import gives every new or restored person the club's
+ * «عضو» type, and the file filled in a type column anyway (docs/adr/0029-leads-add-members.md).
+ */
+export const memberImportNoticeSchema = z.enum(['membership_type_ignored']);
+export type MemberImportNotice = z.infer<typeof memberImportNoticeSchema>;
+
 export const previewMemberImportResponseSchema = z.object({
   /**
    * SHA-256 of the planned changes — send it back to import. It covers what the preview showed
@@ -146,6 +154,8 @@ export const previewMemberImportResponseSchema = z.object({
   checksum: z.string().length(64),
   /** Header names that are not columns of ours; their values are ignored. */
   ignoredColumns: z.array(z.string()),
+  /** About the whole file. Empty for an import into a club. */
+  notices: z.array(memberImportNoticeSchema),
   summary: memberImportSummarySchema,
   rows: z.array(memberImportRowSchema),
 });
@@ -213,5 +223,54 @@ export const memberImportTemplateEndpoint = defineEndpoint({
   path: '/api/v1/clubs/:clubId/members/import/template',
   access: 'actor',
   params: importParamsSchema,
+  response: z.string(),
+});
+
+// ─── Into one committee (docs/adr/0029-leads-add-members.md) ─
+
+/*
+ * The same two steps and the same file, for one committee: its leads, the club's officers and
+ * full admins, with the committee from the URL. Every row that writes goes into that committee —
+ * a new person, a removed member (restored), an active member who is not in it yet (`join`) —
+ * and new or restored people get the club's «عضو» type:
+ *
+ *   - the committees cell may be empty or name this committee; any other name makes the row
+ *     `invalid` with `committee_not_target`;
+ *   - the type column is ignored, and the preview says so with `membership_type_ignored`;
+ *   - an active member's profile, type and name are never touched, as in the club import.
+ *
+ * A committee outside the actor's scope is a 404; an archived club or committee is 409
+ * `club_archived` / `committee_archived`; a club without a «عضو» type is 409
+ * `member_type_missing`. A checksum from the club import is not valid here (409
+ * `import_changed`), nor the other way round.
+ */
+
+const committeeImportParamsSchema = z.object({ committeeId: idSchema });
+
+export const previewCommitteeMemberImportEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/committees/:committeeId/members/import/preview',
+  access: 'actor',
+  params: committeeImportParamsSchema,
+  body: memberImportBodySchema,
+  response: previewMemberImportResponseSchema,
+});
+
+export const confirmCommitteeMemberImportEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/committees/:committeeId/members/import',
+  access: 'actor',
+  params: committeeImportParamsSchema,
+  body: confirmMemberImportBodySchema,
+  response: memberImportResultSchema,
+  successStatus: 201,
+});
+
+/** The same template as the club's: a committees column is welcome but may stay empty. */
+export const committeeMemberImportTemplateEndpoint = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/committees/:committeeId/members/import/template',
+  access: 'actor',
+  params: committeeImportParamsSchema,
   response: z.string(),
 });
