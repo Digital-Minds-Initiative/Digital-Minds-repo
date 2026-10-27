@@ -43,6 +43,12 @@ export interface ImportClubState {
   >;
   /** The name this club has on record, per membership id. Read through the members scope. */
   storedNames: ReadonlyMap<string, string>;
+  /**
+   * The committees each active member of this club is active in, per membership id. Read through
+   * the committee memberships scope; a removed committee membership is not in it, so a row naming
+   * that committee brings it back.
+   */
+  activeCommittees: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /** An `add` row: create the account unless it exists, then create the membership. */
@@ -66,6 +72,17 @@ export interface ImportRestore {
   committeeIds: string[];
 }
 
+/**
+ * A `join` row: an active member of this club goes into the committees the file names that they
+ * are not active in — new committee memberships, or removed ones brought back. The membership
+ * itself (type, profile, name) is left exactly as it is.
+ */
+interface ImportJoin {
+  line: number;
+  membershipId: string;
+  committeeIds: string[];
+}
+
 export interface ImportPlan {
   /** Exactly what the preview answers with, in file order. */
   rows: MemberImportRow[];
@@ -73,15 +90,17 @@ export interface ImportPlan {
   checksum: string;
   adds: ImportAdd[];
   restores: ImportRestore[];
+  joins: ImportJoin[];
 }
 
 export function buildImportPlan(rows: ParsedImportRow[], club: ImportClubState): ImportPlan {
   const plan: ImportPlan = {
     rows: [],
-    summary: { total: rows.length, add: 0, restore: 0, existing: 0, invalid: 0 },
+    summary: { total: rows.length, add: 0, restore: 0, join: 0, existing: 0, invalid: 0 },
     checksum: '',
     adds: [],
     restores: [],
+    joins: [],
   };
   /** First line each address was used on, so a repeat can point at it. */
   const firstSeen = new Map<string, number>();
@@ -92,6 +111,7 @@ export function buildImportPlan(rows: ParsedImportRow[], club: ImportClubState):
     plan.summary[classified.row.status] += 1;
     if (classified.add) plan.adds.push(classified.add);
     if (classified.restore) plan.restores.push(classified.restore);
+    if (classified.join) plan.joins.push(classified.join);
     if (row.uniEmail && !firstSeen.has(row.uniEmail)) firstSeen.set(row.uniEmail, row.line);
   }
 
@@ -103,6 +123,7 @@ interface ClassifiedRow {
   row: MemberImportRow;
   add?: ImportAdd;
   restore?: ImportRestore;
+  join?: ImportJoin;
 }
 
 function classify(
@@ -129,16 +150,17 @@ function classify(
   // and compared. An account outside the club is not: `add` rows show the file's name and say
   // nothing, exactly as adding one member does (ADR 0012).
   const storedName = membership ? (club.storedNames.get(membership.id) ?? null) : null;
-  const status = statusFor(issues, membership);
+  // An active member is skipped unless the file puts them in a committee they are not active in;
+  // then only those committee memberships are written (ADR 0021 amendment).
+  const joinIds =
+    membership && !membership.removed ? committeesToJoin(committeeIds, membership.id, club) : [];
+  const baseStatus = statusFor(issues, membership);
+  const status = baseStatus === 'existing' && joinIds.length > 0 ? 'join' : baseStatus;
   // The name the row ends with: this club's own record when the person is one of its members
   // (even a removed one), and otherwise what the file says — which is all the officer may see.
   const fullName = storedName ?? parsed.fullName;
 
-  if (
-    (status === 'existing' || status === 'restore') &&
-    storedName &&
-    storedName !== parsed.fullName
-  ) {
+  if (status !== 'add' && status !== 'invalid' && storedName && storedName !== parsed.fullName) {
     warnings.push({ field: 'fullName', code: 'name_differs' });
   }
 
@@ -150,6 +172,12 @@ function classify(
     issues,
     warnings,
   };
+
+  if (status === 'join' && membership) {
+    const names = new Map(club.committees.map((committee) => [committee.id, committee.name]));
+    row.joinCommittees = joinIds.map((id) => names.get(id) ?? '');
+    return { row, join: { line: parsed.line, membershipId: membership.id, committeeIds: joinIds } };
+  }
 
   if (status === 'add' && parsed.uniEmail && parsed.fullName && membershipTypeId) {
     return {
@@ -187,6 +215,16 @@ function statusFor(
   if (issues.length > 0) return 'invalid';
   if (!membership) return 'add';
   return membership.removed ? 'restore' : 'existing';
+}
+
+/** The file's committees this member is not active in, each once, in the cell's order. */
+function committeesToJoin(
+  committeeIds: readonly string[],
+  membershipId: string,
+  club: ImportClubState,
+): string[] {
+  const active = club.activeCommittees.get(membershipId);
+  return [...new Set(committeeIds)].filter((id) => !active?.has(id));
 }
 
 function resolveMembershipType(
@@ -256,6 +294,7 @@ function checksumOf(plan: ImportPlan, clubId: string): string {
   hash.update(`v1\u001f${clubId}`);
   const adds = new Map(plan.adds.map((add) => [add.line, add]));
   const restores = new Map(plan.restores.map((restore) => [restore.line, restore]));
+  const joins = new Map(plan.joins.map((join) => [join.line, join]));
 
   for (const row of plan.rows) {
     const parts: string[] = [
@@ -268,6 +307,7 @@ function checksumOf(plan: ImportPlan, clubId: string): string {
     ];
     const add = adds.get(row.line);
     const restore = restores.get(row.line);
+    const join = joins.get(row.line);
     if (add)
       parts.push(add.membershipTypeId, committeeKey(add.committeeIds), profileKey(add.profile));
     if (restore) {
@@ -276,6 +316,13 @@ function checksumOf(plan: ImportPlan, clubId: string): string {
         restore.membershipTypeId,
         committeeKey(restore.committeeIds),
         profileKey(restore.profile),
+      );
+    }
+    if (join) {
+      parts.push(
+        join.membershipId,
+        committeeKey(join.committeeIds),
+        [...(row.joinCommittees ?? [])].sort().join(','),
       );
     }
     hash.update(`\u001e${parts.join('\u001f')}`);

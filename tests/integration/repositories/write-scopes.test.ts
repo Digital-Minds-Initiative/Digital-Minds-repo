@@ -239,7 +239,7 @@ describe('repository writes apply the scope themselves', () => {
     await expectNotFound(
       saveImportedMembers(
         officerBScopes,
-        { clubId: s.clubA.id, adds: [add], restores: [] },
+        { clubId: s.clubA.id, adds: [add], restores: [], joins: [] },
         always,
       ),
     );
@@ -251,6 +251,7 @@ describe('repository writes apply the scope themselves', () => {
           clubId: s.clubA.id,
           adds: [{ ...add, committeeIds: [s.committees.a2.id] }],
           restores: [],
+          joins: [],
         },
         always,
       ),
@@ -258,12 +259,51 @@ describe('repository writes apply the scope themselves', () => {
     // Restoring is a write, so it goes through the members scope: the lead cannot see a member
     // who is in none of their committees, so there is nothing for them to bring back.
     await expectConflict(
-      saveImportedMembers(lead, { clubId: s.clubA.id, adds: [], restores: [restore] }, always),
+      saveImportedMembers(
+        lead,
+        { clubId: s.clubA.id, adds: [], restores: [restore], joins: [] },
+        always,
+      ),
       'import_changed',
     );
     expect(
       await db.membership.findUniqueOrThrow({ where: { id: s.memberships.removedOfficer } }),
     ).toEqual(removed);
+
+    // Joining committees goes through the same scopes: another club's officer reaches no club,
+    // a lead reaches no committee they do not lead, and no member outside their committees.
+    const plainBefore = await committeeRows(s.memberships.plain);
+    const memberA1Before = await committeeRows(s.memberships.memberA1);
+    const join = { membershipId: s.memberships.plain, committeeIds: [s.committees.a1.id] };
+    await expectNotFound(
+      saveImportedMembers(
+        officerBScopes,
+        { clubId: s.clubA.id, adds: [], restores: [], joins: [join] },
+        always,
+      ),
+    );
+    await expectNotFound(
+      saveImportedMembers(
+        lead,
+        {
+          clubId: s.clubA.id,
+          adds: [],
+          restores: [],
+          joins: [{ membershipId: s.memberships.memberA1, committeeIds: [s.committees.a2.id] }],
+        },
+        always,
+      ),
+    );
+    await expectConflict(
+      saveImportedMembers(
+        lead,
+        { clubId: s.clubA.id, adds: [], restores: [], joins: [join] },
+        always,
+      ),
+      'import_changed',
+    );
+    expect(await committeeRows(s.memberships.plain)).toEqual(plainBefore);
+    expect(await committeeRows(s.memberships.memberA1)).toEqual(memberA1Before);
 
     // And a plan that no longer matches writes nothing either, scope or no scope.
     const officerA = await actorFor(s.users.officerA.id);
@@ -274,7 +314,7 @@ describe('repository writes apply the scope themselves', () => {
           committees: committeesScope(officerA),
           members: membersScope(officerA),
         },
-        { clubId: s.clubA.id, adds: [add], restores: [] },
+        { clubId: s.clubA.id, adds: [add], restores: [], joins: [] },
         () => Promise.resolve(false),
       ),
       'import_changed',

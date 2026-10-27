@@ -92,10 +92,11 @@ export type MemberImportIssue = z.infer<typeof memberImportIssueSchema>;
  *
  * `add` covers an email nobody has **and** an account that already exists in another club, so the
  * preview never reveals which emails have accounts (docs/adr/0012-member-profiles-per-club.md).
- * `existing` and `restore` describe this club's own members, whom the importing officer sees
- * anyway.
+ * `restore`, `join` and `existing` describe this club's own members, whom the importing officer
+ * sees anyway. `join` is an active member whose committees cell names committees they are not
+ * active in: only those committee memberships are written, never the membership itself.
  */
-export const memberImportStatusSchema = z.enum(['add', 'restore', 'existing', 'invalid']);
+export const memberImportStatusSchema = z.enum(['add', 'restore', 'join', 'existing', 'invalid']);
 export type MemberImportStatus = z.infer<typeof memberImportStatusSchema>;
 
 export const memberImportRowSchema = z.object({
@@ -113,11 +114,16 @@ export const memberImportRowSchema = z.object({
   issues: z.array(memberImportIssueSchema),
   /**
    * Worth seeing, but the row still imports. Today the only one is `name_differs`: this club has
-   * a different name on record and keeps it. It appears on `existing` and `restore` rows only —
-   * on an `add` row the stored name belongs to an account outside the club, which the officer may
-   * not see (docs/adr/0021-csv-member-import.md).
+   * a different name on record and keeps it. It appears on `restore`, `join` and `existing` rows
+   * only — on an `add` row the stored name belongs to an account outside the club, which the
+   * officer may not see (docs/adr/0021-csv-member-import.md).
    */
   warnings: z.array(memberImportIssueSchema),
+  /**
+   * `join` rows only: the committees the member will be added to or brought back into, by their
+   * names on record. Committees the member is already active in are not listed.
+   */
+  joinCommittees: z.array(z.string()).optional(),
 });
 export type MemberImportRow = z.infer<typeof memberImportRowSchema>;
 
@@ -125,6 +131,7 @@ export const memberImportSummarySchema = z.object({
   total: z.number().int(),
   add: z.number().int(),
   restore: z.number().int(),
+  join: z.number().int(),
   existing: z.number().int(),
   invalid: z.number().int(),
 });
@@ -151,6 +158,8 @@ export type PreviewMemberImportResponse = z.infer<typeof previewMemberImportResp
 export const memberImportResultSchema = z.object({
   added: z.number().int(),
   restored: z.number().int(),
+  /** Rows of active members who were added to committees (rows, not committee memberships). */
+  joined: z.number().int(),
   skippedExisting: z.number().int(),
   skippedInvalid: z.number().int(),
 });
@@ -175,7 +184,8 @@ export const previewMemberImportEndpoint = defineEndpoint({
 });
 
 /**
- * `invalid` and `existing` rows are skipped; every other row is applied in one transaction, so a
+ * `invalid` and `existing` rows are skipped, and a `join` row writes only its committee
+ * memberships; every other row is applied in one transaction, so a
  * failure leaves nothing behind. A row whose state changed since the preview — someone else added
  * that person, a committee was renamed, the file was edited — refuses the whole import with 409
  * `import_changed`, and the client previews again.

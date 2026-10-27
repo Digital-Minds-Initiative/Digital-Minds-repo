@@ -192,6 +192,36 @@ describe('ImportMembersDialog — confirming', { timeout: 30_000 }, () => {
     expect(db.memberships.some((membership) => membership.userId === person?.id)).toBe(true);
   });
 
+  it('adds an existing member to a committee they are not in, and says which one', async () => {
+    const { user } = renderDialog();
+    const db = getMockDb();
+    const userId = db.users.find((candidate) => candidate.uniEmail === EXISTING)?.id;
+    const membership = db.memberships.find(
+      (row) => row.userId === userId && row.removedAt === null,
+    );
+    const committee = db.committees.find(
+      (candidate) =>
+        candidate.clubId === membership?.clubId &&
+        !candidate.archivedAt &&
+        !membership.committees.some((link) => link.committeeId === candidate.id && !link.removed),
+    );
+    if (!membership || !committee) throw new Error('demo data changed');
+
+    const table = await chooseAndPreview(user, `${HEADER}\nأحمد,${EXISTING},,,${committee.name}`);
+    expect(summary('join')).toBe('1');
+    expect(summary('existing')).toBe('0');
+    const row = within(table).getAllByRole('row')[1];
+    if (!row) throw new Error('no row');
+    expect(within(row).getByText('ستُضاف للجان')).toBeTruthy();
+    expect(within(row).getByText(`سيُضاف إلى: ${committee.name}`)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'تأكيد استيراد شخص واحد' }));
+    expect(await screen.findByText('أُضيفوا للجان: 1', undefined, { timeout: 8000 })).toBeTruthy();
+    expect(
+      membership.committees.some((link) => link.committeeId === committee.id && !link.removed),
+    ).toBe(true);
+  });
+
   it('cannot confirm a file with nothing to import', async () => {
     const { user } = renderDialog();
     await chooseAndPreview(user, `${HEADER}\nأحمد,${EXISTING},,,`);

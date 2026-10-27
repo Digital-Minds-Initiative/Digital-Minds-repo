@@ -17,7 +17,7 @@ import {
   type ArchivedScenario,
   type Scenario,
 } from '@tests/factories/scenario';
-import { expectConflict } from '@tests/utils/assertions';
+import { expectConflict, expectForbidden } from '@tests/utils/assertions';
 import { importFile, importFixture } from '@tests/utils/import-file';
 
 /*
@@ -72,7 +72,13 @@ describe('importing a members CSV', () => {
   describe('what it writes', () => {
     it('creates the people, their memberships and their committees', async () => {
       const result = await importFully(officerA, importFixture('arabic-headers.csv'));
-      expect(result).toEqual({ added: 3, restored: 0, skippedExisting: 0, skippedInvalid: 0 });
+      expect(result).toEqual({
+        added: 3,
+        restored: 0,
+        joined: 0,
+        skippedExisting: 0,
+        skippedInvalid: 0,
+      });
 
       const first = await memberByEmail('s441000101@uqu.edu.sa');
       expect(first).toMatchObject({
@@ -181,24 +187,171 @@ describe('importing a members CSV', () => {
       const membership = await db.membership.findFirstOrThrow({
         where: { id: s.memberships.plain },
       });
-      const result = await importFully(
-        officerA,
-        csv(`${person.fullName},${person.uniEmail},0559998888,كلية أخرى,1,عضو فعال,لجنة أ2`),
-      );
+      const user = await db.user.findUniqueOrThrow({ where: { id: person.id } });
+      // Every profile cell, the type and the name differ from what the club holds.
+      const file = csv(`اسم من الملف,${person.uniEmail},0559998888,كلية أخرى,1,عضو فعال,لجنة أ2`);
 
-      // An active member is skipped whole: the file does not edit this club's record of them.
-      expect(result).toEqual({ added: 0, restored: 0, skippedExisting: 1, skippedInvalid: 0 });
-      const after = await db.membership.findFirstOrThrow({ where: { id: s.memberships.plain } });
-      expect(after).toEqual(membership);
+      const preview = await previewMemberImport(officerA, s.clubA.id, { file });
+      expect(preview.summary).toMatchObject({ join: 1, existing: 0 });
+      expect(preview.rows[0]).toMatchObject({
+        status: 'join',
+        fullName: person.fullName,
+        joinCommittees: ['لجنة أ2'],
+        warnings: [{ field: 'fullName', code: 'name_differs' }],
+      });
+
+      const result = await confirmMemberImport(officerA, s.clubA.id, {
+        file,
+        checksum: preview.checksum,
+      });
+      expect(result).toEqual({
+        added: 0,
+        restored: 0,
+        joined: 1,
+        skippedExisting: 0,
+        skippedInvalid: 0,
+      });
+      // Only the committee membership: not the profile, not the type, not the name.
+      expect(await db.membership.findUniqueOrThrow({ where: { id: membership.id } })).toEqual(
+        membership,
+      );
+      expect(await db.user.findUniqueOrThrow({ where: { id: person.id } })).toEqual(user);
+      const committees = await db.committeeMembership.findMany({
+        where: { membershipId: membership.id },
+      });
+      expect(committees).toMatchObject([
+        { committeeId: s.committees.a2.id, clubId: s.clubA.id, role: 'MEMBER', removedAt: null },
+      ]);
+    });
+
+    it('skips an existing member who is already in every committee the file names', async () => {
+      // `plain` joined لجنة أ2 in the test above.
+      const person = s.users.plain;
+      const file = csv(`${person.fullName},${person.uniEmail},,,,,لجنة أ2`);
+      const preview = await previewMemberImport(officerA, s.clubA.id, { file });
+      expect(preview.rows[0]).toMatchObject({ status: 'existing', warnings: [] });
+      expect(preview.rows[0]?.joinCommittees).toBeUndefined();
+
+      const before = await world();
+      const result = await confirmMemberImport(officerA, s.clubA.id, {
+        file,
+        checksum: preview.checksum,
+      });
+      expect(result).toEqual({
+        added: 0,
+        restored: 0,
+        joined: 0,
+        skippedExisting: 1,
+        skippedInvalid: 0,
+      });
+      expect(await world()).toEqual(before);
+    });
+
+    it('brings back a committee membership an active member was removed from, without its role', async () => {
+      // staleLead is an active member of A whose A1 row (a LEAD row) was removed.
+      const person = s.users.staleLead;
+      const file = csv(`${person.fullName},${person.uniEmail},,,,,لجنة أ1`);
+      const preview = await previewMemberImport(officerA, s.clubA.id, { file });
+      expect(preview.rows[0]).toMatchObject({ status: 'join', joinCommittees: ['لجنة أ1'] });
+
+      await confirmMemberImport(officerA, s.clubA.id, { file, checksum: preview.checksum });
+      const row = await db.committeeMembership.findUniqueOrThrow({
+        where: { id: s.committeeMemberships.staleLeadA1 },
+      });
+      // The same row, so its points count again; leading the committee is not restored.
+      expect(row).toMatchObject({ removedAt: null, role: 'MEMBER' });
       expect(
-        await db.committeeMembership.count({ where: { membershipId: s.memberships.plain } }),
-      ).toBe(0);
+        await db.committeeMembership.count({ where: { membershipId: s.memberships.staleLead } }),
+      ).toBe(1);
+    });
+
+    it('refuses an existing member’s row whose committee is unknown, another club’s or archived', async () => {
+      const person = s.users.memberA2;
+      const file = csv(
+        `${person.fullName},${person.uniEmail},,,,,لجنة أ1،لجنة ب1`,
+        `${s.users.coLeadA1.fullName},${s.users.coLeadA1.uniEmail},,,,,لجنة لا توجد`,
+        `${s.users.leadA1.fullName},${s.users.leadA1.uniEmail},,,,,${a.archivedCommittee.name}`,
+      );
+      const preview = await previewMemberImport(officerA, s.clubA.id, { file });
+      expect(preview.rows.map((row) => row.status)).toEqual(['invalid', 'invalid', 'invalid']);
+      expect(preview.rows.map((row) => row.issues)).toMatchObject([
+        // Another club's committee is not one this club has: the same as an unknown name.
+        [{ field: 'committees', code: 'unknown_committee', value: 'لجنة ب1' }],
+        [{ field: 'committees', code: 'unknown_committee', value: 'لجنة لا توجد' }],
+        [{ field: 'committees', code: 'committee_archived', value: a.archivedCommittee.name }],
+      ]);
+
+      const before = await world();
+      const result = await confirmMemberImport(officerA, s.clubA.id, {
+        file,
+        checksum: preview.checksum,
+      });
+      expect(result).toMatchObject({ joined: 0, skippedInvalid: 3 });
+      // The usable committee in the first row is not written either: the row is refused whole.
+      expect(await world()).toEqual(before);
+    });
+
+    it('lets nobody who could not add the member to the committee by hand do it by file', async () => {
+      // A lead cannot add anyone to a committee, their own included, so they cannot import.
+      const lead = await actorFor(s.users.leadA1.id);
+      const file = csv(`${s.users.memberA2.fullName},${s.users.memberA2.uniEmail},,,,,لجنة أ1`);
+      const before = await world();
+      await expectForbidden(
+        previewMemberImport(lead, s.clubA.id, { file }),
+        'club_management_required',
+      );
+      await expectForbidden(
+        confirmMemberImport(lead, s.clubA.id, { file, checksum: 'f'.repeat(64) }),
+        'club_management_required',
+      );
+      expect(await world()).toEqual(before);
+    });
+
+    it('imports a file mixing new people, members and members joining committees in one go', async () => {
+      const newcomer = 's441000901@uqu.edu.sa';
+      const file = csv(
+        `طالب جديد للخليط,${newcomer},,,,,لجنة أ1`,
+        // Already in A1: skipped.
+        `${s.users.memberA1.fullName},${s.users.memberA1.uniEmail},,,,,لجنة أ1`,
+        // In A2, now also in A1.
+        `${s.users.memberA2.fullName},${s.users.memberA2.uniEmail},,,,,لجنة أ2،لجنة أ1`,
+      );
+      const preview = await previewMemberImport(officerA, s.clubA.id, { file });
+      expect(preview.rows.map((row) => row.status)).toEqual(['add', 'existing', 'join']);
+      expect(preview.rows[2]?.joinCommittees).toEqual(['لجنة أ1']);
+
+      const result = await confirmMemberImport(officerA, s.clubA.id, {
+        file,
+        checksum: preview.checksum,
+      });
+      expect(result).toEqual({
+        added: 1,
+        restored: 0,
+        joined: 1,
+        skippedExisting: 1,
+        skippedInvalid: 0,
+      });
+      const added = await memberByEmail(newcomer);
+      expect(added.committeeMemberships.map((row) => row.committee.name)).toEqual(['لجنة أ1']);
+      const joined = await memberByEmail(s.users.memberA2.uniEmail);
+      expect(
+        joined.committeeMemberships
+          .filter((row) => row.removedAt === null)
+          .map((row) => row.committee.name)
+          .sort(),
+      ).toEqual(['لجنة أ1', 'لجنة أ2']);
     });
 
     it('skips invalid rows and imports the rest', async () => {
       const before = await world();
       const result = await importFully(officerA, importFixture('problems.csv'));
-      expect(result).toEqual({ added: 2, restored: 0, skippedExisting: 0, skippedInvalid: 5 });
+      expect(result).toEqual({
+        added: 2,
+        restored: 0,
+        joined: 0,
+        skippedExisting: 0,
+        skippedInvalid: 5,
+      });
 
       expect(await db.membership.count({ where: { clubId: s.clubA.id } })).toBe(
         before.memberships.filter((row) => row.clubId === s.clubA.id).length + 2,
