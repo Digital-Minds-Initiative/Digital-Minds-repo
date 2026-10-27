@@ -5,6 +5,7 @@ import { AuthzError, type Actor } from '@/server/authz';
 import {
   assertCanAddMember,
   assertCanAddToCommittee,
+  assertCanAdmitToCommittee,
   assertCanChangeMembershipType,
   assertCanEditClubFields,
   assertCanEditFullName,
@@ -150,5 +151,41 @@ describe('the membership type', () => {
 
   it('cannot be changed by an ordinary member', () => {
     expect(() => assertCanChangeMembershipType(member, inOwnCommittee)).toThrow(AuthzError);
+  });
+});
+
+describe('bringing a person into one committee (docs/adr/0029-leads-add-members.md)', () => {
+  const own = { clubId: CLUB, committeeId: OWN };
+  const other = { clubId: CLUB, committeeId: OTHER };
+
+  it('is allowed for a full admin and the club’s officer, in any committee of the club', () => {
+    for (const actor of [admin, officer]) {
+      expect(() => assertCanAdmitToCommittee(actor, own)).not.toThrow();
+      expect(() => assertCanAdmitToCommittee(actor, other)).not.toThrow();
+    }
+  });
+
+  it('is allowed for the lead, in the committee they lead only', () => {
+    expect(() => assertCanAdmitToCommittee(lead, own)).not.toThrow();
+    // The scopes make another committee a 404 first; this is the rule behind that.
+    try {
+      assertCanAdmitToCommittee(lead, other);
+      expect.unreachable('a lead admits to their own committee only');
+    } catch (error) {
+      expect((error as AuthzError).reason).toBe('committee_management_required');
+    }
+  });
+
+  it('is refused for an ordinary member and another club’s officer', () => {
+    expect(() => assertCanAdmitToCommittee(member, own)).toThrow(AuthzError);
+    expect(() =>
+      assertCanAdmitToCommittee(officer, { clubId: OTHER_CLUB, committeeId: OTHER }),
+    ).toThrow(AuthzError);
+  });
+
+  it('leaves every club-level action refused for the lead, removing included', () => {
+    // A lead admits people; taking anyone out stays with the club's officers.
+    expect(() => assertCanRemoveFromCommittee(lead, CLUB)).toThrow(AuthzError);
+    expect(() => assertCanRemoveFromClub(lead, CLUB)).toThrow(AuthzError);
   });
 });
