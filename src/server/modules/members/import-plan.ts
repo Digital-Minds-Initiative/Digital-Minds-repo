@@ -273,7 +273,10 @@ function resolveCommittees(
  * "لجنة الاعلام" finds "لجنة الإعلام" — but only when exactly one candidate folds to it, because
  * guessing between two real committees is worse than refusing the row.
  */
-function matchByName<T extends { name: string }>(candidates: readonly T[], name: string): T | null {
+export function matchByName<T extends { name: string }>(
+  candidates: readonly T[],
+  name: string,
+): T | null {
   const exact = candidates.find((candidate) => normalizeEntityName(candidate.name) === name);
   if (exact) return exact;
   const folded = normalizeForSearch(name);

@@ -4,6 +4,7 @@ import {
   clubsScope,
   committeeMembershipsScope,
   committeesScope,
+  memberAdmissionScope,
   membersScope,
   membershipTypesScope,
   pointTransactionsScope,
@@ -29,6 +30,7 @@ import {
   setCommitteeRole,
   removeFromClub,
   removeFromCommittee,
+  saveAdmittedMember,
   saveMemberChanges,
   saveImportedMembers,
   saveMemberExport,
@@ -205,6 +207,60 @@ describe('repository writes apply the scope themselves', () => {
     expect(await db.user.count()).toBe(users);
     expect(await db.membership.count()).toBe(memberships);
     expect(await committeeRows(s.memberships.memberA2)).toEqual(beforeA2);
+  });
+
+  it('saveAdmittedMember checks the club, the committee and the membership it brings in', async () => {
+    const lead = await actorFor(s.users.leadA1.id);
+    const leadScopes = {
+      club: clubsScope(lead),
+      committees: committeesScope(lead),
+      admission: memberAdmissionScope(lead),
+    };
+    const before = {
+      users: await db.user.count(),
+      memberships: await db.membership.findMany({ orderBy: { id: 'asc' } }),
+      committeeMemberships: await db.committeeMembership.findMany({ orderBy: { id: 'asc' } }),
+    };
+    const input = {
+      person: { uniEmail: 's900000521@st.uqu.edu.sa', fullName: 'شخص جديد' },
+      profile: {},
+      clubId: s.clubA.id,
+      committeeId: s.committees.a1.id,
+      membershipTypeId: s.types.a,
+    };
+
+    // Club A with club B's scopes, whole.
+    await expectNotFound(
+      saveAdmittedMember(
+        {
+          club: clubsScope(officerB),
+          committees: committeesScope(officerB),
+          admission: memberAdmissionScope(officerB),
+        },
+        input,
+      ),
+    );
+    // The lead's club, but a committee they do not lead.
+    await expectNotFound(
+      saveAdmittedMember(leadScopes, { ...input, committeeId: s.committees.a2.id }),
+    );
+    // The club and the committee pass, but the membership is checked through the admission scope
+    // itself: one from another club reaches neither a removed member nor an active one.
+    const outsideAdmission = { ...leadScopes, admission: memberAdmissionScope(officerB) };
+    for (const person of [s.users.removedOfficer, s.users.memberA2]) {
+      await expectNotFound(
+        saveAdmittedMember(outsideAdmission, {
+          ...input,
+          person: { uniEmail: person.uniEmail, fullName: person.fullName },
+        }),
+      );
+    }
+
+    expect(await db.user.count()).toBe(before.users);
+    expect(await db.membership.findMany({ orderBy: { id: 'asc' } })).toEqual(before.memberships);
+    expect(await db.committeeMembership.findMany({ orderBy: { id: 'asc' } })).toEqual(
+      before.committeeMemberships,
+    );
   });
 
   it('saveImportedMembers checks the club, the committees and the memberships it restores', async () => {

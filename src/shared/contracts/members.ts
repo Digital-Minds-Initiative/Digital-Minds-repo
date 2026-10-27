@@ -244,6 +244,45 @@ export const createMemberEndpoint = defineEndpoint({
   successStatus: 201,
 });
 
+/**
+ * The name of the membership type a person gets when they are brought in through one committee,
+ * matched like every entity name (exactly, then on the Arabic-folded spelling). A club without
+ * one refuses with 409 `member_type_missing` (docs/adr/0029-leads-add-members.md).
+ */
+export const COMMITTEE_ADMISSION_TYPE_NAME = 'عضو';
+
+/** No type and no committees: the type is always the club's «عضو», the committee the URL's. */
+export const admitMemberBodySchema = z.strictObject({
+  person: newPersonSchema,
+  /** Saved only when the person gets a new or restored membership; an active member keeps theirs. */
+  profile: newProfileSchema.default({}),
+});
+export type AdmitMemberBody = z.output<typeof admitMemberBodySchema>;
+
+/**
+ * Brings a person into one committee — its leads, the club's officers and full admins
+ * (docs/adr/0029-leads-add-members.md). Always 201 with the member:
+ *
+ *   - no membership in the club (a new address, or an account in another club — never told
+ *     apart, docs/adr/0012) → a new membership with the club's «عضو» type, in this committee;
+ *   - a removed membership → restored by id with «عضو» and role MEMBER, in this committee only;
+ *   - an active member not in this committee → joins it (a removed committee membership comes back
+ *     by id, role MEMBER); their type, profile and name are not touched.
+ *
+ * Already active in this committee is 409 `already_in_committee` with `error.details.memberId`.
+ * A club without a «عضو» type is 409 `member_type_missing`. A membership type or committees in
+ * the body are 422 (`unrecognized_keys`).
+ */
+export const admitMemberEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/committees/:committeeId/members',
+  access: 'actor',
+  params: z.object({ committeeId: idSchema }),
+  body: admitMemberBodySchema,
+  response: memberSchema,
+  successStatus: 201,
+});
+
 // ─── Update ──────────────────────────────────────────────────
 
 export const updateMemberBodySchema = requireAnyField(

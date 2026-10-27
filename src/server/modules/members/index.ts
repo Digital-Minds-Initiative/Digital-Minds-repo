@@ -2,6 +2,7 @@ import 'server-only';
 
 export {
   addMemberToCommittee,
+  admitMember,
   createMember,
   getMember,
   listMembers,
