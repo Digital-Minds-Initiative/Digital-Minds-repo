@@ -20,11 +20,11 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0014](0014-email-otp-sign-in.md)                 | Sign in with a one-time code emailed to the university address                      | Accepted (0017, 0027)           |
 | [0015](0015-archive-instead-of-delete.md)         | Archive clubs and committees instead of deleting them                               | Accepted (amended: deletes)     |
 | [0016](0016-membership-type-deletes-and-order.md) | Membership types: delete with a destination, order in one request                   | Accepted                        |
-| [0017](0017-member-permissions.md)                | Officers run the membership; a removed member is restored                           | Accepted                        |
+| [0017](0017-member-permissions.md)                | Officers run the membership; a removed member is restored                           | Accepted (0029)                 |
 | [0018](0018-granting-roles.md)                    | Full admins appoint officers, officers appoint leads; every grant is recorded       | Accepted (0027)                 |
 | [0019](0019-points-rules.md)                      | What the points endpoints accept, refuse and record                                 | Accepted (amends 0004)          |
 | [0020](0020-members-list-filtering.md)            | Arabic names order on the folded copy; points ranked in two phases, not in SQL      | Accepted                        |
-| [0021](0021-csv-member-import.md)                 | Import members from a CSV behind a preview the import must match                    | Accepted (amended: join)        |
+| [0021](0021-csv-member-import.md)                 | Import members from a CSV behind a preview the import must match                    | Accepted (amended: join; 0029)  |
 | [0022](0022-bulk-points.md)                       | Bulk points: two endpoints, all or nothing, and a key that makes a resend harmless  | Accepted (extends 0019)         |
 | [0023](0023-committee-view-link.md)               | A committee view link: a capability token, stored twice, opening a whitelisted page | Accepted (amends 0002)          |
 | [0024](0024-content-security-policy.md)           | A nonce-based Content-Security-Policy, built per request in the proxy               | Accepted                        |
@@ -32,6 +32,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0026](0026-person-deletion.md)                   | Deleting a person's data: the account is emptied in place                           | Accepted (amends 0003, 0019)    |
 | [0027](0027-invite-only-sign-in.md)               | Invite-only sign-in at launch, and invitations for new role holders                 | Accepted (amends 0014, 0018)    |
 | [0028](0028-hosting-and-deploys.md)               | Vercel and Neon in Frankfurt, deployed only from GitHub Actions                     | Accepted                        |
+| [0029](0029-leads-add-members.md)                 | Committee leads bring people into their own committee                               | Accepted (amends 0017, 0021)    |
 
 ## Writing a new ADR
 
