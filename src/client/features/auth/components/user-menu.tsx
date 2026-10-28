@@ -47,7 +47,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="gap-2 px-2" aria-label={t('userMenu.label')}>
+        <Button variant="ghost" className="gap-2 px-2">
           <span
             aria-hidden
             className="flex size-8 items-center justify-center rounded-full bg-primary-subtle text-xs font-semibold text-primary-subtle-fg"
@@ -55,6 +55,8 @@ export function UserMenu() {
             {initials(me.user.fullName)}
           </span>
           <span className="hidden max-w-40 truncate text-sm md:inline">{me.user.fullName}</span>
+          {/* The button's name comes from its content: the visible name, plus this for when it is hidden. */}
+          <span className="sr-only">{t('userMenu.label')}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
@@ -67,7 +69,11 @@ export function UserMenu() {
         {roles.length > 0 ? (
           <>
             <DropdownMenuSeparator />
-            <div className="flex flex-wrap gap-1 px-2 py-1.5" aria-label={t('userMenu.roles')}>
+            <div
+              role="group"
+              className="flex flex-wrap gap-1 px-2 py-1.5"
+              aria-label={t('userMenu.roles')}
+            >
               {roles.map((role) => (
                 <Badge key={role} variant="primary">
                   {role}

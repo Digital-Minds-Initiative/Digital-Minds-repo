@@ -41,7 +41,9 @@ export function TypeText({ text }: { text: string }) {
 
   if (!animate) return <span ref={ref}>{text}</span>;
   return (
-    <span ref={ref} className="relative inline-block" aria-label={text}>
+    <span ref={ref} className="relative inline-block">
+      {/* The words for screen readers; the two layers below are only for the eye. */}
+      <span className="sr-only">{text}</span>
       <span aria-hidden className="invisible">
         {text}
       </span>
