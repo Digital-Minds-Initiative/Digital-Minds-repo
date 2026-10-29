@@ -34,6 +34,7 @@ import { toLatinDigits } from '@/shared/lib/arabic';
 import { normalizeEmail } from '@/shared/lib/email-domains';
 import { normalizePersonName } from '@/shared/lib/names';
 
+import { fromGenderValue, GenderSelect, toGenderValue, type GenderValue } from './gender-select';
 import { useClubTypes, useUpdateMember } from '../hooks/use-member-actions';
 import type { MemberAccess } from '../lib/access';
 import { applyIssues } from '../lib/form';
@@ -47,6 +48,7 @@ interface Values {
   college: string;
   major: string;
   level: string;
+  gender: GenderValue;
 }
 
 const FIELDS = [
@@ -58,6 +60,7 @@ const FIELDS = [
   'college',
   'major',
   'level',
+  'gender',
 ] as const;
 
 export interface EditMemberDialogProps {
@@ -106,6 +109,7 @@ function EditMemberForm({
       college: member.profile.college ?? '',
       major: member.profile.major ?? '',
       level: member.profile.level === null ? '' : String(member.profile.level),
+      gender: toGenderValue(member.profile.gender),
     },
   });
   const emailChanged =
@@ -136,8 +140,10 @@ function EditMemberForm({
           text(toLatinDigits(values.level)) === null
             ? null
             : Number(toLatinDigits(values.level).trim()),
+        gender: fromGenderValue(values.gender),
       };
-      for (const key of ['personalEmail', 'phone', 'college', 'major', 'level'] as const) {
+      const keys = ['personalEmail', 'phone', 'college', 'major', 'level', 'gender'] as const;
+      for (const key of keys) {
         if (next[key] !== member.profile[key]) changes[key] = next[key];
       }
     }
@@ -304,6 +310,18 @@ function EditMemberForm({
                   )}
                 />
               ))}
+              <FormField
+                control={form.control}
+                name="gender"
+                label={t('fieldsPlain.gender')}
+                render={({ field, controlProps }) => (
+                  <GenderSelect
+                    id={controlProps.id}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
             </div>
           ) : null}
 

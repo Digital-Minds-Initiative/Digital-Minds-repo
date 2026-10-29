@@ -6,6 +6,7 @@ import type {
   ClubScope,
   CommitteeMembershipScope,
   CommitteeScope,
+  MemberAdmissionScope,
   MemberScope,
   MembershipTypeScope,
   UserScope,
@@ -18,6 +19,7 @@ import type {
   ClubRole,
   CommitteeRole,
   CreateMemberBody,
+  MemberGenderFilter,
   MemberSortField,
   MemberStatus,
   UpdateMemberBody,
@@ -46,6 +48,7 @@ function memberSelect(nested: CommitteeMembershipScope) {
     college: true,
     major: true,
     level: true,
+    gender: true,
     user: { select: { id: true, fullName: true, uniEmail: true, registeredAt: true } },
     club: { select: { id: true, name: true, slug: true } },
     membershipType: { select: { id: true, name: true, order: true } },
@@ -68,6 +71,8 @@ export interface MemberFilters {
   membershipTypeIds?: string[];
   role?: ClubRole;
   registered?: boolean;
+  /** A recorded gender, or `UNSPECIFIED` for none. */
+  gender?: MemberGenderFilter;
   status: MemberStatus;
   /** The members export's ticked rows: only these, and still only where the rest matches. */
   memberIds?: string[];
@@ -100,6 +105,9 @@ function memberWhere(
   if (filters.role) conditions.push({ role: filters.role });
   if (filters.registered !== undefined) {
     conditions.push({ user: { registeredAt: filters.registered ? { not: null } : null } });
+  }
+  if (filters.gender) {
+    conditions.push({ gender: filters.gender === 'UNSPECIFIED' ? null : filters.gender });
   }
   if (filters.search) {
     const search: Prisma.MembershipWhereInput[] = [
@@ -282,14 +290,27 @@ export async function findManageableCommittees(
 export async function findCommitteeForMember(
   scope: CommitteeScope,
   committeeId: string,
-): Promise<{ id: string; clubId: string; archived: boolean; clubArchived: boolean } | null> {
+): Promise<{
+  id: string;
+  name: string;
+  clubId: string;
+  archived: boolean;
+  clubArchived: boolean;
+} | null> {
   const row = await db.committee.findFirst({
     where: { AND: [scope, { id: committeeId }] },
-    select: { id: true, clubId: true, archivedAt: true, club: { select: { archivedAt: true } } },
+    select: {
+      id: true,
+      name: true,
+      clubId: true,
+      archivedAt: true,
+      club: { select: { archivedAt: true } },
+    },
   });
   return row
     ? {
         id: row.id,
+        name: row.name,
         clubId: row.clubId,
         archived: row.archivedAt !== null,
         clubArchived: row.club.archivedAt !== null,
@@ -336,6 +357,23 @@ export function alreadyInClub(memberId: string): ConflictError {
   return new ConflictError('The person is already a member of this club.', 'already_in_club', {
     memberId,
   });
+}
+
+/** 409 for someone who is already active in the committee they are being brought into. */
+function alreadyInCommittee(memberId: string): ConflictError {
+  return new ConflictError(
+    'The person is already a member of this committee.',
+    'already_in_committee',
+    { memberId },
+  );
+}
+
+/** 409 for a club with no «عضو» type to bring people in with (docs/adr/0029-leads-add-members.md). */
+export function memberTypeMissing(): ConflictError {
+  return new ConflictError(
+    'The club has no membership type for new committee members.',
+    'member_type_missing',
+  );
 }
 
 // ─── Writes ──────────────────────────────────────────────────
@@ -437,6 +475,125 @@ export async function saveNewMember(
         update: { removedAt: null, role: 'MEMBER' },
       });
     }
+    return membershipId;
+  });
+}
+
+/** What bringing a person into one committee writes through (docs/adr/0029-leads-add-members.md). */
+export interface AdmitMemberScopes {
+  club: ClubScope;
+  committees: CommitteeScope;
+  admission: MemberAdmissionScope;
+}
+
+/**
+ * Brings a person into one committee, in one transaction that also makes every decision, so two
+ * requests for the same person cannot both get past them:
+ *
+ *   - no membership in the club → the account unless it exists, then a membership with `membershipTypeId`;
+ *   - a removed membership → restored by id with that type, the profile and role MEMBER;
+ *   - an active membership → left exactly as it is (type, profile, name);
+ *
+ * and then the committee membership: created, or a removed one back by id with role MEMBER.
+ * Already active in it is 409 `already_in_committee`.
+ *
+ * The club and the committee are checked through the actor's scopes, and the membership through
+ * the admission scope — which is wider than what a lead may read, so it is only ever paired with
+ * the committee checked here, in the same club.
+ */
+export async function saveAdmittedMember(
+  scopes: AdmitMemberScopes,
+  input: {
+    person: CreateMemberBody['person'];
+    profile: CreateMemberBody['profile'];
+    clubId: string;
+    committeeId: string;
+    membershipTypeId: string;
+  },
+): Promise<string> {
+  return db.$transaction(async (tx) => {
+    const club = await tx.club.count({
+      where: { AND: [scopes.club, { id: input.clubId, archivedAt: null }] },
+    });
+    if (club !== 1) throw new NotFoundError('Club');
+    const committee = await tx.committee.count({
+      where: {
+        AND: [scopes.committees, { id: input.committeeId, clubId: input.clubId, archivedAt: null }],
+      },
+    });
+    if (committee !== 1) throw new NotFoundError('Committee');
+
+    // Unscoped and ids only, like `findAccountByUniEmail`: one account per person, and adding has
+    // to link to it without saying that it exists.
+    const account = await tx.user.findUnique({
+      where: { uniEmail: input.person.uniEmail },
+      select: {
+        id: true,
+        memberships: { where: { clubId: input.clubId }, select: { id: true, removedAt: true } },
+      },
+    });
+    const userId =
+      account?.id ??
+      (
+        await tx.user.create({
+          data: {
+            uniEmail: input.person.uniEmail,
+            fullName: input.person.fullName,
+            searchName: normalizeForSearch(input.person.fullName),
+          },
+          select: { id: true },
+        })
+      ).id;
+    const current = account?.memberships[0];
+
+    let membershipId: string;
+    if (!current) {
+      membershipId = (
+        await tx.membership.create({
+          data: {
+            ...input.profile,
+            userId,
+            clubId: input.clubId,
+            membershipTypeId: input.membershipTypeId,
+          },
+          select: { id: true },
+        })
+      ).id;
+    } else if (current.removedAt) {
+      // Restored, not recreated — the same as an officer's add — with this club's «عضو» type.
+      const { count } = await tx.membership.updateMany({
+        where: { AND: [scopes.admission, { id: current.id, removedAt: { not: null } }] },
+        data: {
+          ...input.profile,
+          removedAt: null,
+          removedById: null,
+          role: 'MEMBER',
+          membershipTypeId: input.membershipTypeId,
+        },
+      });
+      if (count !== 1) throw new NotFoundError('Member');
+      membershipId = current.id;
+    } else {
+      // An active member: nothing on the membership changes, it only has to be one the actor
+      // may bring in.
+      const reachable = await tx.membership.count({
+        where: { AND: [scopes.admission, { id: current.id, removedAt: null }] },
+      });
+      if (reachable !== 1) throw new NotFoundError('Member');
+      membershipId = current.id;
+    }
+
+    const existing = await tx.committeeMembership.findUnique({
+      where: { membershipId_committeeId: { membershipId, committeeId: input.committeeId } },
+      select: { removedAt: true },
+    });
+    if (existing && !existing.removedAt) throw alreadyInCommittee(membershipId);
+    await tx.committeeMembership.upsert({
+      where: { membershipId_committeeId: { membershipId, committeeId: input.committeeId } },
+      create: { membershipId, committeeId: input.committeeId, clubId: input.clubId },
+      // Back with its points, never with its role: leading again is an appointment of its own.
+      update: { removedAt: null, role: 'MEMBER' },
+    });
     return membershipId;
   });
 }
@@ -672,7 +829,7 @@ export async function findAccountsByUniEmails(
  * member the actor can already see, which is what keeps an account outside the club invisible.
  */
 export async function findMemberNames(
-  scope: MemberScope,
+  scope: MemberScope | MemberAdmissionScope,
   memberIds: readonly string[],
   client: TransactionClient = db,
 ): Promise<Map<string, string>> {
@@ -737,7 +894,8 @@ export async function findCommitteesInClub(
 export interface ImportScopes {
   club: ClubScope;
   committees: CommitteeScope;
-  members: MemberScope;
+  /** The members scope for a club import, the admission scope for a committee import (ADR 0029). */
+  members: MemberScope | MemberAdmissionScope;
 }
 
 /** One row's worth of work for the writer: a new membership, or a removed one coming back. */
@@ -911,7 +1069,7 @@ async function createMemberships(
  */
 async function restoreMemberships(
   tx: TransactionClient,
-  scope: MemberScope,
+  scope: MemberScope | MemberAdmissionScope,
   restores: readonly ImportRestoreWrite[],
 ): Promise<number> {
   let count = 0;

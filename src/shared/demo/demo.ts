@@ -11,6 +11,7 @@
  * and sends real email, so never give a demo person an address that could be someone's inbox.
  */
 
+import type { Gender } from '@/shared/contracts/core';
 import type { MemberProfile } from '@/shared/contracts/members';
 
 export type DemoClubKey = 'computing' | 'tuwaiq';
@@ -50,7 +51,7 @@ export const demoClubs: readonly DemoClub[] = [
     slug: 'tuwaiq',
     name: 'نادي طويق',
     description: 'نادي يهتم بتطوير المهارات التقنية وريادة الأعمال الرقمية.',
-    membershipTypes: ['رئيس', 'عضو فعال', 'مستفيد'],
+    membershipTypes: ['رئيس', 'عضو فعال', 'عضو', 'مستفيد'],
     committees: [
       { key: 'development', name: 'لجنة التطوير', description: 'مشاريع التطوير والتدريب التقني.' },
       { key: 'content', name: 'لجنة المحتوى', description: 'كتابة المحتوى التقني والنشرات.' },
@@ -81,6 +82,8 @@ export interface DemoPerson {
   college?: string;
   major?: string;
   level?: number;
+  /** Left out for a few people, so the list has members whose club recorded none. */
+  gender?: Gender;
   isFullAdmin?: boolean;
   /** False: added by an admin; the person has not signed up yet, so they cannot be selected. */
   registered: boolean;
@@ -109,6 +112,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'sara',
     fullName: 'سارة عبدالرحمن القحطاني',
     uniEmail: 's000000001@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'sara.alqahtani@example.com',
     phone: '+966500000102',
     college: CS,
@@ -129,6 +133,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'fahad',
     fullName: 'فهد سعد العنزي',
     uniEmail: 's000000002@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'fahad.alanazi@example.com',
     phone: '+966500000103',
     college: CS,
@@ -144,6 +149,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'noura',
     fullName: 'نورة خالد الحربي',
     uniEmail: 's000000003@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'noura.alharbi@example.com',
     phone: '+966500000104',
     college: CS,
@@ -160,6 +166,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'mohammed',
     fullName: 'محمد عبدالله العتيبي',
     uniEmail: 's000000004@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'mohammed.alotaibi@example.com',
     phone: '+966500000105',
     college: CS,
@@ -179,6 +186,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'reem',
     fullName: 'ريم ناصر الشهري',
     uniEmail: 's000000005@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'reem.alshehri@example.com',
     phone: '+966500000106',
     college: DESIGN,
@@ -194,6 +202,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'khalid',
     fullName: 'خالد إبراهيم المالكي',
     uniEmail: 's000000006@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'khalid.almalki@example.com',
     phone: '+966500000107',
     college: CS,
@@ -216,6 +225,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'abdulrahman',
     fullName: 'عبدالرحمن فيصل القرشي',
     uniEmail: 's000000007@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'abdulrahman.alqurashi@example.com',
     phone: '+966500000108',
     college: CS,
@@ -232,6 +242,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'jood',
     fullName: 'جود سلطان الأحمدي',
     uniEmail: 's000000008@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'jood.alahmadi@example.com',
     phone: '+966500000109',
     college: CS,
@@ -247,6 +258,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'majed',
     fullName: 'ماجد حسن السلمي',
     uniEmail: 's000000009@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'majed.alsulami@example.com',
     phone: '+966500000110',
     college: BUSINESS,
@@ -260,6 +272,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'ibrahim',
     fullName: 'إبراهيم يوسف الصاعدي',
     uniEmail: 's000000010@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'ibrahim.alsaedi@example.com',
     phone: '+966500000111',
     college: CS,
@@ -275,6 +288,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'faisal',
     fullName: 'فيصل أحمد الدوسري',
     uniEmail: 's000000011@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'faisal.aldosari@example.com',
     phone: '+966500000112',
     college: CS,
@@ -290,6 +304,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'lama',
     fullName: 'لمى عبدالعزيز السبيعي',
     uniEmail: 's000000012@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'lama.alsubaie@example.com',
     phone: '+966500000113',
     college: DESIGN,
@@ -303,6 +318,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'omar',
     fullName: 'عمر سالم باوزير',
     uniEmail: 's000000013@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'omar.bawazir@example.com',
     phone: '+966500000114',
     college: CS,
@@ -316,6 +332,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'asma',
     fullName: 'أسماء محمد الثبيتي',
     uniEmail: 's000000014@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'asma.althubaiti@example.com',
     phone: '+966500000115',
     college: CS,
@@ -331,6 +348,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'yousef',
     fullName: 'يوسف علي الشمراني',
     uniEmail: 's000000015@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'yousef.alshamrani@example.com',
     phone: '+966500000116',
     college: CS,
@@ -347,6 +365,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'rahaf',
     fullName: 'رهف ماجد الجهني',
     uniEmail: 's000000016@st.uqu.edu.sa',
+    gender: 'FEMALE',
     phone: '+966500000117',
     college: CS,
     major: 'علوم الحاسب',
@@ -359,6 +378,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'turki',
     fullName: 'تركي عبدالله العمري',
     uniEmail: 's000000017@st.uqu.edu.sa',
+    gender: 'MALE',
     college: 'كلية الهندسة والعمارة الإسلامية',
     major: 'الهندسة الكهربائية',
     level: 2,
@@ -370,6 +390,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'mona',
     fullName: 'منى سعيد الحازمي',
     uniEmail: 's000000018@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'mona.alhazmi@example.com',
     phone: '+966500000119',
     college: CS,
@@ -387,6 +408,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'bandar',
     fullName: 'بندر عادل الزهراني',
     uniEmail: 's000000019@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'bandar.alzahrani@example.com',
     phone: '+966500000120',
     college: CS,
@@ -400,6 +422,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'shahad',
     fullName: 'شهد فهد المطيري',
     uniEmail: 's000000020@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'shahad.almutairi@example.com',
     phone: '+966500000121',
     college: DESIGN,
@@ -415,6 +438,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'waad',
     fullName: 'وعد حمد البقمي',
     uniEmail: 's000000021@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'waad.albuqami@example.com',
     phone: '+966500000122',
     college: CS,
@@ -443,6 +467,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'salman',
     fullName: 'سلمان جابر الفيفي',
     uniEmail: 's000000023@st.uqu.edu.sa',
+    gender: 'MALE',
     phone: '+966500000124',
     college: CS,
     major: 'علوم الحاسب',
@@ -468,6 +493,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'naif',
     fullName: 'نايف ثامر الرشيدي',
     uniEmail: 's000000025@st.uqu.edu.sa',
+    gender: 'MALE',
     personalEmail: 'naif.alrashidi@example.com',
     phone: '+966500000126',
     college: CS,
@@ -481,6 +507,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'dana',
     fullName: 'دانة وليد الخزاعي',
     uniEmail: 's000000026@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'dana.alkhuzai@example.com',
     phone: '+966500000127',
     college: CS,
@@ -500,6 +527,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'mashael',
     fullName: 'مشاعل راشد اليامي',
     uniEmail: 's000000027@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'mashael.alyami@example.com',
     phone: '+966500000128',
     college: SCIENCE,
@@ -513,6 +541,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'hessa',
     fullName: 'حصة منصور العسيري',
     uniEmail: 's000000028@st.uqu.edu.sa',
+    gender: 'FEMALE',
     personalEmail: 'hessa.alasiri@example.com',
     phone: '+966500000129',
     college: CS,
@@ -529,6 +558,7 @@ export const demoPeople: readonly DemoPerson[] = [
     key: 'layan',
     fullName: 'ليان طارق الغامدي',
     uniEmail: 's000000029@st.uqu.edu.sa',
+    gender: 'FEMALE',
     college: DESIGN,
     major: 'التصميم الجرافيكي',
     level: 1,
@@ -552,6 +582,7 @@ export function demoProfile(person: DemoPerson): MemberProfile {
     college: person.college ?? null,
     major: person.major ?? null,
     level: person.level ?? null,
+    gender: person.gender ?? null,
   };
 }
 

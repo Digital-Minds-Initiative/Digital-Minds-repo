@@ -25,8 +25,23 @@ export type PointTransactionScope = Scope<Prisma.PointTransactionWhereInput>;
 export type RoleChangeScope = Scope<Prisma.RoleChangeWhereInput>;
 export type RoleInvitationScope = Scope<Prisma.RoleInvitationWhereInput>;
 
+declare const admissionBrand: unique symbol;
+
+/**
+ * Club memberships an actor may bring into a committee: a write-only scope, with a brand of its
+ * own so it cannot be passed where a read scope is expected (docs/adr/0029-leads-add-members.md).
+ * For a lead it is wider than what they may read — a member who is not in their committee yet.
+ */
+export type MemberAdmissionScope = Prisma.MembershipWhereInput & {
+  readonly [admissionBrand]: true;
+};
+
 function scope<TWhere>(where: TWhere): Scope<TWhere> {
   return where as Scope<TWhere>;
+}
+
+function admission(where: Prisma.MembershipWhereInput): MemberAdmissionScope {
+  return where as MemberAdmissionScope;
 }
 
 /** Matches no rows. The fail-closed result for an actor without access. */
@@ -99,6 +114,21 @@ export function membersScope(actor: Actor): MemberScope {
     });
   }
   return scope(conditions.length > 0 ? { OR: conditions } : noRows());
+}
+
+/**
+ * Club memberships the actor may add to a committee they manage, removed ones included, since
+ * adding someone removed restores their membership: every membership of a club they manage, and,
+ * for a lead, every membership of a club in which they lead a committee.
+ *
+ * Writes only. The add, restore and join writes take it, always together with a committee from
+ * `committeesScope` in the same club — that pair, not this scope alone, is what keeps a lead to
+ * their own committee. Nothing reads members through it.
+ */
+export function memberAdmissionScope(actor: Actor): MemberAdmissionScope {
+  if (actor.isFullAdmin) return admission({});
+  const clubIds = visibleClubIds(actor);
+  return admission(clubIds.length > 0 ? { clubId: { in: clubIds } } : noRows());
 }
 
 /**

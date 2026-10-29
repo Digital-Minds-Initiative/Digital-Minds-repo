@@ -1,7 +1,8 @@
 # 0021. Import members from a CSV behind a preview the import must match
 
-- Status: Accepted; amended 2026-10-27 — an active member whose row names committees they are not in joins them ([below](#amendment-2026-10-27-existing-members-join-the-files-committees))
+- Status: Accepted; amended 2026-10-27 — an active member whose row names committees they are not in joins them ([below](#amendment-2026-10-27-existing-members-join-the-files-committees)); amended 2026-10-30 — a gender column ([below](#amendment-2026-10-30-a-gender-column))
 - Date: 2026-10-17
+- Amended by: [ADR 0029](0029-leads-add-members.md) — a committee import (`/committees/:committeeId/members/import`) for its leads, officers and full admins
 
 ## Context
 
@@ -199,3 +200,20 @@ A fifth state, between `restore` and `existing`:
   transaction the joining memberships are counted through the members scope (still active, still
   in this club) before anything is written.
 - The summary counts `join`, and the result says `joined` (rows, not committee memberships).
+
+## Amendment (2026-10-30): a gender column
+
+A «الجنس» column (`gender`), which the template writes after «المستوى». It is a profile cell
+like the others ([ADR 0012 amendment](0012-member-profiles-per-club.md#amendment-2026-10-30-gender-is-part-of-the-clubs-copy)):
+
+- Accepted values, after trimming and ignoring case: «ذكر» and `male` → `MALE`; «أنثى»,
+  «انثى», «إنثى» and `female` → `FEMALE` (`parseGender`, `src/shared/lib/gender.ts`).
+  Anything else makes the row `invalid` with `invalid_gender` on `gender` («اكتب «ذكر» أو
+  «أنثى»»). A short list on purpose: guessing at `m`, «ذكور» or «بنت» would store a value nobody
+  chose.
+- An empty cell writes nothing, as for every profile cell: an `add` row gets no gender, a
+  `restore` row keeps what the club had.
+- It is written exactly where the rest of the profile is: `add` and `restore` (club or committee
+  import). `join` and `existing` rows never change it.
+- The column is optional, so files made from older templates import as before. The value is part
+  of the row's profile, so it is in the checksum.

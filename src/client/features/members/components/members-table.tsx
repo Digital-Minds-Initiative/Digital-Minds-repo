@@ -45,6 +45,7 @@ const DEFAULT_COLUMN_VISIBILITY: ColumnVisibilityState = {
   college: false,
   major: false,
   level: false,
+  gender: false,
 };
 
 const getRowId = (member: Member) => member.id;
@@ -188,7 +189,8 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
     query.committeeId?.length ||
     query.membershipTypeId?.length ||
     query.role ||
-    query.registered !== undefined,
+    query.registered !== undefined ||
+    query.gender,
   );
 
   return (

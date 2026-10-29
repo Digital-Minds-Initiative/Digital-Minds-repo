@@ -96,15 +96,29 @@ describe('MembersToolbar — every filter the API offers', { timeout: 20_000 }, 
     await user.click(await screen.findByRole('option', { name: 'لم يسجّلوا بعد' }));
     expect(onChange).toHaveBeenLastCalledWith({ registered: false });
   });
+
+  it('filters by gender, including members with none recorded', async () => {
+    const onChange = vi.fn();
+    const user = renderToolbar(onChange);
+    const select = await screen.findByRole('combobox', { name: 'الجنس' });
+    expect(select.textContent).toBe('الجنس: الكل');
+    await user.click(select);
+    for (const name of ['ذكر', 'أنثى', 'غير محدد']) {
+      expect(await screen.findByRole('option', { name })).toBeTruthy();
+    }
+    await user.click(screen.getByRole('option', { name: 'غير محدد' }));
+    expect(onChange).toHaveBeenLastCalledWith({ gender: 'UNSPECIFIED' });
+  });
 });
 
 describe('MembersToolbar — a period already in the address', { timeout: 20_000 }, () => {
   it('clears it with the other filters', async () => {
     const onChange = vi.fn();
-    const user = renderToolbar(onChange, { from: '2026-03-01' });
+    const user = renderToolbar(onChange, { from: '2026-03-01', gender: 'FEMALE' });
+    expect(screen.getByRole('combobox', { name: 'الجنس' }).textContent).toBe('أنثى');
     await user.click(screen.getByRole('button', { name: 'مسح عوامل التصفية' }));
     expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ from: undefined, to: undefined }),
+      expect.objectContaining({ from: undefined, to: undefined, gender: undefined }),
     );
   });
 });

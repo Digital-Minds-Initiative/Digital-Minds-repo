@@ -4,6 +4,7 @@ import { clubRefSchema, committeeRefSchema } from '@/shared/contracts/clubs';
 import {
   academicLevelSchema,
   defineEndpoint,
+  genderSchema,
   idSchema,
   isoDateSchema,
   isoDateTimeSchema,
@@ -30,7 +31,7 @@ import {
  * docs/adr/0017-member-permissions.md). Full admins can do everything everywhere:
  *   read and search members ......... officer: the club · lead: members of their committees
  *   add a person to the club ........ officer
- *   edit this club's fields ......... officer        (phone, personal email, college, major, level)
+ *   edit this club's fields ......... officer        (phone, personal email, college, major, level, gender)
  *   edit the full name .............. officer        (nobody edits their own)
  *   edit the university email ....... officer while the person has not registered; after that a
  *                                     full admin only — and every session of theirs ends
@@ -67,6 +68,7 @@ export const memberProfileSchema = z.object({
   college: z.string().nullable(),
   major: z.string().nullable(),
   level: z.number().int().nullable(),
+  gender: genderSchema.nullable(),
 });
 export type MemberProfile = z.infer<typeof memberProfileSchema>;
 
@@ -106,6 +108,10 @@ export const memberCommitteeParamsSchema = z.object({ memberId: idSchema, commit
 export const memberStatusSchema = z.enum(['active', 'removed', 'all']);
 export type MemberStatus = z.infer<typeof memberStatusSchema>;
 
+/** The gender filter: one recorded value, or the members with none. */
+export const memberGenderFilterSchema = z.enum([...genderSchema.options, 'UNSPECIFIED']);
+export type MemberGenderFilter = z.infer<typeof memberGenderFilterSchema>;
+
 /**
  * `fullName` sorts on the Arabic-folded `searchName`, so names that differ only in أ/إ/آ or
  * ة/ه sit together (docs/adr/0020-members-list-filtering.md). `points` sorts by the figure the
@@ -138,6 +144,8 @@ export const memberListFiltersShape = {
   membershipTypeId: queryArray(idSchema).optional(),
   role: clubRoleSchema.optional(),
   registered: queryBoolean().optional(),
+  /** A recorded gender, or `UNSPECIFIED` for members whose club recorded none. */
+  gender: memberGenderFilterSchema.optional(),
   status: memberStatusSchema.default('active'),
 };
 
@@ -209,6 +217,7 @@ export const newProfileSchema = z.strictObject({
   college: shortTextSchema.optional(),
   major: shortTextSchema.optional(),
   level: academicLevelSchema.optional(),
+  gender: genderSchema.optional(),
 });
 
 export const createMemberBodySchema = z.strictObject({
@@ -244,6 +253,45 @@ export const createMemberEndpoint = defineEndpoint({
   successStatus: 201,
 });
 
+/**
+ * The name of the membership type a person gets when they are brought in through one committee,
+ * matched like every entity name (exactly, then on the Arabic-folded spelling). A club without
+ * one refuses with 409 `member_type_missing` (docs/adr/0029-leads-add-members.md).
+ */
+export const COMMITTEE_ADMISSION_TYPE_NAME = 'عضو';
+
+/** No type and no committees: the type is always the club's «عضو», the committee the URL's. */
+export const admitMemberBodySchema = z.strictObject({
+  person: newPersonSchema,
+  /** Saved only when the person gets a new or restored membership; an active member keeps theirs. */
+  profile: newProfileSchema.default({}),
+});
+export type AdmitMemberBody = z.output<typeof admitMemberBodySchema>;
+
+/**
+ * Brings a person into one committee — its leads, the club's officers and full admins
+ * (docs/adr/0029-leads-add-members.md). Always 201 with the member:
+ *
+ *   - no membership in the club (a new address, or an account in another club — never told
+ *     apart, docs/adr/0012) → a new membership with the club's «عضو» type, in this committee;
+ *   - a removed membership → restored by id with «عضو» and role MEMBER, in this committee only;
+ *   - an active member not in this committee → joins it (a removed committee membership comes back
+ *     by id, role MEMBER); their type, profile and name are not touched.
+ *
+ * Already active in this committee is 409 `already_in_committee` with `error.details.memberId`.
+ * A club without a «عضو» type is 409 `member_type_missing`. A membership type or committees in
+ * the body are 422 (`unrecognized_keys`).
+ */
+export const admitMemberEndpoint = defineEndpoint({
+  method: 'POST',
+  path: '/api/v1/committees/:committeeId/members',
+  access: 'actor',
+  params: z.object({ committeeId: idSchema }),
+  body: admitMemberBodySchema,
+  response: memberSchema,
+  successStatus: 201,
+});
+
 // ─── Update ──────────────────────────────────────────────────
 
 export const updateMemberBodySchema = requireAnyField(
@@ -259,6 +307,7 @@ export const updateMemberBodySchema = requireAnyField(
     college: shortTextSchema.nullable().optional(),
     major: shortTextSchema.nullable().optional(),
     level: academicLevelSchema.nullable().optional(),
+    gender: genderSchema.nullable().optional(),
     /** Officers and full admins; also the lead of a committee this member is in. */
     membershipTypeId: idSchema.optional(),
   }),

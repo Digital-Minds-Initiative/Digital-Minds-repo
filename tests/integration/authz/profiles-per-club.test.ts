@@ -76,6 +76,7 @@ describe('member profiles are per club', () => {
       college: 'كلية الهندسة',
       major: null,
       level: null,
+      gender: null,
     });
     const after = await db.membership.findUniqueOrThrow({ where: { id: s.memberships.memberB1 } });
     expect(after).toEqual(before);

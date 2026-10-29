@@ -55,6 +55,7 @@ const COLUMN_WIDTHS: Record<MemberExportColumn, number> = {
   college: 22,
   major: 22,
   level: 9,
+  gender: 9,
   membershipType: 16,
   role: 13,
   committees: 34,
@@ -96,6 +97,10 @@ function cellFor(member: Member, column: MemberExportColumn): Cell {
       return text(member.profile.major);
     case 'level':
       return number(member.profile.level);
+    case 'gender':
+      return member.profile.gender === null
+        ? null
+        : text(t(member.profile.gender === 'MALE' ? 'values.male' : 'values.female'));
     case 'membershipType':
       return text(member.membershipType.name);
     case 'role':

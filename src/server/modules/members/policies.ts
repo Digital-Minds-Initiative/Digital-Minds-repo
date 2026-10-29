@@ -1,6 +1,12 @@
 import 'server-only';
 
-import { AuthzError, canManageClub, isLeadOf, type Actor } from '@/server/authz';
+import {
+  AuthzError,
+  canManageClub,
+  canManageCommittee,
+  isLeadOf,
+  type Actor,
+} from '@/server/authz';
 
 /*
  * What an actor may do with members (docs/adr/0017-member-permissions.md).
@@ -8,10 +14,11 @@ import { AuthzError, canManageClub, isLeadOf, type Actor } from '@/server/authz'
  * A club's membership is run by its officers and by full admins: they add people, edit this
  * club's copy of their details, move them between committees, change their type and remove them.
  *
- * Committee leads read the members of the committees they lead (through the scopes) and may
- * change their membership type — nothing else. Types are club-level, so that one change applies
- * to the whole club membership; it is still the lead's call, because the lead already sees and
- * runs that member's work.
+ * Committee leads read the members of the committees they lead (through the scopes), may change
+ * their membership type, and may bring people into a committee they lead (ADR 0029) — nothing
+ * else: no removing, no profile edits, no other committee. Types are club-level, so a type change
+ * applies to the whole club membership; it is still the lead's call, because the lead already
+ * sees and runs that member's work.
  *
  * Nobody edits their own name or university email here: those belong to the shared account, and
  * an ordinary member sees no member at all (the scopes make every member a 404 for them).
@@ -45,7 +52,7 @@ export function assertCanImportMembers(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);
 }
 
-/** This club's copy of the contact and study details: phone, personal email, college, major, level. */
+/** This club's copy of the contact and study details: phone, personal email, college, major, level, gender. */
 export function assertCanEditClubFields(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);
 }
@@ -80,6 +87,20 @@ export function assertCanChangeMembershipType(actor: Actor, member: MemberTarget
 /** Committees belong to the club, so moving people between them is a club-level action. */
 export function assertCanAddToCommittee(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);
+}
+
+/**
+ * Bringing a person into one committee — new to the club, removed from it, or a member who is not
+ * in this committee yet — with the club's «عضو» type and nothing else
+ * (docs/adr/0029-leads-add-members.md). Its leads may, as well as the club's officers and full
+ * admins. A lead of another committee never gets here: the committee is outside their scope, so
+ * it is a 404 first, and this is the guard that documents the rule.
+ */
+export function assertCanAdmitToCommittee(
+  actor: Actor,
+  target: { clubId: string; committeeId: string },
+): void {
+  if (!canManageCommittee(actor, target)) throw new AuthzError('committee_management_required');
 }
 
 /** Including another lead: an officer may take anyone out of a committee. */

@@ -28,6 +28,7 @@ function member(overrides: Partial<Member> = {}): Member {
       college: 'الحاسبات',
       major: 'علوم الحاسب',
       level: 5,
+      gender: 'FEMALE',
     },
     club: { id: ID, name: 'نادي الحاسبات', slug: 'computing' },
     membershipType: { id: ID, name: 'عضو فعال', order: 0 },
@@ -112,6 +113,7 @@ describe('buildMembersFile', () => {
       'الحاسبات',
       'علوم الحاسب',
       5,
+      'أنثى',
       'عضو فعال',
       'مسؤول نادي',
       'لجنة البرمجة، لجنة التصميم',
@@ -136,14 +138,22 @@ describe('buildMembersFile', () => {
         member({
           role: 'MEMBER',
           user: { id: ID, fullName: 'x', uniEmail: 'x@uqu.edu.sa', isRegistered: false },
-          profile: { personalEmail: null, phone: null, college: null, major: null, level: null },
+          profile: {
+            personalEmail: null,
+            phone: null,
+            college: null,
+            major: null,
+            level: null,
+            gender: null,
+          },
           committees: [],
           removedAt: '2026-10-02T00:00:00.000Z',
         }),
       ],
-      ['phone', 'level', 'committees', 'role', 'registered', 'status'],
+      ['phone', 'level', 'gender', 'committees', 'role', 'registered', 'status'],
     );
     expect(book.sheets.get('الأعضاء')?.[1]).toEqual([
+      null,
       null,
       null,
       null,
@@ -162,12 +172,12 @@ describe('buildMembersFile', () => {
     // A bold font exists, and the text number format `@`.
     expect(book.stylesXml).toMatch(/<b\s*\/>/);
     expect(book.stylesXml).toMatch(/formatCode="@"/);
-    // The email and the phone are string cells, so the phone keeps its leading zero; the level
+    // The email, the phone and the gender are string cells, so the phone keeps its leading zero; the level
     // and the points are numbers.
-    for (const cell of ['B2', 'C2']) {
+    for (const cell of ['B2', 'C2', 'H2']) {
       expect(sheet).toMatch(new RegExp(`<c r="${cell}"[^>]*t="s"`));
     }
-    for (const cell of ['G2', 'K2']) {
+    for (const cell of ['G2', 'L2']) {
       expect(sheet).toMatch(new RegExp(`<c r="${cell}"(?![^>]*t=)[^>]*>`));
     }
   });
@@ -177,7 +187,14 @@ describe('buildMembersFile', () => {
     const book = await build([
       member({
         user: { id: ID, fullName: evil, uniEmail: 's@uqu.edu.sa', isRegistered: true },
-        profile: { personalEmail: null, phone: null, college: '+1+1', major: '-2', level: null },
+        profile: {
+          personalEmail: null,
+          phone: null,
+          college: '+1+1',
+          major: '-2',
+          level: null,
+          gender: null,
+        },
         membershipType: { id: ID, name: '@SUM(A1)', order: 0 },
         committees: [{ id: ID, name: '=1+1', role: 'MEMBER', points: 0 }],
       }),
@@ -187,8 +204,8 @@ describe('buildMembersFile', () => {
     expect(row?.[0]).toBe(`'${evil}`);
     expect(row?.[4]).toBe("'+1+1");
     expect(row?.[5]).toBe("'-2");
-    expect(row?.[7]).toBe("'@SUM(A1)");
-    expect(row?.[9]).toBe("'=1+1");
+    expect(row?.[8]).toBe("'@SUM(A1)");
+    expect(row?.[10]).toBe("'=1+1");
   });
 
   it('describes the file on its second sheet', async () => {

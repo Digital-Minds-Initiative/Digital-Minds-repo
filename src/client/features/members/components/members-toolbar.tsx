@@ -17,6 +17,7 @@ import {
 import type { Me } from '@/shared/contracts/auth';
 import {
   clubRoleSchema,
+  memberGenderFilterSchema,
   memberStatusSchema,
   type ListMembersQuery,
 } from '@/shared/contracts/members';
@@ -69,6 +70,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
     query.membershipTypeId?.length ||
     query.role ||
     query.registered !== undefined ||
+    query.gender ||
     query.from ||
     query.to,
   );
@@ -192,6 +194,23 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
         </SelectContent>
       </Select>
 
+      <Select
+        value={query.gender ?? ALL}
+        onValueChange={(value) =>
+          onChange({ gender: value === ALL ? undefined : memberGenderFilterSchema.parse(value) })
+        }
+      >
+        <SelectTrigger className={filterClass(Boolean(query.gender))} aria-label={t('gender')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>{t('allGenders')}</SelectItem>
+          <SelectItem value="MALE">{t('genderMale')}</SelectItem>
+          <SelectItem value="FEMALE">{t('genderFemale')}</SelectItem>
+          <SelectItem value="UNSPECIFIED">{t('genderUnspecified')}</SelectItem>
+        </SelectContent>
+      </Select>
+
       {hasFilters ? (
         <Button
           variant="ghost"
@@ -205,6 +224,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
               membershipTypeId: undefined,
               role: undefined,
               registered: undefined,
+              gender: undefined,
               status: 'active',
               from: undefined,
               to: undefined,

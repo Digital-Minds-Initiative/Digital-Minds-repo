@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-15
+- Amended by: [ADR 0029](0029-leads-add-members.md) — a committee's leads bring people into that committee, with the club's «عضو» type; removing and everything else here stay with officers
 
 ## Context
 
@@ -31,16 +32,16 @@ Three more things needed deciding, because the data model makes them awkward:
 **Who may do what** (★ full admin, O officer of the club, L lead of a committee the member is in;
 an ordinary member sees no member at all, so every one of these is a 404 for them):
 
-| Action                                                                 |  ★  |                    O                    |             L             |
-| ---------------------------------------------------------------------- | :-: | :-------------------------------------: | :-----------------------: |
-| List, view and search members                                          | all |                    ✓                    | their committees' members |
-| Add a person to the club, and to any committees of it                  |  ✓  |                    ✓                    |             —             |
-| Add to / remove from a committee                                       |  ✓  |                    ✓                    |             —             |
-| Remove from the club                                                   |  ✓  |                    ✓                    |             —             |
-| Edit this club's fields (phone, personal email, college, major, level) |  ✓  |                    ✓                    |             —             |
-| Edit the full name                                                     |  ✓  |                    ✓                    |             —             |
-| Change the membership type                                             |  ✓  |                    ✓                    |             ✓             |
-| Edit the university email                                              |  ✓  | only while the person is not registered |             —             |
+| Action                                                                         |  ★  |                    O                    |             L             |
+| ------------------------------------------------------------------------------ | :-: | :-------------------------------------: | :-----------------------: |
+| List, view and search members                                                  | all |                    ✓                    | their committees' members |
+| Add a person to the club, and to any committees of it                          |  ✓  |                    ✓                    |             —             |
+| Add to / remove from a committee                                               |  ✓  |                    ✓                    |             —             |
+| Remove from the club                                                           |  ✓  |                    ✓                    |             —             |
+| Edit this club's fields (phone, personal email, college, major, level, gender) |  ✓  |                    ✓                    |             —             |
+| Edit the full name                                                             |  ✓  |                    ✓                    |             —             |
+| Change the membership type                                                     |  ✓  |                    ✓                    |             ✓             |
+| Edit the university email                                                      |  ✓  | only while the person is not registered |             —             |
 
 Every club-level refusal carries one reason, `club_management_required`, so the UI explains them
 alike. Out of scope stays a 404, decided before any of these rules runs.

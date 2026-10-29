@@ -13,6 +13,8 @@ import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
 import { deletePersonEndpoint } from '@/shared/contracts/deletions';
 import {
   addMemberToCommitteeEndpoint,
+  admitMemberEndpoint,
+  COMMITTEE_ADMISSION_TYPE_NAME,
   createMemberEndpoint,
   removeMemberEndpoint,
   removeMemberFromCommitteeEndpoint,
@@ -121,6 +123,7 @@ export const memberWriteHandlers = [
       college: body.profile.college ?? null,
       major: body.profile.major ?? null,
       level: body.profile.level ?? null,
+      gender: body.profile.gender ?? null,
     };
 
     const existing = db.memberships.find(
@@ -165,6 +168,87 @@ export const memberWriteHandlers = [
     return toMemberFixture(db, actor, membership);
   }),
 
+  // One committee: its leads too, always «عضو», and an active member only joins it (ADR 0029).
+  mockEndpoint(admitMemberEndpoint, ({ cookies, params, body }) => {
+    const ctx = context(cookies);
+    if (isError(ctx)) return ctx;
+    const { db, actor } = ctx;
+    const committee = db.committeesById.get(params.committeeId);
+    const manages =
+      committee &&
+      (canManageClub(actor, committee.clubId) || actor.ledCommitteeIds.includes(committee.id));
+    if (!committee || !manages) return mockError('NOT_FOUND');
+    const club = must(db.clubsById.get(committee.clubId), 'club');
+    if (club.archivedAt) return conflict('club_archived');
+    if (committee.archivedAt) return conflict('committee_archived');
+    const type = db.membershipTypes.find(
+      (candidate) =>
+        candidate.clubId === club.id && candidate.name.trim() === COMMITTEE_ADMISSION_TYPE_NAME,
+    );
+    if (!type) return conflict('member_type_missing');
+    if (!isAllowedEmailDomain(body.person.uniEmail, MOCK_EMAIL_DOMAINS)) {
+      return invalid(['body', 'person', 'uniEmail'], 'email_domain_not_allowed');
+    }
+
+    let user = db.users.find((candidate) => candidate.uniEmail === body.person.uniEmail);
+    if (!user) {
+      user = {
+        id: crypto.randomUUID(),
+        key: body.person.uniEmail,
+        publicId: crypto.randomUUID().replaceAll('-', ''),
+        fullName: normalizePersonName(body.person.fullName),
+        uniEmail: body.person.uniEmail,
+        isFullAdmin: false,
+        registered: false,
+        persona: 'unregistered',
+      };
+      db.users.push(user);
+      db.usersById.set(user.id, user);
+    }
+    const profile = {
+      personalEmail: body.profile.personalEmail ?? null,
+      phone: body.profile.phone ?? null,
+      college: body.profile.college ?? null,
+      major: body.profile.major ?? null,
+      level: body.profile.level ?? null,
+      gender: body.profile.gender ?? null,
+    };
+
+    let membership = db.memberships.find(
+      (candidate) => candidate.userId === user.id && candidate.clubId === club.id,
+    );
+    if (!membership) {
+      membership = {
+        id: crypto.randomUUID(),
+        userId: user.id,
+        clubId: club.id,
+        typeId: type.id,
+        role: 'MEMBER',
+        profile,
+        joinedAt: new Date().toISOString(),
+        removedAt: null,
+        committees: [],
+      };
+      db.memberships.push(membership);
+    } else if (membership.removedAt !== null) {
+      membership.removedAt = null;
+      membership.role = 'MEMBER';
+      membership.typeId = type.id;
+      membership.profile = profile;
+      for (const link of membership.committees) link.role = 'MEMBER';
+    }
+    // An active member keeps their type and profile; only the committee is theirs to gain.
+    const link = membership.committees.find((c) => c.committeeId === committee.id);
+    if (link && !link.removed) return conflict('already_in_committee', { memberId: membership.id });
+    if (link) {
+      link.removed = false;
+      link.role = 'MEMBER';
+    } else {
+      membership.committees.push({ committeeId: committee.id, role: 'MEMBER', removed: false });
+    }
+    return toMemberFixture(db, actor, membership);
+  }),
+
   mockEndpoint(updateMemberEndpoint, ({ cookies, params, body }) => {
     const ctx = context(cookies);
     if (isError(ctx)) return ctx;
@@ -183,7 +267,7 @@ export const memberWriteHandlers = [
           ? normalizePersonName(body.fullName)
           : undefined,
     };
-    const profileKeys = ['personalEmail', 'phone', 'college', 'major', 'level'] as const;
+    const profileKeys = ['personalEmail', 'phone', 'college', 'major', 'level', 'gender'] as const;
     const profileChanges = profileKeys.filter(
       (key) => body[key] !== undefined && body[key] !== membership.profile[key],
     );

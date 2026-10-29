@@ -25,6 +25,12 @@ enum CommitteeRole {
   LEAD
 }
 
+/// A member's gender as this club recorded it — per club, like the other profile fields (ADR 0012).
+enum Gender {
+  MALE
+  FEMALE
+}
+
 /// A role as role history records it. MEMBER is the absence of a role and is shared by both
 /// columns, so one table covers both kinds: a club change is MEMBER↔CLUB_OFFICER, a committee
 /// change MEMBER↔LEAD (a CHECK constraint keeps the pair and the target consistent).
@@ -173,6 +179,7 @@ model Membership {
   college          String?
   major            String?
   level            Int?      @db.SmallInt
+  gender           Gender?
   /// Set when the person is removed from the club. A removed membership grants nothing.
   removedAt        DateTime?
   removedById      String?   @db.Uuid

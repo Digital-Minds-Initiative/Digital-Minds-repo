@@ -52,6 +52,10 @@ export const personNameSchema = z
 /** Academic level (المستوى). */
 export const academicLevelSchema = z.number().int().min(1).max(12);
 
+/** Gender (الجنس). Optional everywhere: a member without one is simply not recorded. */
+export const genderSchema = z.enum(['MALE', 'FEMALE']);
+export type Gender = z.infer<typeof genderSchema>;
+
 /**
  * Free text somebody types: a college, a major, a description. Whitespace is collapsed, not just
  * trimmed, so the same words typed with a double space are the same value — the CSV import

@@ -4,12 +4,18 @@ import {
   clubsScope,
   committeeMembershipsScope,
   committeesScope,
+  memberAdmissionScope,
   membersScope,
   membershipTypesScope,
   type Actor,
 } from '@/server/authz';
 import { env } from '@/server/env';
-import { clubArchived, clubHasNoMembershipTypes, NotFoundError } from '@/server/errors';
+import {
+  clubArchived,
+  clubHasNoMembershipTypes,
+  committeeArchived,
+  NotFoundError,
+} from '@/server/errors';
 import type {
   MemberImportResult,
   PreviewMemberImportResponse,
@@ -17,28 +23,36 @@ import type {
 
 import { buildImportTemplate, decodeImportFile, parseImportFile } from './import-csv';
 import {
+  admissionTypeId,
   buildImportPlan,
   type ImportClubState,
   type ImportPlan,
   type ImportAdd,
   type ImportRestore,
 } from './import-plan';
-import { assertCanAddToCommittee, assertCanImportMembers } from './policies';
+import {
+  assertCanAddToCommittee,
+  assertCanAdmitToCommittee,
+  assertCanImportMembers,
+} from './policies';
 import {
   findAccountsByUniEmails,
   findActiveCommitteeIds,
   findClubForMembers,
+  findCommitteeForMember,
   findCommitteesInClub,
   findMemberNames,
   findMembershipTypesInClub,
   importChanged,
+  memberTypeMissing,
   saveImportedMembers,
   type ImportAddWrite,
   type ImportClient,
 } from './repository';
 
 /*
- * Importing a club's members from a CSV file (docs/adr/0021-csv-member-import.md).
+ * Importing members from a CSV file (docs/adr/0021-csv-member-import.md), into a whole club or
+ * into one committee of it (docs/adr/0029-leads-add-members.md).
  *
  * Both steps do the same work: read the file, read what the club holds through the actor's
  * scopes, and build the plan. The preview answers with it and writes nothing; the import redoes
@@ -46,17 +60,36 @@ import {
  * officer confirmed.
  *
  * Reading the file reveals nothing about anyone, so the order is the same as adding one member:
- * the club must be visible (404), the actor must be allowed to import (403) and the club must be
- * open (409) before a single address is looked up.
+ * the club or committee must be visible (404), the actor must be allowed to import (403) and it
+ * must be open (409) before a single address is looked up.
  */
 
-/** What both steps need before they can look at the file. */
-async function loadClub(actor: Actor, clubId: string): Promise<{ id: string }> {
+/** Where a file goes: a club, or one committee of it. */
+interface ImportTarget {
+  clubId: string;
+  committee: { id: string; name: string } | null;
+}
+
+/** What both steps of a club import need before they can look at the file. */
+async function loadClub(actor: Actor, clubId: string): Promise<ImportTarget> {
   const club = await findClubForMembers(clubsScope(actor), clubId);
   if (!club) throw new NotFoundError('Club');
   assertCanImportMembers(actor, club.id);
   if (club.archived) throw clubArchived();
-  return { id: club.id };
+  return { clubId: club.id, committee: null };
+}
+
+/**
+ * The same for a committee import: the committee through the actor's scope (another lead's is a
+ * 404), the rule of adding one person to it, and both it and its club open.
+ */
+async function loadCommittee(actor: Actor, committeeId: string): Promise<ImportTarget> {
+  const committee = await findCommitteeForMember(committeesScope(actor), committeeId);
+  if (!committee) throw new NotFoundError('Committee');
+  assertCanAdmitToCommittee(actor, { clubId: committee.clubId, committeeId: committee.id });
+  if (committee.clubArchived) throw clubArchived();
+  if (committee.archived) throw committeeArchived();
+  return { clubId: committee.clubId, committee: { id: committee.id, name: committee.name } };
 }
 
 /**
@@ -68,15 +101,31 @@ export async function previewMemberImport(
   clubId: string,
   body: { file: string },
 ): Promise<PreviewMemberImportResponse> {
-  const club = await loadClub(actor, clubId);
+  return preview(actor, await loadClub(actor, clubId), body);
+}
+
+export async function previewCommitteeMemberImport(
+  actor: Actor,
+  committeeId: string,
+  body: { file: string },
+): Promise<PreviewMemberImportResponse> {
+  return preview(actor, await loadCommittee(actor, committeeId), body);
+}
+
+async function preview(
+  actor: Actor,
+  target: ImportTarget,
+  body: { file: string },
+): Promise<PreviewMemberImportResponse> {
   const file = parseImportFile(decodeImportFile(body.file), {
     allowedDomains: env.ALLOWED_EMAIL_DOMAINS,
   });
-  const plan = await planFor(actor, club.id, file.rows);
+  const plan = await planFor(actor, target, file.rows);
 
   return {
     checksum: plan.checksum,
     ignoredColumns: file.ignoredColumns,
+    notices: plan.notices,
     summary: plan.summary,
     rows: plan.rows,
   };
@@ -97,29 +146,48 @@ export async function confirmMemberImport(
   clubId: string,
   body: { file: string; checksum: string },
 ): Promise<MemberImportResult> {
-  const club = await loadClub(actor, clubId);
+  return confirm(actor, await loadClub(actor, clubId), body);
+}
+
+export async function confirmCommitteeMemberImport(
+  actor: Actor,
+  committeeId: string,
+  body: { file: string; checksum: string },
+): Promise<MemberImportResult> {
+  return confirm(actor, await loadCommittee(actor, committeeId), body);
+}
+
+async function confirm(
+  actor: Actor,
+  target: ImportTarget,
+  body: { file: string; checksum: string },
+): Promise<MemberImportResult> {
   const file = parseImportFile(decodeImportFile(body.file), {
     allowedDomains: env.ALLOWED_EMAIL_DOMAINS,
   });
-  const plan = await planFor(actor, club.id, file.rows);
+  const plan = await planFor(actor, target, file.rows);
   if (plan.checksum !== body.checksum) throw importChanged();
   // A `join` row is adding an existing member to a committee, so it answers to that rule too.
-  // Today it is the same rule as importing, so this never refuses — it keeps the two tied.
-  if (plan.joins.length > 0) assertCanAddToCommittee(actor, club.id);
+  // Today it is the same rule as importing, so this never refuses — it keeps the two tied. A
+  // committee import has already been held to the rule of adding to that committee.
+  if (plan.joins.length > 0 && !target.committee) assertCanAddToCommittee(actor, target.clubId);
 
   await saveImportedMembers(
     {
       club: clubsScope(actor),
       committees: committeesScope(actor),
-      members: membersScope(actor),
+      // A committee import may bring in members the importer cannot read yet — someone removed,
+      // or not in this committee — so it writes through the admission scope, while every
+      // committee it writes into is still checked through `committeesScope`.
+      members: target.committee ? memberAdmissionScope(actor) : membersScope(actor),
     },
     {
-      clubId: club.id,
+      clubId: target.clubId,
       adds: plan.adds.map(toAddWrite),
       restores: plan.restores.map(toRestore),
       joins: plan.joins.map(({ membershipId, committeeIds }) => ({ membershipId, committeeIds })),
     },
-    async (tx) => (await planFor(actor, club.id, file.rows, tx)).checksum === body.checksum,
+    async (tx) => (await planFor(actor, target, file.rows, tx)).checksum === body.checksum,
   );
 
   return {
@@ -137,16 +205,25 @@ export async function getMemberImportTemplate(actor: Actor, clubId: string): Pro
   return buildImportTemplate();
 }
 
+export async function getCommitteeMemberImportTemplate(
+  actor: Actor,
+  committeeId: string,
+): Promise<string> {
+  await loadCommittee(actor, committeeId);
+  return buildImportTemplate();
+}
+
 /**
  * The club's side of the plan, read through the actor's scopes — optionally on the transaction
  * that is about to write, so the confirm step compares against the state it will write into.
  */
 async function planFor(
   actor: Actor,
-  clubId: string,
+  target: ImportTarget,
   rows: Parameters<typeof buildImportPlan>[0],
   client?: ImportClient,
 ): Promise<ImportPlan> {
+  const { clubId } = target;
   // One query after another, never in parallel: inside the transaction these share a single
   // connection, and pg does not allow two queries on it at once.
   const membershipTypes = await findMembershipTypesInClub(
@@ -155,15 +232,20 @@ async function planFor(
     client,
   );
   const committees = await findCommitteesInClub(committeesScope(actor), clubId, client);
-  const defaultMembershipType = membershipTypes[0];
-  if (!defaultMembershipType) throw clubHasNoMembershipTypes();
+  const defaultMembershipTypeId = target.committee
+    ? admissionTypeId(membershipTypes)
+    : (membershipTypes[0]?.id ?? null);
+  if (!defaultMembershipTypeId) {
+    throw target.committee ? memberTypeMissing() : clubHasNoMembershipTypes();
+  }
 
   const uniEmails = [...new Set(rows.flatMap((row) => (row.uniEmail ? [row.uniEmail] : [])))];
   const accounts = await findAccountsByUniEmails(uniEmails, clubId, client);
-  // Only the names of this club's own members, read through the members scope: an account that
-  // exists outside the club must stay invisible, name included (ADR 0012).
+  // Only the names of this club's own members, read through the members scope — or, for a
+  // committee import, the admission scope, since a row may bring in a member the importer does
+  // not see yet. Either way an account outside the club stays invisible, name included (ADR 0012).
   const storedNames = await findMemberNames(
-    membersScope(actor),
+    target.committee ? memberAdmissionScope(actor) : membersScope(actor),
     [...accounts.values()].flatMap((account) =>
       account.membership ? [account.membership.id] : [],
     ),
@@ -179,7 +261,8 @@ async function planFor(
 
   const club: ImportClubState = {
     clubId,
-    defaultMembershipTypeId: defaultMembershipType.id,
+    defaultMembershipTypeId,
+    committee: target.committee,
     membershipTypes,
     committees,
     accounts,
