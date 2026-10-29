@@ -118,6 +118,7 @@ export function toMemberFilters(query: Omit<ListMembersQuery, 'page' | 'pageSize
     membershipTypeIds: query.membershipTypeId,
     role: query.role,
     registered: query.registered,
+    gender: query.gender,
     status: query.status,
   };
 }
@@ -420,6 +421,7 @@ export async function updateMember(
     college: changed(body.college, row.college),
     major: changed(body.major, row.major),
     level: changed(body.level, row.level),
+    gender: changed(body.gender, row.gender),
     membershipTypeId: changed(body.membershipTypeId, row.membershipType.id),
   };
   const { uniEmail, fullName, membershipTypeId, ...clubFields } = changes;

@@ -244,6 +244,40 @@ describe('parseImportFile', () => {
     expect(file.rows[1]?.profile.personalEmail).toBe('ahmed@gmail.com');
   });
 
+  it('reads the gender cell, and leaves it out when the cell is empty', () => {
+    const file = parse(
+      [
+        'الاسم الكامل,البريد الجامعي,الجنس',
+        'أحمد علي,s441000001@uqu.edu.sa, ذكر ',
+        'سارة علي,s441000002@uqu.edu.sa,انثى',
+        'هند علي,s441000003@uqu.edu.sa,إنثى',
+        'لمى علي,s441000004@uqu.edu.sa,Female',
+        'عمر علي,s441000005@uqu.edu.sa,MALE',
+        'نورة علي,s441000006@uqu.edu.sa,',
+      ].join('\n'),
+    );
+    expect(file.rows.map((row) => row.profile.gender)).toEqual([
+      'MALE',
+      'FEMALE',
+      'FEMALE',
+      'FEMALE',
+      'MALE',
+      undefined,
+    ]);
+    expect(file.rows.every((row) => row.issues.length === 0)).toBe(true);
+  });
+
+  it('refuses a gender it does not know, and keeps the rest of the row', () => {
+    const file = parse(
+      [
+        'الاسم الكامل,البريد الجامعي,الكلية,الجنس',
+        'أحمد علي,s441000001@uqu.edu.sa,الحاسبات,m',
+      ].join('\n'),
+    );
+    expect(codes(file.rows[0])).toEqual(['gender:invalid_gender']);
+    expect(file.rows[0]?.profile).toEqual({ college: 'الحاسبات' });
+  });
+
   it('refuses a row naming more than 20 committees', () => {
     const many = Array.from({ length: 21 }, (_, i) => `لجنة ${String(i)}`).join(';');
     const file = parse(
@@ -278,6 +312,7 @@ describe('buildImportTemplate', () => {
       'الكلية',
       'التخصص',
       'المستوى',
+      'الجنس',
       'نوع العضوية',
       'اللجان',
     ]);

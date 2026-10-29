@@ -52,7 +52,7 @@ export function assertCanImportMembers(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);
 }
 
-/** This club's copy of the contact and study details: phone, personal email, college, major, level. */
+/** This club's copy of the contact and study details: phone, personal email, college, major, level, gender. */
 export function assertCanEditClubFields(actor: Actor, clubId: string): void {
   assertClubManagement(actor, clubId);
 }

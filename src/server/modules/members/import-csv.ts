@@ -15,6 +15,7 @@ import {
 } from '@/shared/contracts/members-import';
 import { toLatinDigits } from '@/shared/lib/arabic';
 import { isAllowedEmailDomain } from '@/shared/lib/email-domains';
+import { parseGender } from '@/shared/lib/gender';
 import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 import { collapseWhitespace } from '@/shared/lib/text';
@@ -57,6 +58,7 @@ export interface ParsedImportRow {
     college?: string;
     major?: string;
     level?: number;
+    gender?: 'MALE' | 'FEMALE';
   };
   /** Null when the cell was empty: the club's first membership type is used. */
   membershipTypeName: string | null;
@@ -385,6 +387,13 @@ function readProfile(
     const parsed = /^\d{1,2}$/.test(digits) ? Number(digits) : Number.NaN;
     if (parsed >= 1 && parsed <= 12) profile.level = parsed;
     else fail('level', 'invalid_level');
+  }
+
+  const gender = cell('gender');
+  if (gender !== EMPTY) {
+    const parsed = parseGender(gender);
+    if (parsed) profile.gender = parsed;
+    else fail('gender', 'invalid_gender');
   }
 
   return profile;

@@ -42,6 +42,7 @@ export const memberImportColumns = {
   college: ['الكلية', 'college'],
   major: ['التخصص', 'major'],
   level: ['المستوى', 'level'],
+  gender: ['الجنس', 'gender'],
   membershipType: ['نوع العضوية', 'membershipType'],
   committees: ['اللجان', 'اللجنة', 'committees'],
 } as const;
