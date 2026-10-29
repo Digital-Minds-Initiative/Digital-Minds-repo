@@ -3,20 +3,25 @@ import {
   getMockDb,
   findMockActor,
   type MockActor,
+  type MockCommittee,
   type MockDb,
   type MockMembership,
 } from '@/client/mocks/db';
 import { mockEndpoint, mockError, type MockError } from '@/client/mocks/endpoint';
 import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
+import { COMMITTEE_ADMISSION_TYPE_NAME } from '@/shared/contracts/members';
 import {
+  confirmCommitteeMemberImportEndpoint,
   confirmMemberImportEndpoint,
   MEMBER_IMPORT_MAX_BYTES,
   MEMBER_IMPORT_MAX_ROWS,
   memberImportColumns,
   memberImportRequiredColumns,
+  previewCommitteeMemberImportEndpoint,
   previewMemberImportEndpoint,
   type MemberImportField,
   type MemberImportIssue,
+  type MemberImportNotice,
   type MemberImportRow,
   type MemberImportSummary,
 } from '@/shared/contracts/members-import';
@@ -72,70 +77,115 @@ interface MockPlan {
   rows: MockImportRow[];
   summary: MemberImportSummary;
   ignoredColumns: string[];
+  notices: MemberImportNotice[];
   checksum: string;
+}
+
+/** Where a file goes: a club, or one committee of it (docs/adr/0029-leads-add-members.md). */
+type ImportTarget = { clubId: string } | { committeeId: string };
+
+function previewOf(plan: MockPlan) {
+  return {
+    checksum: plan.checksum,
+    ignoredColumns: plan.ignoredColumns,
+    notices: plan.notices,
+    summary: plan.summary,
+    rows: plan.rows.map(toContractRow),
+  };
 }
 
 export const memberImportHandlers = [
   mockEndpoint(previewMemberImportEndpoint, ({ cookies, params, body }) => {
-    const plan = planOrError(cookies, params.clubId, body.file);
-    if ('code' in plan) return plan;
-    return {
-      checksum: plan.checksum,
-      ignoredColumns: plan.ignoredColumns,
-      summary: plan.summary,
-      rows: plan.rows.map(toContractRow),
-    };
+    const plan = planOrError(cookies, { clubId: params.clubId }, body.file);
+    return 'code' in plan ? plan : previewOf(plan);
   }),
 
-  mockEndpoint(confirmMemberImportEndpoint, ({ cookies, params, body }) => {
-    const plan = planOrError(cookies, params.clubId, body.file);
-    if ('code' in plan) return plan;
-    if (plan.checksum !== body.checksum) return conflict('import_changed');
-
-    const db = getMockDb();
-    let added = 0;
-    let restored = 0;
-    let joined = 0;
-    for (const row of plan.rows) {
-      if (row.join) {
-        joinCommittees(row.join.membership, row.join.committeeIds);
-        joined += 1;
-      }
-      if (!row.write) continue;
-      apply(db, params.clubId, row.write);
-      if (row.status === 'restore') restored += 1;
-      else added += 1;
-    }
-    return {
-      added,
-      restored,
-      joined,
-      skippedExisting: plan.summary.existing,
-      skippedInvalid: plan.summary.invalid,
-    };
+  mockEndpoint(previewCommitteeMemberImportEndpoint, ({ cookies, params, body }) => {
+    const plan = planOrError(cookies, { committeeId: params.committeeId }, body.file);
+    return 'code' in plan ? plan : previewOf(plan);
   }),
+
+  mockEndpoint(confirmMemberImportEndpoint, ({ cookies, params, body }) =>
+    confirm(cookies, { clubId: params.clubId }, body),
+  ),
+
+  mockEndpoint(confirmCommitteeMemberImportEndpoint, ({ cookies, params, body }) =>
+    confirm(cookies, { committeeId: params.committeeId }, body),
+  ),
 ];
+
+function confirm(
+  cookies: Record<string, string>,
+  target: ImportTarget,
+  body: { file: string; checksum: string },
+) {
+  const plan = planOrError(cookies, target, body.file);
+  if ('code' in plan) return plan;
+  const clubId = plan.clubId;
+  if (plan.checksum !== body.checksum) return conflict('import_changed');
+
+  const db = getMockDb();
+  let added = 0;
+  let restored = 0;
+  let joined = 0;
+  for (const row of plan.rows) {
+    if (row.join) {
+      joinCommittees(row.join.membership, row.join.committeeIds);
+      joined += 1;
+    }
+    if (!row.write) continue;
+    apply(db, clubId, row.write);
+    if (row.status === 'restore') restored += 1;
+    else added += 1;
+  }
+  return {
+    added,
+    restored,
+    joined,
+    skippedExisting: plan.summary.existing,
+    skippedInvalid: plan.summary.invalid,
+  };
+}
 
 function planOrError(
   cookies: Record<string, string>,
-  clubId: string,
+  target: ImportTarget,
   file: string,
-): MockPlan | MockError {
+): (MockPlan & { clubId: string }) | MockError {
   const db = getMockDb();
   const actor = findMockActor(db, cookies[DEV_ACTOR_COOKIE]);
   if (!actor) return mockError('UNAUTHENTICATED');
-  const club = db.clubsById.get(clubId);
-  if (!club || !canSee(db, actor, clubId)) return mockError('NOT_FOUND');
-  if (!canManageClub(actor, clubId)) {
-    return mockError('FORBIDDEN', 'club_management_required', {
-      reason: 'club_management_required',
-    });
+
+  let clubId: string;
+  let committee: MockCommittee | null = null;
+  if ('clubId' in target) {
+    clubId = target.clubId;
+    const club = db.clubsById.get(clubId);
+    if (!club || !canSee(db, actor, clubId)) return mockError('NOT_FOUND');
+    if (!canManageClub(actor, clubId)) {
+      return mockError('FORBIDDEN', 'club_management_required', {
+        reason: 'club_management_required',
+      });
+    }
+    if (club.archivedAt) return conflict('club_archived');
+  } else {
+    // A committee the persona leads, or one of a club they run; anything else is a 404.
+    committee = db.committeesById.get(target.committeeId) ?? null;
+    if (
+      !committee ||
+      !(canManageClub(actor, committee.clubId) || actor.ledCommitteeIds.includes(committee.id))
+    ) {
+      return mockError('NOT_FOUND');
+    }
+    clubId = committee.clubId;
+    if (db.clubsById.get(clubId)?.archivedAt) return conflict('club_archived');
+    if (committee.archivedAt) return conflict('committee_archived');
   }
-  if (club.archivedAt) return conflict('club_archived');
 
   const text = decode(file);
   if (typeof text !== 'string') return text;
-  return buildPlan(db, actor, clubId, text);
+  const plan = buildPlan(db, actor, clubId, text, committee);
+  return 'code' in plan ? plan : { ...plan, clubId };
 }
 
 /** A persona sees a club when they manage it or lead one of its committees. */
@@ -176,6 +226,7 @@ function buildPlan(
   actor: MockActor,
   clubId: string,
   text: string,
+  committee: MockCommittee | null,
 ): MockPlan | MockError {
   const lines = text.split(/\r?\n/);
   const headerLine = lines[0] ?? '';
@@ -201,8 +252,14 @@ function buildPlan(
   const types = db.membershipTypes
     .filter((type) => type.clubId === clubId)
     .sort((a, b) => a.order - b.order);
-  const defaultType = types[0];
-  if (!defaultType) return conflict('club_has_no_membership_types');
+  // A committee import gives everyone the club's «عضو» and ignores the type column (ADR 0029).
+  const defaultType = committee
+    ? types.find((type) => normalizeEntityName(type.name) === COMMITTEE_ADMISSION_TYPE_NAME)
+    : types[0];
+  if (!defaultType) {
+    return conflict(committee ? 'member_type_missing' : 'club_has_no_membership_types');
+  }
+  const notices: MemberImportNotice[] = [];
   const committees = db.committees.filter((committee) => committee.clubId === clubId);
 
   const dataLines = lines
@@ -260,8 +317,11 @@ function buildPlan(
     }
 
     const typeName = cell('membershipType');
+    if (committee && typeName !== '' && notices.length === 0) {
+      notices.push('membership_type_ignored');
+    }
     const type =
-      typeName === ''
+      typeName === '' || committee
         ? defaultType
         : types.find((candidate) => normalizeEntityName(candidate.name) === typeName);
     if (!type) {
@@ -274,14 +334,19 @@ function buildPlan(
     for (const raw of names) {
       const name = normalizeEntityName(raw);
       if (name === '') continue;
-      const committee = committees.find(
-        (candidate) => normalizeEntityName(candidate.name) === name,
-      );
-      if (!committee) issues.push({ field: 'committees', code: 'unknown_committee', value: name });
-      else if (committee.archivedAt) {
+      if (committee) {
+        if (normalizeEntityName(committee.name) !== name) {
+          issues.push({ field: 'committees', code: 'committee_not_target', value: name });
+        }
+        continue;
+      }
+      const found = committees.find((candidate) => normalizeEntityName(candidate.name) === name);
+      if (!found) issues.push({ field: 'committees', code: 'unknown_committee', value: name });
+      else if (found.archivedAt) {
         issues.push({ field: 'committees', code: 'committee_archived', value: name });
-      } else committeeIds.push(committee.id);
+      } else committeeIds.push(found.id);
     }
+    if (committee) committeeIds.push(committee.id);
 
     const user = uniEmail
       ? db.users.find((candidate) => candidate.uniEmail === uniEmail)
@@ -349,7 +414,13 @@ function buildPlan(
     if (uniEmail && !firstSeen.has(uniEmail)) firstSeen.set(uniEmail, line);
   }
 
-  return { rows, summary, ignoredColumns, checksum: checksumOf(clubId, rows) };
+  return {
+    rows,
+    summary,
+    ignoredColumns,
+    notices,
+    checksum: checksumOf(committee ? `${clubId}/${committee.id}` : clubId, rows),
+  };
 }
 
 function toContractRow(row: MockImportRow): MemberImportRow {

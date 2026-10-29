@@ -36,6 +36,7 @@ import {
 import {
   MEMBER_IMPORT_MAX_BYTES,
   MEMBER_IMPORT_MAX_ROWS,
+  committeeMemberImportTemplateEndpoint,
   memberImportColumns,
   memberImportTemplateEndpoint,
   type MemberImportIssue,
@@ -46,12 +47,19 @@ import {
 } from '@/shared/contracts/members-import';
 
 import { useConfirmMemberImport, usePreviewMemberImport } from '../hooks/use-member-actions';
+import type { AdmittingCommittee } from '../lib/access';
+import { useCommitteeLabel } from '../lib/committee-label';
 
 export interface ImportMembersDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The clubs the person may import into (officers and full admins). */
   clubs: ReadonlyArray<{ id: string; name: string }>;
+  /**
+   * Without a club to import into: the committees the person leads, one of which the file goes
+   * into, with «عضو» for anyone new (docs/adr/0029-leads-add-members.md).
+   */
+  committees?: readonly AdmittingCommittee[];
 }
 
 interface PickedFile {
@@ -101,6 +109,7 @@ const ISSUE_CODES = [
   'unknown_membership_type',
   'unknown_committee',
   'committee_archived',
+  'committee_not_target',
   'name_differs',
 ] as const;
 type IssueCode = (typeof ISSUE_CODES)[number];
@@ -139,19 +148,28 @@ export function ImportMembersDialog(props: ImportMembersDialogProps) {
   return props.open ? <ImportMembersFlow {...props} /> : null;
 }
 
-function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
+function ImportMembersFlow({ onOpenChange, clubs, committees = [] }: ImportMembersDialogProps) {
   const t = useTranslations('members.import');
   const format = useFormatter();
   const errorText = useErrorText();
+  const committeeLabel = useCommitteeLabel(committees);
+  // A club to import into wins; a lead without one imports into a committee they lead.
+  const intoCommittee = clubs.length === 0;
   const [clubId, setClubId] = useState(clubs[0]?.id ?? '');
+  const [committeeId, setCommitteeId] = useState(committees[0]?.id ?? '');
+  const committee = committees.find((candidate) => candidate.id === committeeId);
   const [file, setFile] = useState<PickedFile | null>(null);
   const [step, setStep] = useState<Step>({ name: 'file' });
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [onlyProblems, setOnlyProblems] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const preview = usePreviewMemberImport(clubId);
-  const confirm = useConfirmMemberImport(clubId);
+  const target = intoCommittee ? { committeeId } : { clubId };
+  const preview = usePreviewMemberImport(target);
+  const confirm = useConfirmMemberImport(target);
+  const templateHref = intoCommittee
+    ? committeeMemberImportTemplateEndpoint.path.replace(':committeeId', committeeId)
+    : memberImportTemplateEndpoint.path.replace(':clubId', clubId);
   const busy = preview.isPending || confirm.isPending || reading;
 
   /** The words for a failed preview: the file's own problems first, then the generic ones. */
@@ -250,11 +268,32 @@ function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
       <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{step.name === 'done' ? t('done.title') : t('title')}</DialogTitle>
-          <DialogDescription>{t('description')}</DialogDescription>
+          <DialogDescription>
+            {intoCommittee
+              ? t('committeeDescription', { committee: committee?.name ?? '' })
+              : t('description')}
+          </DialogDescription>
         </DialogHeader>
 
         {step.name === 'file' ? (
           <div className="grid gap-4">
+            {intoCommittee && committees.length > 1 ? (
+              <div className="grid gap-1.5">
+                <Label id="import-committee-label">{t('committee')}</Label>
+                <Select value={committeeId} onValueChange={setCommitteeId}>
+                  <SelectTrigger aria-labelledby="import-committee-label">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {committees.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {committeeLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             {clubs.length > 1 ? (
               <div className="grid gap-1.5">
                 <Label id="import-club-label">{t('club')}</Label>
@@ -274,7 +313,7 @@ function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
             ) : null}
 
             <div className="grid gap-2 rounded-md bg-surface-3 p-3 text-sm text-fg-muted">
-              <p className="m-0">{t('columnsHint')}</p>
+              <p className="m-0">{intoCommittee ? t('committeeColumnsHint') : t('columnsHint')}</p>
               <p className="m-0">
                 {t('encodingHint', {
                   size: `${MEMBER_IMPORT_MAX_BYTES / 1_000_000} م.ب`,
@@ -283,7 +322,7 @@ function ImportMembersFlow({ onOpenChange, clubs }: ImportMembersDialogProps) {
               </p>
               <a
                 // The file comes straight from the API (text/csv), not through the JSON client.
-                href={memberImportTemplateEndpoint.path.replace(':clubId', clubId)}
+                href={templateHref}
                 download
                 className="flex w-fit items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline"
               >
@@ -456,6 +495,15 @@ function PreviewStep({
           </li>
         ))}
       </ul>
+      {preview.notices.map((notice) => (
+        <p
+          key={notice}
+          role="note"
+          className="m-0 rounded-md bg-info-subtle px-3 py-2 text-sm text-info-subtle-fg"
+        >
+          {t(`notices.${notice}`)}
+        </p>
+      ))}
       {preview.ignoredColumns.length > 0 ? (
         <p className="m-0 text-xs text-fg-muted">
           {t('ignoredColumns', { names: preview.ignoredColumns.join('، ') })}

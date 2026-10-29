@@ -50,7 +50,7 @@ export const demoClubs: readonly DemoClub[] = [
     slug: 'tuwaiq',
     name: 'نادي طويق',
     description: 'نادي يهتم بتطوير المهارات التقنية وريادة الأعمال الرقمية.',
-    membershipTypes: ['رئيس', 'عضو فعال', 'مستفيد'],
+    membershipTypes: ['رئيس', 'عضو فعال', 'عضو', 'مستفيد'],
     committees: [
       { key: 'development', name: 'لجنة التطوير', description: 'مشاريع التطوير والتدريب التقني.' },
       { key: 'content', name: 'لجنة المحتوى', description: 'كتابة المحتوى التقني والنشرات.' },

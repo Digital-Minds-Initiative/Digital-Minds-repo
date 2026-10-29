@@ -2,6 +2,7 @@
 
 - Status: Accepted; amended 2026-10-27 — an active member whose row names committees they are not in joins them ([below](#amendment-2026-10-27-existing-members-join-the-files-committees))
 - Date: 2026-10-17
+- Amended by: [ADR 0029](0029-leads-add-members.md) — a committee import (`/committees/:committeeId/members/import`) for its leads, officers and full admins
 
 ## Context
 

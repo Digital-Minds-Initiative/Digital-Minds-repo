@@ -81,22 +81,33 @@ async function openMember(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('member actions — who is offered what', { timeout: 30_000 }, () => {
-  it('offers adding members to officers and full admins, not to committee leads', async () => {
+  it('offers adding members to officers and full admins', async () => {
     await renderTable(OFFICER);
     expect(screen.getByRole('button', { name: 'إضافة عضو' })).toBeTruthy();
   });
 
-  it('does not offer the add button to a committee lead', async () => {
-    await renderTable(LEAD);
-    expect(screen.queryByRole('button', { name: 'إضافة عضو' })).toBeNull();
+  it('offers a committee lead the add button for their committee, with no type to choose', async () => {
+    const user = await renderTable(LEAD);
+    await user.click(screen.getByRole('button', { name: 'إضافة عضو' }));
+    const dialog = await screen.findByRole('dialog', { name: 'إضافة عضو إلى اللجنة' });
+    // One committee led, so it is named rather than picked; no type, no committees to tick.
+    expect(within(dialog).getByText('لجنة البرمجة')).toBeTruthy();
+    expect(within(dialog).queryByLabelText('نوع العضوية')).toBeNull();
+    expect(within(dialog).queryByRole('checkbox')).toBeNull();
+    expect(within(dialog).getByText(/نوع العضوية للأعضاء الجدد: «عضو»/)).toBeTruthy();
   });
 
-  it('offers the CSV import to officers, and not to a committee lead', async () => {
+  it('offers the CSV import to officers and to a committee lead, for their committee', async () => {
     await renderTable(OFFICER);
     expect(screen.getByRole('button', { name: 'استيراد من ملف' })).toBeTruthy();
     cleanup();
-    await renderTable(LEAD);
-    expect(screen.queryByRole('button', { name: 'استيراد من ملف' })).toBeNull();
+    const user = await renderTable(LEAD);
+    await user.click(screen.getByRole('button', { name: 'استيراد من ملف' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/ليُضافوا إلى «لجنة البرمجة»/)).toBeTruthy();
+    expect(
+      within(dialog).getByRole('link', { name: 'تنزيل قالب الملف' }).getAttribute('href'),
+    ).toMatch(/^\/api\/v1\/committees\/[^/]+\/members\/import\/template$/);
   });
 
   it('shows an officer edit and remove on a member, and a lead only edit (the type)', async () => {
@@ -117,6 +128,8 @@ describe('member actions — who is offered what', { timeout: 30_000 }, () => {
     expect(within(dialog).getByRole('button', { name: 'تعديل البيانات' })).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: 'إزالة من النادي' })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'إضافة إلى لجنة' })).toBeNull();
+    // Adding people does not make a lead someone who takes them out (ADR 0029).
+    expect(within(dialog).queryByRole('button', { name: /^إزالة / })).toBeNull();
   });
 });
 
@@ -137,6 +150,25 @@ describe('member actions — adding', { timeout: 30_000 }, () => {
       (candidate) => candidate.uniEmail === 'newcomer.test@st.uqu.edu.sa',
     );
     expect(added?.registered).toBe(false);
+  });
+
+  it('lets a committee lead add a person to their committee, as «عضو»', async () => {
+    const user = await renderTable(LEAD);
+    await user.click(screen.getByRole('button', { name: 'إضافة عضو' }));
+    const dialog = await screen.findByRole('dialog', { name: 'إضافة عضو إلى اللجنة' });
+    await user.type(within(dialog).getByLabelText(/البريد الجامعي/), 's441960001@st.uqu.edu.sa');
+    await user.type(within(dialog).getByLabelText(/الاسم الكامل/), 'منضم عبر اللجنة');
+    await user.click(within(dialog).getByRole('button', { name: 'إضافة العضو' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 8000 });
+
+    const db = getMockDb();
+    const person = db.users.find((candidate) => candidate.uniEmail === 's441960001@st.uqu.edu.sa');
+    const membership = db.memberships.find((candidate) => candidate.userId === person?.id);
+    const type = db.membershipTypes.find((candidate) => candidate.id === membership?.typeId);
+    expect(type?.name).toBe('عضو');
+    expect(
+      membership?.committees.map((link) => db.committeesById.get(link.committeeId)?.name),
+    ).toEqual(['لجنة البرمجة']);
   });
 
   it('refuses an address outside the university on the email field', async () => {

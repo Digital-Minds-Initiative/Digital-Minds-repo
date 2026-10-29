@@ -8,16 +8,20 @@ import { listCommitteesEndpoint, listMembershipTypesEndpoint } from '@/shared/co
 import { deletePersonEndpoint, type DeletePersonBody } from '@/shared/contracts/deletions';
 import {
   addMemberToCommitteeEndpoint,
+  admitMemberEndpoint,
   createMemberEndpoint,
   getMemberEndpoint,
   removeMemberEndpoint,
   removeMemberFromCommitteeEndpoint,
   updateMemberEndpoint,
+  type AdmitMemberBody,
   type CreateMemberBody,
   type UpdateMemberBody,
 } from '@/shared/contracts/members';
 import {
+  confirmCommitteeMemberImportEndpoint,
   confirmMemberImportEndpoint,
+  previewCommitteeMemberImportEndpoint,
   previewMemberImportEndpoint,
 } from '@/shared/contracts/members-import';
 
@@ -83,6 +87,16 @@ export function useCreateMember(clubId: string) {
   });
 }
 
+/** Brings a person into one committee, with «عضو» (docs/adr/0029-leads-add-members.md). */
+export function useAdmitMember(committeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AdmitMemberBody) =>
+      apiClient.request(admitMemberEndpoint, { params: { committeeId }, body }),
+    onSuccess: () => refreshAfterChange(queryClient),
+  });
+}
+
 export function useUpdateMember(memberId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -128,23 +142,30 @@ export function useRemoveFromCommittee(memberId: string) {
   });
 }
 
+/** Where a file goes: a whole club, or one committee of it (docs/adr/0029-leads-add-members.md). */
+export type ImportTarget = { clubId: string } | { committeeId: string };
+
 /** Reads a CSV and says what each row would do; writes nothing. */
-export function usePreviewMemberImport(clubId: string) {
+export function usePreviewMemberImport(target: ImportTarget) {
   return useMutation({
     mutationFn: (file: string) =>
-      apiClient.request(previewMemberImportEndpoint, { params: { clubId }, body: { file } }),
+      'clubId' in target
+        ? apiClient.request(previewMemberImportEndpoint, { params: target, body: { file } })
+        : apiClient.request(previewCommitteeMemberImportEndpoint, {
+            params: target,
+            body: { file },
+          }),
   });
 }
 
 /** Applies the previewed file; the server refuses it (409 `import_changed`) if anything moved. */
-export function useConfirmMemberImport(clubId: string) {
+export function useConfirmMemberImport(target: ImportTarget) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, checksum }: { file: string; checksum: string }) =>
-      apiClient.request(confirmMemberImportEndpoint, {
-        params: { clubId },
-        body: { file, checksum },
-      }),
+    mutationFn: (body: { file: string; checksum: string }) =>
+      'clubId' in target
+        ? apiClient.request(confirmMemberImportEndpoint, { params: target, body })
+        : apiClient.request(confirmCommitteeMemberImportEndpoint, { params: target, body }),
     onSuccess: () => refreshAfterChange(queryClient),
   });
 }

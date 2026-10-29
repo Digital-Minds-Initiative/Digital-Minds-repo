@@ -9,7 +9,8 @@ import type { Member } from '@/shared/contracts/members';
  *   full admin / club officer .... everything about the members of their club: add, edit the
  *                                  club's details and the name, change the type, move between
  *                                  committees, remove
- *   committee lead ............... the membership type of members in their committees, nothing else
+ *   committee lead ............... the membership type of members in their committees, and adding
+ *                                  people to a committee they lead (ADR 0029) — never removing
  *   the university email ......... an officer only while the person has not registered; after
  *                                  that a full admin (and every session of the person ends)
  */
@@ -41,4 +42,32 @@ export function memberAccess(me: Me, member: Member): MemberAccess {
 /** The clubs the person may add members to: every club for a full admin, their own for an officer. */
 export function clubsToAddTo(me: Me): Me['access']['clubs'] {
   return me.access.clubs.filter((club) => club.canManage);
+}
+
+/** A committee a lead may bring people into, with its club for the label. */
+export interface AdmittingCommittee {
+  id: string;
+  name: string;
+  clubName: string;
+}
+
+/**
+ * The committees the person leads in clubs they do not run — where they add people one committee
+ * at a time, always with «عضو» (docs/adr/0029-leads-add-members.md). In a club they run they use
+ * the officers' add instead, which can do everything this can.
+ */
+export function committeesToAddTo(me: Me): AdmittingCommittee[] {
+  if (me.user.isFullAdmin) return [];
+  const managed = new Set(clubsToAddTo(me).map((club) => club.id));
+  return me.memberships
+    .filter((membership) => !managed.has(membership.club.id))
+    .flatMap((membership) =>
+      membership.committees
+        .filter((committee) => committee.role === 'LEAD')
+        .map((committee) => ({
+          id: committee.id,
+          name: committee.name,
+          clubName: membership.club.name,
+        })),
+    );
 }

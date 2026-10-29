@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-15
+- Amended by: [ADR 0029](0029-leads-add-members.md) — a committee's leads bring people into that committee, with the club's «عضو» type; removing and everything else here stay with officers
 
 ## Context
 

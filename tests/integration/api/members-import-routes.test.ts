@@ -4,6 +4,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { POST as previewRoute } from '@/app/api/v1/clubs/[clubId]/members/import/preview/route';
 import { POST as importRoute } from '@/app/api/v1/clubs/[clubId]/members/import/route';
 import { GET as templateRoute } from '@/app/api/v1/clubs/[clubId]/members/import/template/route';
+import { POST as committeePreviewRoute } from '@/app/api/v1/committees/[committeeId]/members/import/preview/route';
+import { POST as committeeImportRoute } from '@/app/api/v1/committees/[committeeId]/members/import/route';
+import { GET as committeeTemplateRoute } from '@/app/api/v1/committees/[committeeId]/members/import/template/route';
 import { db } from '@/server/db/client';
 import { DEV_ACTOR_HEADER } from '@/shared/contracts/auth';
 import type { ErrorEnvelope } from '@/shared/contracts/core';
@@ -232,6 +235,86 @@ describe('the CSV import endpoints', () => {
         expect(text).toContain(arabic);
       }
       expect(text.split('\r\n').filter(Boolean)).toHaveLength(1);
+    });
+  });
+
+  /** The same three endpoints for one committee (docs/adr/0029-leads-add-members.md). */
+  describe('for one committee', () => {
+    const file = () =>
+      importFile(['الاسم الكامل,البريد الجامعي', 'طالب للجنة,s441003101@uqu.edu.sa'].join('\n'));
+    const at = (
+      route: Route,
+      method: 'GET' | 'POST',
+      committeeId: string,
+      path: string,
+      actor?: string,
+      body?: unknown,
+    ) =>
+      callRoute(route, {
+        method,
+        path: `/api/v1/committees/${committeeId}/members/import${path}`,
+        params: { committeeId },
+        actor,
+        body,
+      });
+
+    it('previews, imports and serves the template for the committee’s lead', async () => {
+      const lead = s.users.leadA1.uniEmail;
+      const preview = await at(
+        committeePreviewRoute,
+        'POST',
+        s.committees.a1.id,
+        '/preview',
+        lead,
+        {
+          file: file(),
+        },
+      );
+      expect(preview.status).toBe(200);
+      const body = previewMemberImportResponseSchema.parse(await preview.json());
+      expect(body.notices).toEqual([]);
+
+      const imported = await at(committeeImportRoute, 'POST', s.committees.a1.id, '', lead, {
+        file: file(),
+        checksum: body.checksum,
+      });
+      expect(imported.status).toBe(201);
+      expect(memberImportResultSchema.parse(await imported.json())).toMatchObject({ added: 1 });
+
+      const template = await at(
+        committeeTemplateRoute,
+        'GET',
+        s.committees.a1.id,
+        '/template',
+        lead,
+      );
+      expect(template.status).toBe(200);
+      expect(template.headers.get('content-type')).toContain('text/csv');
+    });
+
+    it('is a 404 for another committee and 401 signed out', async () => {
+      const other = await at(
+        committeePreviewRoute,
+        'POST',
+        s.committees.a2.id,
+        '/preview',
+        s.users.leadA1.uniEmail,
+        {
+          file: file(),
+        },
+      );
+      expect(other.status).toBe(404);
+      const anonymous = await at(
+        committeePreviewRoute,
+        'POST',
+        s.committees.a1.id,
+        '/preview',
+        undefined,
+        {
+          file: file(),
+        },
+      );
+      expect(anonymous.status).toBe(401);
     });
   });
 });

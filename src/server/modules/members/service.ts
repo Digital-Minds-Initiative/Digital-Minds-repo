@@ -4,6 +4,7 @@ import {
   clubsScope,
   committeeMembershipsScope,
   committeesScope,
+  memberAdmissionScope,
   membersScope,
   membershipTypesScope,
   type Actor,
@@ -23,21 +24,24 @@ import { endUserSessions } from '@/server/modules/auth';
 import { getActivePointsByMember, type MemberBalances } from '@/server/modules/points';
 import { liveUniEmail } from '@/server/people';
 import { pageMeta, pageOffset } from '@/shared/contracts/core';
-import type {
-  CreateMemberBody,
-  ListMembersQuery,
-  ListMembersResponse,
-  Member,
-  MemberPointsBasis,
-  UpdateMemberBody,
+import {
+  type AdmitMemberBody,
+  type CreateMemberBody,
+  type ListMembersQuery,
+  type ListMembersResponse,
+  type Member,
+  type MemberPointsBasis,
+  type UpdateMemberBody,
 } from '@/shared/contracts/members';
 import { normalizeEmail } from '@/shared/lib/email-domains';
 import { normalizePersonName } from '@/shared/lib/names';
 
+import { admissionTypeId } from './import-plan';
 import { toMember } from './mappers';
 import {
   assertCanAddMember,
   assertCanAddToCommittee,
+  assertCanAdmitToCommittee,
   assertCanChangeMembershipType,
   assertCanEditClubFields,
   assertCanEditFullName,
@@ -58,12 +62,15 @@ import {
   findManageableCommittees,
   findMember,
   findMemberSortKeys,
+  findMembershipTypesInClub,
   findMembersByIds,
   findMembersPage,
+  memberTypeMissing,
   membershipTypeBelongsToClub,
   type MemberFilters,
   removeFromClub,
   removeFromCommittee,
+  saveAdmittedMember,
   saveMemberChanges,
   saveNewMember,
   type MemberRow,
@@ -319,6 +326,62 @@ export async function createMember(
     },
   );
   return getMember(actor, memberId);
+}
+
+/**
+ * Brings a person into one committee (docs/adr/0029-leads-add-members.md): its leads may, as well
+ * as the club's officers and full admins. New to the club or removed from it, they get the club's
+ * «عضو» type; an active member only joins the committee and keeps everything else.
+ *
+ * The refusals come in the usual order, and all of them before the address is looked up, so none
+ * depends on who the person is: a committee outside the actor's scope is a 404 (another lead's
+ * committee included), then the role, then an archived club or committee and a club with no
+ * «عضو» type.
+ */
+export async function admitMember(
+  actor: Actor,
+  committeeId: string,
+  body: AdmitMemberBody,
+): Promise<Member> {
+  const committee = await findCommitteeForMember(committeesScope(actor), committeeId);
+  if (!committee) throw new NotFoundError('Committee');
+  assertCanAdmitToCommittee(actor, { clubId: committee.clubId, committeeId: committee.id });
+  if (committee.clubArchived) throw clubArchived();
+  if (committee.archived) throw committeeArchived();
+  const membershipTypeId = await findAdmissionTypeId(actor, committee.clubId);
+
+  const person = {
+    uniEmail: normalizeEmail(body.person.uniEmail),
+    fullName: normalizePersonName(body.person.fullName),
+  };
+  assertUniversityEmail(person.uniEmail, ['body', 'person', 'uniEmail']);
+
+  const memberId = await saveAdmittedMember(
+    {
+      club: clubsScope(actor),
+      committees: committeesScope(actor),
+      admission: memberAdmissionScope(actor),
+    },
+    {
+      person,
+      profile: body.profile,
+      clubId: committee.clubId,
+      committeeId: committee.id,
+      membershipTypeId,
+    },
+  );
+  return getMember(actor, memberId);
+}
+
+/**
+ * The club's «عضو» type, matched the way an import matches a type cell. A club that has none —
+ * renamed, deleted, never created — cannot take members through a committee, and says so.
+ */
+async function findAdmissionTypeId(actor: Actor, clubId: string): Promise<string> {
+  const types = await findMembershipTypesInClub(membershipTypesScope(actor), clubId);
+  const typeId = admissionTypeId(types);
+  if (!typeId) throw memberTypeMissing();
+  return typeId;
 }
 
 /**

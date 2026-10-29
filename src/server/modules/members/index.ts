@@ -2,6 +2,7 @@ import 'server-only';
 
 export {
   addMemberToCommittee,
+  admitMember,
   createMember,
   getMember,
   listMembers,
@@ -11,8 +12,11 @@ export {
 } from './service';
 export { exportMembers } from './export-service';
 export {
+  confirmCommitteeMemberImport,
   confirmMemberImport,
+  getCommitteeMemberImportTemplate,
   getMemberImportTemplate,
+  previewCommitteeMemberImport,
   previewMemberImport,
 } from './import-service';
 /*

@@ -9,6 +9,7 @@ import {
   committeeMembershipsScope,
   committeesScope,
   hasDashboardAccess,
+  memberAdmissionScope,
   membersScope,
   membershipTypesScope,
   pointTransactionsScope,
@@ -80,6 +81,7 @@ describe('scopes', () => {
       committeesScope,
       membershipTypesScope,
       membersScope,
+      memberAdmissionScope,
       committeeMembershipsScope,
       pointTransactionsScope,
       roleChangesScope,
@@ -95,6 +97,7 @@ describe('scopes', () => {
         committeesScope,
         membershipTypesScope,
         membersScope,
+        memberAdmissionScope,
         committeeMembershipsScope,
         pointTransactionsScope,
         roleChangesScope,
@@ -130,6 +133,14 @@ describe('scopes', () => {
     expect(scope).toContain(CLUB_A);
     expect(scope).not.toContain(CLUB_B);
     expect(scope).not.toContain(B1);
+    expect(memberAdmissionScope(mixed)).toEqual({ clubId: { in: [CLUB_A] } });
+  });
+
+  it('let a lead admit any membership of their own club, and nothing in another', () => {
+    // Wider than what the lead reads, on purpose: someone not in their committee yet, or removed
+    // from the club (docs/adr/0029-leads-add-members.md). The committee scope is the other half.
+    expect(memberAdmissionScope(leadA1)).toEqual({ clubId: { in: [CLUB_A] } });
+    expect(memberAdmissionScope(officerA)).toEqual({ clubId: { in: [CLUB_A] } });
   });
 });
 
