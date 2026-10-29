@@ -158,6 +158,8 @@ describe('member actions — adding', { timeout: 30_000 }, () => {
     const dialog = await screen.findByRole('dialog', { name: 'إضافة عضو إلى اللجنة' });
     await user.type(within(dialog).getByLabelText(/البريد الجامعي/), 's441960001@st.uqu.edu.sa');
     await user.type(within(dialog).getByLabelText(/الاسم الكامل/), 'منضم عبر اللجنة');
+    await user.click(within(dialog).getByRole('combobox', { name: /الجنس/ }));
+    await user.click(await screen.findByRole('option', { name: 'أنثى' }));
     await user.click(within(dialog).getByRole('button', { name: 'إضافة العضو' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 8000 });
 
@@ -166,6 +168,7 @@ describe('member actions — adding', { timeout: 30_000 }, () => {
     const membership = db.memberships.find((candidate) => candidate.userId === person?.id);
     const type = db.membershipTypes.find((candidate) => candidate.id === membership?.typeId);
     expect(type?.name).toBe('عضو');
+    expect(membership?.profile.gender).toBe('FEMALE');
     expect(
       membership?.committees.map((link) => db.committeesById.get(link.committeeId)?.name),
     ).toEqual(['لجنة البرمجة']);
@@ -250,6 +253,26 @@ describe('member actions — editing, committees and removing', { timeout: 40_00
     expect(within(edit).getByLabelText('نوع العضوية')).toBeTruthy();
     expect(within(edit).queryByLabelText('الاسم الكامل')).toBeNull();
     expect(within(edit).queryByLabelText('الجوال')).toBeNull();
+    expect(within(edit).queryByLabelText('الجنس')).toBeNull();
+  });
+
+  it('shows the gender on the file and clears it from the edit form', async () => {
+    const user = await renderTable(OFFICER);
+    const file = await openMember(user);
+    expect(within(file).getByText('ذكر')).toBeTruthy();
+    await user.click(within(file).getByRole('button', { name: 'تعديل البيانات' }));
+    const edit = await screen.findByRole('dialog', {
+      name: new RegExp(`تعديل بيانات ${MEMBER_NAME}`),
+    });
+    await user.click(within(edit).getByRole('combobox', { name: 'الجنس' }));
+    await user.click(await screen.findByRole('option', { name: 'غير محدد' }));
+    await user.click(within(edit).getByRole('button', { name: 'حفظ التعديلات' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /تعديل بيانات/ })).toBeNull(), {
+      timeout: 8000,
+    });
+    const person = getMockDb().users.find((candidate) => candidate.fullName === MEMBER_NAME);
+    const membership = getMockDb().memberships.find((candidate) => candidate.userId === person?.id);
+    expect(membership?.profile.gender).toBeNull();
   });
 
   it('adds the member to a committee and takes them out again', async () => {

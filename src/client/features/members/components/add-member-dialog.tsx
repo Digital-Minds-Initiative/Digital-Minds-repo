@@ -29,6 +29,7 @@ import { toast } from '@/components/ui/toaster';
 import { admitMemberBodySchema, createMemberBodySchema } from '@/shared/contracts/members';
 import { toLatinDigits } from '@/shared/lib/arabic';
 
+import { fromGenderValue, GenderSelect, NO_GENDER, type GenderValue } from './gender-select';
 import {
   useAdmitMember,
   useClubCommittees,
@@ -53,6 +54,7 @@ interface Values {
   college: string;
   major: string;
   level: string;
+  gender: GenderValue;
 }
 
 const FIELDS = [
@@ -63,6 +65,7 @@ const FIELDS = [
   'college',
   'major',
   'level',
+  'gender',
 ] as const;
 
 const DEFAULT_TYPE = 'default';
@@ -140,6 +143,7 @@ function AddMemberForm({
       college: '',
       major: '',
       level: '',
+      gender: NO_GENDER,
     },
   });
   const clubId = useWatch({ control: form.control, name: 'clubId' });
@@ -161,6 +165,7 @@ function AddMemberForm({
       college: blankToUndefined(values.college),
       major: blankToUndefined(values.major),
       level: level === undefined ? undefined : Number(level),
+      gender: fromGenderValue(values.gender) ?? undefined,
     };
     // The same schema the API uses decides what is valid, so the person is told before a request.
     // A committee's add takes no type and no committees: the server gives «عضو» and the URL's.
@@ -415,6 +420,18 @@ function AddMemberForm({
                     )}
                   />
                 ))}
+                <FormField
+                  control={form.control}
+                  name="gender"
+                  label={t('fields.gender')}
+                  render={({ field, controlProps }) => (
+                    <GenderSelect
+                      id={controlProps.id}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
               </div>
             </Section>
 

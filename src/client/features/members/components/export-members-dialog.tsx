@@ -41,6 +41,7 @@ const COLUMN_ORDER: readonly MemberExportColumn[] = [
   'college',
   'major',
   'level',
+  'gender',
   'joinedAt',
 ];
 
