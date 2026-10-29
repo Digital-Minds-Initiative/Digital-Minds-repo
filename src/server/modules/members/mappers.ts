@@ -34,6 +34,7 @@ export function toMember(
       college: row.college,
       major: row.major,
       level: row.level,
+      gender: row.gender,
     },
     club: row.club,
     membershipType: row.membershipType,

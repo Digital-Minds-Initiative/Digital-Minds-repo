@@ -19,6 +19,7 @@ import type {
   ClubRole,
   CommitteeRole,
   CreateMemberBody,
+  MemberGenderFilter,
   MemberSortField,
   MemberStatus,
   UpdateMemberBody,
@@ -47,6 +48,7 @@ function memberSelect(nested: CommitteeMembershipScope) {
     college: true,
     major: true,
     level: true,
+    gender: true,
     user: { select: { id: true, fullName: true, uniEmail: true, registeredAt: true } },
     club: { select: { id: true, name: true, slug: true } },
     membershipType: { select: { id: true, name: true, order: true } },
@@ -69,6 +71,8 @@ export interface MemberFilters {
   membershipTypeIds?: string[];
   role?: ClubRole;
   registered?: boolean;
+  /** A recorded gender, or `UNSPECIFIED` for none. */
+  gender?: MemberGenderFilter;
   status: MemberStatus;
   /** The members export's ticked rows: only these, and still only where the rest matches. */
   memberIds?: string[];
@@ -101,6 +105,9 @@ function memberWhere(
   if (filters.role) conditions.push({ role: filters.role });
   if (filters.registered !== undefined) {
     conditions.push({ user: { registeredAt: filters.registered ? { not: null } : null } });
+  }
+  if (filters.gender) {
+    conditions.push({ gender: filters.gender === 'UNSPECIFIED' ? null : filters.gender });
   }
   if (filters.search) {
     const search: Prisma.MembershipWhereInput[] = [

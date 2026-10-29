@@ -80,6 +80,7 @@ beforeAll(async () => {
       college: 'كلية الحاسب',
       major: 'هندسة برمجيات',
       level: 6,
+      gender: 'FEMALE',
     },
     select: { id: true },
   });
@@ -263,7 +264,7 @@ describe('the public endpoints', () => {
     ]);
   });
 
-  // The stored row has a phone, a personal email, a college, a major and a level, and the member
+  // The stored row has a phone, a personal email, a college, a major, a level and a gender, and the member
   // has a membership id and a user id. None of it may appear anywhere in a public answer.
   it('never leak contact data, study details or internal ids', async () => {
     const bodies = await Promise.all(
@@ -276,6 +277,7 @@ describe('the public endpoints', () => {
         'public.view.routes@st.uqu.edu.sa',
         'كلية الحاسب',
         'هندسة برمجيات',
+        'FEMALE',
         s.clubA.id,
         s.committees.a1.id,
         s.types.a,
@@ -284,7 +286,9 @@ describe('the public endpoints', () => {
         expect(body).not.toContain(secret);
       }
       // The membership type's name is public (ADR 0023); its id and order are not.
-      expect(body).not.toMatch(/"level"|"phone"|"email"|"membershipTypeId"|"order"|"createdBy"/);
+      expect(body).not.toMatch(
+        /"level"|"gender"|"phone"|"email"|"membershipTypeId"|"order"|"createdBy"/,
+      );
     }
   });
 

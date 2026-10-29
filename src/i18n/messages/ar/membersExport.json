@@ -7,6 +7,7 @@
     "college": "الكلية",
     "major": "التخصص",
     "level": "المستوى",
+    "gender": "الجنس",
     "membershipType": "نوع العضوية",
     "role": "الصلاحية",
     "committees": "اللجان",
@@ -21,7 +22,9 @@
     "registered": "مسجّل",
     "notRegistered": "لم يسجّل بعد",
     "active": "حالي",
-    "removed": "مُزال"
+    "removed": "مُزال",
+    "male": "ذكر",
+    "female": "أنثى"
   },
   "sheets": {
     "members": "الأعضاء",

@@ -1,6 +1,6 @@
 # 0012. Keep contact and study details per club; share only the identity
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-30 — gender is part of the club's copy ([below](#amendment-2026-10-30-gender-is-part-of-the-clubs-copy))
 - Date: 2026-10-10
 - Supersedes: what the "One account per person" bullet of [ADR 0003](0003-data-model.md) implied for profile fields; resolves its conflict with [ADR 0002](0002-authorization-model.md)
 
@@ -26,3 +26,18 @@ Together they leaked. Any officer or committee lead who knew a student's univers
 - The name, the university email and whether the person has registered are still shared. A club that adds an email therefore learns the registered name, and can infer that an account existed if that name differs from the one it typed or the person shows as registered. Hiding that would need per-club names, which we rejected: the name is how every club, and the public committee pages, recognise the person.
 - Editing the shared name from one club changes it for every club (the university email can only change before registration). That is accepted for identity; it is not contact data.
 - The demo dataset still lists details once per person; the seed and the mocks give each club the same starting copy.
+
+## Amendment (2026-10-30): gender is part of the club's copy
+
+The clubs asked to record whether a member is male or female. `Membership.gender` (`MALE` /
+`FEMALE`, nullable, no backfill) sits with the other profile fields, so it follows their rules
+exactly: whoever sees a member's phone sees their gender, officers and full admins edit it
+(`club_management_required` otherwise), it is never on the public committee view
+([ADR 0023](0023-committee-view-link.md)), and nothing reads another club's value.
+
+Gender is really a property of the person, not of the club, and putting it on `User` was
+considered. It was rejected because the account is visible to every club the person is in: a
+value one club typed would show in another, which is exactly what this ADR prevents for contact
+data, and an officer could overwrite it for everyone. The cost is accepted: two clubs can record
+different values for the same person, and a future "edit my own profile" screen has the same
+one-club-or-all question as the phone.

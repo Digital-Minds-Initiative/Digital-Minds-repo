@@ -276,6 +276,16 @@ export function useMemberColumns({
           return level === null ? t('none') : t('levelValue', { level });
         },
       }),
+      column.accessor((member) => member.profile.gender, {
+        id: 'gender',
+        header: t('columns.gender'),
+        meta: { label: t('columns.gender') },
+        cell: ({ getValue }) => {
+          const gender = getValue();
+          if (gender === null) return t('none');
+          return gender === 'MALE' ? t('gender.MALE') : t('gender.FEMALE');
+        },
+      }),
       column.accessor('joinedAt', {
         header: t('columns.joinedAt'),
         enableSorting: true,

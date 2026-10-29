@@ -119,6 +119,12 @@ export function listMemberFixtures(
     }
     const user = must(db.usersById.get(membership.userId), 'user');
     if (query.registered !== undefined && user.registered !== query.registered) return false;
+    if (
+      query.gender &&
+      membership.profile.gender !== (query.gender === 'UNSPECIFIED' ? null : query.gender)
+    ) {
+      return false;
+    }
     if (search) {
       const matches =
         normalizeForSearch(user.fullName).includes(search) ||

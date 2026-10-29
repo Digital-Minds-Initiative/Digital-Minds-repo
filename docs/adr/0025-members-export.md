@@ -1,6 +1,6 @@
 # 0025. Exporting members: the list written to a file, refused rather than trimmed, and logged
 
-- Status: Accepted
+- Status: Accepted; amended 2026-10-30 — a gender column and filter ([below](#amendment-2026-10-30-gender))
 - Date: 2026-10-22
 
 ## Context
@@ -153,3 +153,14 @@ full admins will get one.
 - A file re-saved as CSV re-imports. A guarded value comes back with its apostrophe, which the
   import keeps as part of the text. That is acceptable for values that were never meant to start
   with `=` in the first place.
+
+## Amendment (2026-10-30): gender
+
+- `gender` is in `memberExportColumns` after `level`, the template's position, with the header
+  «الجنس» (the import's own, so a re-saved file re-imports) and «ذكر» / «أنثى» or an empty cell,
+  typed as text.
+- The list's `gender` filter (`MALE`, `FEMALE`, `UNSPECIFIED` for none recorded) is part of
+  `memberListFiltersShape`, so the export takes it with no code of its own, and the
+  `MemberExport` row records it with the other filters.
+- No role sees a member's gender that cannot see their phone, so there is still no column a role
+  may not export.

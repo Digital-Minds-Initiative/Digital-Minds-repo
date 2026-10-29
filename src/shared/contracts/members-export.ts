@@ -38,6 +38,7 @@ export const memberExportColumns = [
   'college',
   'major',
   'level',
+  'gender',
   'membershipType',
   'role',
   'committees',

@@ -169,6 +169,13 @@ function MemberFile({
           : tColumns('levelValue', { level: record.profile.level }),
     },
     {
+      label: t('fields.gender'),
+      value:
+        record.profile.gender === null
+          ? tColumns('none')
+          : tColumns(`gender.${record.profile.gender}`),
+    },
+    {
       label: t('fields.points'),
       value: (
         <span className="font-mono [direction:ltr]">{format.number(record.points, 'integer')}</span>

@@ -142,7 +142,7 @@ public id.
 | member search  | `items[].publicId`, `items[].fullName`, `items[].membershipType.name`, `items[].balance`                                                |
 | member points  | `member.publicId`, `member.fullName`, `member.membershipType.name`, `balance`, `transactions.items[].{amount,reason,workDate}` + paging |
 
-No email, phone, college, major, level, membership type id or order, other committee, other club,
+No email, phone, college, major, level, gender, membership type id or order, other committee, other club,
 recorder, cancelled transaction or revision — and a unit test walks the three schemas and fails if
 a field appears that is not in that table.
 
