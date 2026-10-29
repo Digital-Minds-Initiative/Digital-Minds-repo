@@ -9,6 +9,7 @@ import {
 } from '@/client/mocks/db';
 import { mockEndpoint, mockError, type MockError } from '@/client/mocks/endpoint';
 import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
+import type { Gender } from '@/shared/contracts/core';
 import { COMMITTEE_ADMISSION_TYPE_NAME } from '@/shared/contracts/members';
 import {
   confirmCommitteeMemberImportEndpoint,
@@ -27,6 +28,7 @@ import {
 } from '@/shared/contracts/members-import';
 import { toLatinDigits } from '@/shared/lib/arabic';
 import { isAllowedEmailDomain, normalizeEmail } from '@/shared/lib/email-domains';
+import { parseGender } from '@/shared/lib/gender';
 import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
 import { collapseWhitespace } from '@/shared/lib/text';
@@ -69,6 +71,7 @@ interface MockImportRow extends MemberImportRow {
       college: string | null;
       major: string | null;
       level: number | null;
+      gender: Gender | null;
     };
   };
 }
@@ -310,6 +313,9 @@ function buildPlan(
     if (level !== null && !(Number.isInteger(level) && level >= 1 && level <= 12)) {
       issues.push({ field: 'level', code: 'invalid_level' });
     }
+    const genderCell = cell('gender');
+    const gender = genderCell === '' ? null : parseGender(genderCell);
+    if (genderCell !== '' && !gender) issues.push({ field: 'gender', code: 'invalid_gender' });
 
     const duplicateOf = uniEmail === null ? undefined : firstSeen.get(uniEmail);
     if (duplicateOf !== undefined) {
@@ -407,6 +413,7 @@ function buildPlan(
           college: cell('college') === '' ? null : cell('college'),
           major: cell('major') === '' ? null : cell('major'),
           level,
+          gender,
         },
       };
     }
@@ -460,7 +467,11 @@ function apply(db: MockDb, clubId: string, write: NonNullable<MockImportRow['wri
     membership.removedAt = null;
     membership.role = 'MEMBER';
     membership.typeId = write.typeId;
-    membership.profile = write.profile;
+    // An empty cell leaves what the club already has, as on the server (ADR 0021).
+    membership.profile = {
+      ...membership.profile,
+      ...Object.fromEntries(Object.entries(write.profile).filter(([, value]) => value !== null)),
+    };
     for (const link of membership.committees) link.role = 'MEMBER';
   } else {
     membership = {

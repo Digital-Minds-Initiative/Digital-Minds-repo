@@ -43,6 +43,12 @@ function cell(member: Member, column: MemberExportColumn): Cell {
       return member.profile.major;
     case 'level':
       return member.profile.level;
+    case 'gender':
+      return member.profile.gender === null
+        ? null
+        : member.profile.gender === 'MALE'
+          ? values.male
+          : values.female;
     case 'membershipType':
       return member.membershipType.name;
     case 'role':

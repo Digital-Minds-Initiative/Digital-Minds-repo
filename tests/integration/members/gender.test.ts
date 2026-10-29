@@ -310,7 +310,14 @@ describe('a member’s gender', () => {
     };
 
     it('writes valid values on new people, none for an empty cell, and refuses anything else', async () => {
-      const [male, female, alif, empty, english, bad] = [1, 2, 3, 4, 5, 6].map(() => newEmail());
+      const [male, female, alif, empty, english, bad] = [
+        newEmail(),
+        newEmail(),
+        newEmail(),
+        newEmail(),
+        newEmail(),
+        newEmail(),
+      ];
       const { preview, result } = await importFully(
         csv(
           'الاسم الكامل,البريد الجامعي,المستوى,الجنس',

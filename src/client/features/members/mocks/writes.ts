@@ -123,6 +123,7 @@ export const memberWriteHandlers = [
       college: body.profile.college ?? null,
       major: body.profile.major ?? null,
       level: body.profile.level ?? null,
+      gender: body.profile.gender ?? null,
     };
 
     const existing = db.memberships.find(
@@ -210,6 +211,7 @@ export const memberWriteHandlers = [
       college: body.profile.college ?? null,
       major: body.profile.major ?? null,
       level: body.profile.level ?? null,
+      gender: body.profile.gender ?? null,
     };
 
     let membership = db.memberships.find(
@@ -265,7 +267,7 @@ export const memberWriteHandlers = [
           ? normalizePersonName(body.fullName)
           : undefined,
     };
-    const profileKeys = ['personalEmail', 'phone', 'college', 'major', 'level'] as const;
+    const profileKeys = ['personalEmail', 'phone', 'college', 'major', 'level', 'gender'] as const;
     const profileChanges = profileKeys.filter(
       (key) => body[key] !== undefined && body[key] !== membership.profile[key],
     );
