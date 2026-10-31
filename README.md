@@ -240,11 +240,11 @@ Restart `pnpm dev` after changing it. Pick an account from **«حساب التج
 | `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                                                  |
 | `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).                                       |
 | `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded).                                  |
-| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                                                             |
+| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`. Local or `app.environment=dev` databases only.              |
 | `pnpm db:deploy`        | Applies pending migrations without creating new ones (the deploy workflow runs it).                                                  |
 | `pnpm db:seed`          | Replaces all data in your local database with the demo data (hosted: dev only, §12.6).                                               |
-| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds.                                                                    |
-| `pnpm db:studio`        | Opens Prisma Studio to browse the database.                                                                                          |
+| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds. Local or `app.environment=dev` databases only.                     |
+| `pnpm db:studio`        | Opens Prisma Studio to browse the database. Local or `app.environment=dev` databases only.                                           |
 | `pnpm db:generate`      | Regenerates the Prisma client (runs automatically after `pnpm install`).                                                             |
 | `pnpm db:backup`        | Encrypted `pg_dump` of a hosted database ([§12.9](#129-backups)).                                                                    |
 | `pnpm db:restore`       | Restores such a backup into a database, after you type its host ([§12.9](#129-backups)).                                             |
