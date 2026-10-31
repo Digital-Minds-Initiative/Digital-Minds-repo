@@ -32,16 +32,18 @@ Three more things needed deciding, because the data model makes them awkward:
 **Who may do what** (★ full admin, O officer of the club, L lead of a committee the member is in;
 an ordinary member sees no member at all, so every one of these is a 404 for them):
 
-| Action                                                                         |  ★  |                    O                    |             L             |
-| ------------------------------------------------------------------------------ | :-: | :-------------------------------------: | :-----------------------: |
-| List, view and search members                                                  | all |                    ✓                    | their committees' members |
-| Add a person to the club, and to any committees of it                          |  ✓  |                    ✓                    |             —             |
-| Add to / remove from a committee                                               |  ✓  |                    ✓                    |             —             |
-| Remove from the club                                                           |  ✓  |                    ✓                    |             —             |
-| Edit this club's fields (phone, personal email, college, major, level, gender) |  ✓  |                    ✓                    |             —             |
-| Edit the full name                                                             |  ✓  |                    ✓                    |             —             |
-| Change the membership type                                                     |  ✓  |                    ✓                    |             ✓             |
-| Edit the university email                                                      |  ✓  | only while the person is not registered |             —             |
+| Action                                                                         |  ★  |                                   O                                    |             L             |
+| ------------------------------------------------------------------------------ | :-: | :--------------------------------------------------------------------: | :-----------------------: |
+| List, view and search members                                                  | all |                                   ✓                                    | their committees' members |
+| Add a person to the club, and to any committees of it                          |  ✓  |                                   ✓                                    |             —             |
+| Add to / remove from a committee                                               |  ✓  |                                   ✓                                    |             —             |
+| Remove from the club                                                           |  ✓  |                                   ✓                                    |             —             |
+| Edit this club's fields (phone, personal email, college, major, level, gender) |  ✓  |                                   ✓                                    |             —             |
+| Edit the full name                                                             |  ✓  |               only an account that is the club's alone¹                |             —             |
+| Change the membership type                                                     |  ✓  |                                   ✓                                    |             ✓             |
+| Edit the university email                                                      |  ✓  | only an account that is the club's alone¹, before the person registers |             —             |
+
+¹ No other club, no role anywhere, not a full admin — the amendment at the end.
 
 Every club-level refusal carries one reason, `club_management_required`, so the UI explains them
 alike. Out of scope stays a 404, decided before any of these rules runs.
@@ -56,7 +58,8 @@ pure function.
 **Editing the university email.** An officer may correct it while the person has not signed in
 yet (an admin typing a student's address wrongly is the common case). Once `registeredAt` is set,
 moving the account to another address is a full admin's call (403 `uni_email_requires_full_admin`
-for an officer). Either way, the change ends **all** of that person's sessions in the same
+for an officer; the amendment below narrows the officer's case further). Either way, the change
+ends **all** of that person's sessions in the same
 transaction: what they signed in with no longer identifies them. That includes a sign-in that is
 only half-done — an unregistered person waiting on the name step already holds a session, opened
 against the address their code proved. Addresses stay unique across people — the constraint
@@ -114,7 +117,8 @@ after its own scoped updates, so it cannot run for a member the actor could not 
   member's total can include committees they have left. A per-committee view is the place to see
   only current work.
 - A person added by an admin cannot rename themselves at sign-in. If the club typed the name
-  wrongly, an officer fixes it; the UI should say so on the confirm step.
+  wrongly, an officer fixes it (a full admin, when the account reaches beyond that club — see the
+  amendment); the UI should say so on the confirm step.
 - `error.details` is new on the envelope and carries ids only, never personal data: the caller may
   not be allowed to see the person behind the conflict.
 - Only a real change is an edit: every field is compared with what the member holds, after
@@ -125,3 +129,46 @@ after its own scoped updates, so it cannot run for a member the actor could not 
 - The transaction-client pattern keeps table ownership intact without a service layer that can
   open transactions. It only works one call deep, which is enough for this case; a chain of them
   would mean the modules are drawn wrongly.
+
+## Amendment (2026-10-31): an officer edits the shared account only when it is their club's alone
+
+The name and the university email are not this club's copy of anything: they are the `User` row
+every club of the person shares, and the address is what sign-in matches on. An officer's edit,
+made through their own club, must therefore never change something another club relies on, or an
+account that carries rights of its own. The original rule allowed an officer to correct the
+address of anyone who had not signed in yet and to rename anyone in their club, whatever else that
+account was.
+
+**The rule.** An officer may change the name or the university email only when the account is
+their club's alone:
+
+- no membership in any other club, active or removed (a removed one can be restored, and its
+  history still names the person);
+- no role anywhere — not an officer, not a lead, in another club or in this one;
+- not a full admin (which covers an account made by `pnpm admin:grant --name` before its first
+  sign-in, which has no membership at all).
+
+For the email, the person must also not have registered yet, as before. Anything else is a full
+admin's to change.
+
+**Refusals.** A 403, because the member is visible to the officer and a full admin making the same
+request succeeds: what is missing is the actor's role, not a state anyone could fix. One reason per
+field, whatever the cause — `uni_email_requires_full_admin` (now also covering a role, a full
+admin or another club) and the new `full_name_requires_full_admin` — so the refusal never says
+which condition it was. The outcome itself necessarily tells the officer one bit (this account
+reaches beyond the club, holds a role or is an admin); hiding that would mean taking the edit away
+from officers entirely, which we decided against. The member response gains no flag for it, so
+nobody learns the bit without trying. The UI disables both fields for a member it can see holds a
+role, and otherwise shows the refusal when the form is sent.
+
+**Where it is decided.** `saveMemberChanges` takes a `checkAccount` callback. Inside the
+transaction that writes, before the account is updated, it locks the `User` row, then all of its
+`Membership` rows, then their `CommitteeMembership` rows (`FOR UPDATE`, in `lockPerson`'s order),
+and hands `{ isFullAdmin, inOtherClub, holdsRole }` to `assertCanEditSharedAccount`. While those
+locks are held nobody can add the person to another club (the insert waits on the `User` row's key
+lock), grant them a role, flag them a full admin or complete their registration, so the facts the
+check saw are the ones the write commits against. Full admins go through the same transaction and
+skip the check.
+
+Nothing else an officer can reach writes to `User`: adding, restoring, importing and admitting a
+person all match an existing account by its address and leave it as it is.

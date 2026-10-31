@@ -76,6 +76,43 @@ export function assertCanEditUniEmail(
   if (target.isRegistered) throw new AuthzError('uni_email_requires_full_admin');
 }
 
+/**
+ * The shared account behind a member, as it stands with its rows locked: whether it is a full
+ * admin's, has a membership in any other club (removed ones too), and holds a role anywhere — an
+ * officer or a lead, in this club or another.
+ */
+export interface SharedAccount {
+  isFullAdmin: boolean;
+  inOtherClub: boolean;
+  holdsRole: boolean;
+}
+
+const sharedAccountReasons = {
+  uniEmail: 'uni_email_requires_full_admin',
+  fullName: 'full_name_requires_full_admin',
+} as const;
+
+/**
+ * The name and the university email are on the account every club of the person shares, so an
+ * officer changes them only on an account that is their club's alone: no other club, no role
+ * anywhere, not a full admin. Anything else is a full admin's to change
+ * (docs/adr/0017-member-permissions.md, amendment of October 2026).
+ *
+ * One reason per field whatever the cause, so a refusal never says which of them it was. The
+ * service runs it inside the transaction that writes, with the account's rows locked, after the
+ * field's own check above.
+ */
+export function assertCanEditSharedAccount(
+  actor: Actor,
+  field: keyof typeof sharedAccountReasons,
+  account: SharedAccount,
+): void {
+  if (actor.isFullAdmin) return;
+  if (account.isFullAdmin || account.inOtherClub || account.holdsRole) {
+    throw new AuthzError(sharedAccountReasons[field]);
+  }
+}
+
 /** The one member action a committee lead has, for the members of the committees they lead. */
 export function assertCanChangeMembershipType(actor: Actor, member: MemberTarget): void {
   if (canManageClub(actor, member.clubId)) return;

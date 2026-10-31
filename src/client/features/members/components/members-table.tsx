@@ -263,7 +263,7 @@ export function MembersTable({ openId: controlledOpenId, onOpenIdChange }: Membe
         access={
           editing && me
             ? memberAccess(me, editing)
-            : { canManage: false, canEditEmail: false, canChangeType: false }
+            : { canManage: false, canEditName: false, canEditEmail: false, canChangeType: false }
         }
         onClose={() => setEditing(null)}
       />

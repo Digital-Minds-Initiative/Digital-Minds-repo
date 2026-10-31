@@ -4,8 +4,8 @@
  * The full-admin flag is deliberately not grantable through the API (docs/adr/0018-granting-roles.md),
  * so the first one on a new database — and any later one — is made here, by someone who holds the
  * database URL. An existing account is flagged; an address with no account gets one, which needs
- * --name: it is the name the person confirms at their first sign-in (ADR 0014), and only an officer
- * can change it afterwards.
+ * --name: it is the name the person confirms at their first sign-in (ADR 0014), and only a full
+ * admin can change it afterwards (an officer never can on a full admin's account, ADR 0017).
  *
  * It connects with DIRECT_URL when set, else DATABASE_URL, and prints which database it touched.
  */

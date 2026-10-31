@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Me } from '@/shared/contracts/auth';
+import type { Member } from '@/shared/contracts/members';
 
-import { clubsToAddTo, committeesToAddTo } from '../access';
+import { clubsToAddTo, committeesToAddTo, memberAccess } from '../access';
 
 /*
  * Which add the members page offers (docs/adr/0029-leads-add-members.md): the officers' add for a
@@ -95,5 +96,61 @@ describe('committeesToAddTo', () => {
         }),
       ),
     ).toEqual([]);
+  });
+});
+
+describe('memberAccess: the account every club shares', () => {
+  function member(overrides: { registered?: boolean; officer?: boolean; lead?: boolean } = {}) {
+    return {
+      id: '0192d000-0000-7000-8000-0000000000d1',
+      user: {
+        id: '0192d000-0000-7000-8000-0000000000d2',
+        fullName: 'عضو',
+        uniEmail: 's000000098@st.uqu.edu.sa',
+        isRegistered: overrides.registered ?? false,
+      },
+      profile: {
+        personalEmail: null,
+        phone: null,
+        college: null,
+        major: null,
+        level: null,
+        gender: null,
+      },
+      club: CLUB_A,
+      membershipType: { ...TYPE, order: 0 },
+      role: overrides.officer ? 'CLUB_OFFICER' : 'MEMBER',
+      committees: [{ ...A1, role: overrides.lead ? 'LEAD' : 'MEMBER', points: 0 }],
+      points: 0,
+      joinedAt: '2026-10-01T00:00:00.000Z',
+      removedAt: null,
+    } satisfies Member;
+  }
+  const officer = me({
+    managed: [CLUB_A.id],
+    memberships: [{ club: CLUB_A, role: 'CLUB_OFFICER', membershipType: TYPE, committees: [] }],
+  });
+  const admin = me({ user: { ...me({}).user, isFullAdmin: true } });
+
+  it('lets an officer edit the name and the email of someone holding no role, before they register', () => {
+    expect(memberAccess(officer, member())).toMatchObject({
+      canEditName: true,
+      canEditEmail: true,
+    });
+    expect(memberAccess(officer, member({ registered: true }))).toMatchObject({
+      canEditName: true,
+      canEditEmail: false,
+    });
+  });
+
+  it('leaves both to a full admin for an officer or a lead', () => {
+    for (const target of [member({ officer: true }), member({ lead: true })]) {
+      expect(memberAccess(officer, target)).toMatchObject({
+        canManage: true,
+        canEditName: false,
+        canEditEmail: false,
+      });
+      expect(memberAccess(admin, target)).toMatchObject({ canEditName: true, canEditEmail: true });
+    }
   });
 });

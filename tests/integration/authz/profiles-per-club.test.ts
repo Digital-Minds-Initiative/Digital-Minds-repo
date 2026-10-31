@@ -38,10 +38,11 @@ describe('member profiles are per club', () => {
 
   it("an edit changes only the club's own copy; the shared name changes for every club", async () => {
     const officerA = await actorFor(s.users.officerA.id);
-    await updateMember(officerA, s.memberships.bothClubsA, {
-      phone: '+966500003003',
-      fullName: 'اسم معدّل',
-    });
+    await updateMember(officerA, s.memberships.bothClubsA, { phone: '+966500003003' });
+    // The name is the account both clubs share, so for someone in two clubs it is a full admin's
+    // to change (ADR 0017 amendment) — and it changes for both at once.
+    const admin = await actorFor(s.users.admin.id);
+    await updateMember(admin, s.memberships.bothClubsA, { fullName: 'اسم معدّل' });
 
     const inA = await db.membership.findUniqueOrThrow({ where: { id: s.memberships.bothClubsA } });
     const inB = await db.membership.findUniqueOrThrow({

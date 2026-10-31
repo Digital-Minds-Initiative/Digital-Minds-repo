@@ -11,12 +11,16 @@ import type { Member } from '@/shared/contracts/members';
  *                                  committees, remove
  *   committee lead ............... the membership type of members in their committees, and adding
  *                                  people to a committee they lead (ADR 0029) — never removing
- *   the university email ......... an officer only while the person has not registered; after
- *                                  that a full admin (and every session of the person ends)
+ *   the name and the email ........ on the account every club shares: an officer only for someone
+ *                                  holding no role (and, for the email, not registered yet);
+ *                                  otherwise a full admin. The server also refuses an account
+ *                                  that reaches another club, which this page cannot see — that
+ *                                  refusal is shown when the form is sent.
  */
 export interface MemberAccess {
-  /** Add to and remove from committees and the club; edit the name and this club's details. */
+  /** Add to and remove from committees and the club; edit this club's details. */
   canManage: boolean;
+  canEditName: boolean;
   canEditEmail: boolean;
   canChangeType: boolean;
 }
@@ -32,9 +36,13 @@ export function memberAccess(me: Me, member: Member): MemberAccess {
       membership.committees.some((own) => own.id === committee.id && own.role === 'LEAD'),
     ),
   );
+  const holdsRole =
+    member.role !== 'MEMBER' || member.committees.some((committee) => committee.role !== 'MEMBER');
+  const editsAccount = me.user.isFullAdmin || (manages && !holdsRole);
   return {
     canManage: manages,
-    canEditEmail: me.user.isFullAdmin || (manages && !member.user.isRegistered),
+    canEditName: editsAccount,
+    canEditEmail: me.user.isFullAdmin || (editsAccount && !member.user.isRegistered),
     canChangeType: manages || leadsOne,
   };
 }
