@@ -59,7 +59,7 @@
     "server-only": "0.0.1",
     "tailwind-merge": "3.7.0",
     "write-excel-file": "4.1.1",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

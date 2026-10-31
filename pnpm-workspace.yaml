@@ -17,3 +17,8 @@ allowBuilds:
   esbuild: true # verifies the native esbuild binary
   prisma: true # Prisma CLI setup
   unrs-resolver: true # native module resolver used by ESLint's import plugin
+
+# Transitive versions forced past a security advisory until the parent package catches up.
+# Remove an entry once `pnpm why <package>` shows the parent already depends on a fixed version.
+overrides:
+  '@vercel/cli-config>zod': 4.6.7 # GHSA-mrhx-c7xc-m3w5, via @vercel/functions > @vercel/oidc
