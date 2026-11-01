@@ -37,3 +37,8 @@ BEGIN
   END IF;
 END
 $$;
+
+-- The deletion log is append-only: the app inserts one row per full-admin delete and reads them,
+-- and never changes or removes one (docs/adr/0026-person-deletion.md). Without these rights a bug
+-- or a stolen app connection cannot rewrite what was deleted, by whom. Only the owner can.
+REVOKE UPDATE, DELETE ON "DeletionRecord" FROM digital_minds_app;

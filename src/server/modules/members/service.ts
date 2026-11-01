@@ -45,6 +45,7 @@ import {
   assertCanChangeMembershipType,
   assertCanEditClubFields,
   assertCanEditFullName,
+  assertCanEditSharedAccount,
   assertCanEditUniEmail,
   assertCanRemoveFromClub,
   assertCanRemoveFromCommittee,
@@ -449,15 +450,20 @@ export async function updateMember(
   // Nothing really changes: answer with the member rather than open a transaction that would
   // write nothing.
   if (Object.values(changes).some((value) => value !== undefined)) {
-    await saveMemberChanges(
-      membersScope(actor),
-      memberId,
-      changes,
+    await saveMemberChanges(membersScope(actor), memberId, changes, {
+      // The account is shared by every club of the person, so whether an officer may change it
+      // depends on what it holds elsewhere — read with its rows locked, so nothing can join or be
+      // granted between this check and the write.
+      checkAccount: (account) => {
+        if (uniEmail !== undefined) assertCanEditSharedAccount(actor, 'uniEmail', account);
+        if (fullName !== undefined) assertCanEditSharedAccount(actor, 'fullName', account);
+      },
       // Moving the account to another address invalidates what the person signed in with, so
       // every session of theirs ends with the change, not after it — including a sign-in that is
       // half-done (an unregistered person waiting on the name step holds a session too).
-      uniEmail !== undefined ? (tx) => endUserSessions(tx, row.user.id) : undefined,
-    );
+      alsoInTransaction:
+        uniEmail !== undefined ? (tx) => endUserSessions(tx, row.user.id) : undefined,
+    });
   }
   return getMember(actor, memberId);
 }

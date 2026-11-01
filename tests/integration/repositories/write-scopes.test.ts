@@ -84,19 +84,27 @@ describe('repository writes apply the scope themselves', () => {
 
   it('saveMemberChanges does not run another module’s write when the scope matches nothing', async () => {
     let ran = 0;
+    let checked = 0;
     await expectNotFound(
       saveMemberChanges(
         membersScope(officerB),
         s.memberships.memberA1,
         { uniEmail: 's900000888@st.uqu.edu.sa' },
-        async (tx) => {
-          ran += 1;
-          return endUserSessions(tx, s.users.memberA1.id);
+        {
+          checkAccount: () => {
+            checked += 1;
+          },
+          alsoInTransaction: async (tx) => {
+            ran += 1;
+            return endUserSessions(tx, s.users.memberA1.id);
+          },
         },
       ),
     );
-    // The hook ends the person's sessions; it must not run for a member out of reach.
+    // The hook ends the person's sessions; it must not run for a member out of reach — and the
+    // account check, which locks the account, never sees one either.
     expect(ran).toBe(0);
+    expect(checked).toBe(0);
   });
 
   it('removeFromCommittee', async () => {

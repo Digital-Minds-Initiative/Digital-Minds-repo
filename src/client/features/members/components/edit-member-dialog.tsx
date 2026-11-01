@@ -122,7 +122,7 @@ function EditMemberForm({
     if (access.canEditEmail && normalizeEmail(values.uniEmail) !== member.user.uniEmail) {
       changes.uniEmail = values.uniEmail;
     }
-    if (access.canManage && normalizePersonName(values.fullName) !== member.user.fullName) {
+    if (access.canEditName && normalizePersonName(values.fullName) !== member.user.fullName) {
       changes.fullName = values.fullName;
     }
     if (access.canChangeType && values.membershipTypeId !== member.membershipType.id) {
@@ -229,10 +229,15 @@ function EditMemberForm({
                 control={form.control}
                 name="fullName"
                 label={t('fields.fullName')}
-                description={t('edit.sharedHint')}
+                description={access.canEditName ? t('edit.sharedHint') : t('edit.nameLocked')}
                 required
                 render={({ field, controlProps }) => (
-                  <Input {...field} {...controlProps} autoComplete="off" />
+                  <Input
+                    {...field}
+                    {...controlProps}
+                    autoComplete="off"
+                    disabled={!access.canEditName}
+                  />
                 )}
               />
               <FormField

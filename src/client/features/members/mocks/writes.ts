@@ -285,6 +285,25 @@ export const memberWriteHandlers = [
       const denied = requireClubManagement(actor, membership.clubId);
       if (denied) return denied;
     }
+    // The name and the address are the account every club shares: an officer changes them only
+    // on an account that is their club's alone (ADR 0017, amendment of October 2026).
+    if (!actor.user.isFullAdmin) {
+      const theirs = db.memberships.filter((row) => row.userId === user.id);
+      const reachesBeyond =
+        user.isFullAdmin ||
+        theirs.some(
+          (row) =>
+            row.clubId !== membership.clubId ||
+            row.role !== 'MEMBER' ||
+            row.committees.some((committee) => committee.role !== 'MEMBER'),
+        );
+      if (reachesBeyond && next.uniEmail !== undefined) {
+        return forbidden('uni_email_requires_full_admin');
+      }
+      if (reachesBeyond && next.fullName !== undefined) {
+        return forbidden('full_name_requires_full_admin');
+      }
+    }
     const typeChange =
       body.membershipTypeId !== undefined && body.membershipTypeId !== membership.typeId
         ? body.membershipTypeId
