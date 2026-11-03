@@ -313,7 +313,7 @@ function BulkForm({ onOpenChange, kind, name, groups, onSubmit }: BulkPointsDial
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-40 flex-1">
+              <div className="relative min-w-40 flex-1 basis-full">
                 <Search
                   className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
                   aria-hidden
