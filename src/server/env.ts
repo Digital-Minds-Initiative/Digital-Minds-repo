@@ -4,7 +4,11 @@ import { randomBytes } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { normalizeEmail, parseEmailDomains } from '@/shared/lib/email-domains';
+import {
+  isAllowedEmailDomain,
+  normalizeEmail,
+  parseEmailDomains,
+} from '@/shared/lib/email-domains';
 import { parseSelfSignup } from '@/shared/lib/self-signup';
 
 /**
@@ -67,6 +71,17 @@ const envSchema = (phase: string | undefined) =>
         .string({ error: 'is required (for example "uqu.edu.sa")' })
         .transform(parseEmailDomains)
         .pipe(z.array(domainSchema).min(1, 'must list at least one domain')),
+      /**
+       * Public mail providers people may also use (for example "gmail.com, outlook.com"). Unlike
+       * ALLOWED_EMAIL_DOMAINS, only the exact domain is accepted and a `+tag` address is refused
+       * (src/shared/lib/email-domains.ts, docs/adr/0030-personal-email-domains.md).
+       * Unset or blank means none: only the institutional domains.
+       */
+      ALLOWED_PERSONAL_EMAIL_DOMAINS: z
+        .string()
+        .optional()
+        .transform((raw) => parseEmailDomains(raw ?? ''))
+        .pipe(z.array(domainSchema)),
       /** Where users open the app. Non-GET API requests must come from this origin (CSRF). */
       APP_ORIGIN: optionalString.pipe(
         z
@@ -152,6 +167,18 @@ const envSchema = (phase: string | undefined) =>
       // not for `next build`, which also runs with NODE_ENV=production.
       const productionServer = isProductionServer(env.NODE_ENV, phase);
       const emailTransport = resolveEmailTransport(env.EMAIL_TRANSPORT, productionServer);
+      // The institutional rule is the looser one (subdomains, `+tags`), so a provider listed under
+      // both would quietly lose the personal rules.
+      const overlapping = env.ALLOWED_PERSONAL_EMAIL_DOMAINS.filter((domain) =>
+        isAllowedEmailDomain(`x@${domain}`, env.ALLOWED_EMAIL_DOMAINS),
+      );
+      if (overlapping.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ALLOWED_PERSONAL_EMAIL_DOMAINS'],
+          message: `must not repeat a domain ALLOWED_EMAIL_DOMAINS already allows (${overlapping.join(', ')})`,
+        });
+      }
       if (productionServer) {
         for (const name of ['APP_ORIGIN', 'AUTH_SECRET', 'RESEND_API_KEY'] as const) {
           if (!env[name]) {

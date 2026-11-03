@@ -9,7 +9,7 @@ import {
   membershipTypesScope,
   type Actor,
 } from '@/server/authz';
-import { env } from '@/server/env';
+import { emailDomainPolicy } from '@/server/email-policy';
 import {
   clubArchived,
   clubHasNoMembershipTypes,
@@ -118,7 +118,7 @@ async function preview(
   body: { file: string },
 ): Promise<PreviewMemberImportResponse> {
   const file = parseImportFile(decodeImportFile(body.file), {
-    allowedDomains: env.ALLOWED_EMAIL_DOMAINS,
+    emailPolicy: emailDomainPolicy,
   });
   const plan = await planFor(actor, target, file.rows);
 
@@ -163,7 +163,7 @@ async function confirm(
   body: { file: string; checksum: string },
 ): Promise<MemberImportResult> {
   const file = parseImportFile(decodeImportFile(body.file), {
-    allowedDomains: env.ALLOWED_EMAIL_DOMAINS,
+    emailPolicy: emailDomainPolicy,
   });
   const plan = await planFor(actor, target, file.rows);
   if (plan.checksum !== body.checksum) throw importChanged();

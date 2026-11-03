@@ -55,6 +55,11 @@ export default defineConfig({
           env: {
             DATABASE_URL: process.env.TEST_DATABASE_URL ?? '',
             DIRECT_URL: process.env.TEST_DATABASE_URL ?? '',
+            // The tests assert which addresses are refused, so they pin the lists a developer's
+            // .env would otherwise decide.
+            ALLOWED_EMAIL_DOMAINS: 'uqu.edu.sa',
+            ALLOWED_PERSONAL_EMAIL_DOMAINS:
+              'gmail.com,outlook.com,hotmail.com,live.com,outlook.sa,hotmail.sa',
             DEV_ACTOR_SWITCHER: 'true',
             // Requests in tests are built for http://localhost; emails stay in memory.
             APP_ORIGIN: 'http://localhost',

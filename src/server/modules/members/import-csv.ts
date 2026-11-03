@@ -14,7 +14,7 @@ import {
   type MemberImportIssue,
 } from '@/shared/contracts/members-import';
 import { toLatinDigits } from '@/shared/lib/arabic';
-import { isAllowedEmailDomain } from '@/shared/lib/email-domains';
+import { checkEmailAddress, type EmailDomainPolicy } from '@/shared/lib/email-domains';
 import { parseGender } from '@/shared/lib/gender';
 import { normalizeEntityName, normalizePersonName } from '@/shared/lib/names';
 import { normalizePhone } from '@/shared/lib/phone';
@@ -208,7 +208,7 @@ function readHeader(header: string[]): { columns: ColumnMap; ignoredColumns: str
  */
 export function parseImportFile(
   text: string,
-  options: { allowedDomains: readonly string[] },
+  options: { emailPolicy: EmailDomainPolicy },
 ): ParsedImportFile {
   assertNotTooManyLines(text);
   const delimiter = sniffDelimiter(text);
@@ -254,7 +254,7 @@ export function parseImportFile(
         // own row number — of the line the row ends on, for the rare row with a quoted newline.
         line: info.lines,
         delimiter,
-        allowedDomains: options.allowedDomains,
+        emailPolicy: options.emailPolicy,
       }),
     ),
   };
@@ -291,7 +291,7 @@ function assertNotTooManyLines(text: string): void {
 interface RowContext {
   line: number;
   delimiter: string;
-  allowedDomains: readonly string[];
+  emailPolicy: EmailDomainPolicy;
 }
 
 function readRow(record: string[], columns: ColumnMap, context: RowContext): ParsedImportRow {
@@ -306,7 +306,7 @@ function readRow(record: string[], columns: ColumnMap, context: RowContext): Par
   };
 
   const fullName = readFullName(cell('fullName'), fail);
-  const uniEmail = readUniEmail(cell('uniEmail'), context.allowedDomains, fail);
+  const uniEmail = readUniEmail(cell('uniEmail'), context.emailPolicy, fail);
   const membershipType = cell('membershipType');
   const committeeNames = readCommittees(cell('committees'), context.delimiter, fail);
 
@@ -330,13 +330,12 @@ function readFullName(value: string, fail: Fail): string | null {
   return name;
 }
 
-function readUniEmail(value: string, allowedDomains: readonly string[], fail: Fail): string | null {
+function readUniEmail(value: string, policy: EmailDomainPolicy, fail: Fail): string | null {
   if (value === EMPTY) return fail('uniEmail', 'required');
   const parsed = universityEmailSchema.safeParse(value);
   if (!parsed.success) return fail('uniEmail', 'invalid_email');
-  if (!isAllowedEmailDomain(parsed.data, allowedDomains)) {
-    return fail('uniEmail', 'email_domain_not_allowed');
-  }
+  const problem = checkEmailAddress(parsed.data, policy);
+  if (problem) return fail('uniEmail', problem);
   return parsed.data;
 }
 

@@ -120,7 +120,7 @@ describe('editing a member', () => {
         user: { uniEmail: upper.toLowerCase() },
       });
       await expectInvalid(
-        updateMember(officerA, member.id, { uniEmail: 'someone@gmail.com' }),
+        updateMember(officerA, member.id, { uniEmail: 'someone@example.com' }),
         'email_domain_not_allowed',
       );
     });
