@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -35,10 +35,14 @@ import { todayInAppTimeZone } from '@/shared/lib/dates';
 import { collapseWhitespace } from '@/shared/lib/text';
 
 import { amountFieldSchema } from './points-form-dialog';
+import {
+  matchesMemberSearch,
+  phoneMatchesSearch,
+  type SearchableMember,
+} from '../lib/member-search';
 
-interface BulkMember {
+export interface BulkMember extends SearchableMember {
   id: string;
-  fullName: string;
 }
 
 export interface BulkGroup {
@@ -94,6 +98,7 @@ function BulkForm({ onOpenChange, kind, name, groups, onSubmit }: BulkPointsDial
   const t = useTranslations('points.bulk');
   const tForm = useTranslations('points.form');
   const errorText = useErrorText();
+  const contactId = useId();
   const today = useMemo(() => todayInAppTimeZone(), []);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [rejected, setRejected] = useState<ReadonlyMap<string, string>>(new Map());
@@ -108,11 +113,10 @@ function BulkForm({ onOpenChange, kind, name, groups, onSubmit }: BulkPointsDial
   });
 
   const max = kind === 'committee' ? COMMITTEE_POINTS_BULK_MAX : CLUB_POINTS_BULK_MAX;
-  const needle = search.trim();
   const visibleGroups = groups
     .map((group) => ({
       ...group,
-      members: group.members.filter((member) => !needle || member.fullName.includes(needle)),
+      members: group.members.filter((member) => matchesMemberSearch(member, search)),
     }))
     .filter((group) => group.members.length > 0);
   const total = groups.reduce((sum, group) => sum + group.members.length, 0);
@@ -381,8 +385,22 @@ function BulkForm({ onOpenChange, kind, name, groups, onSubmit }: BulkPointsDial
                                       ? `${member.fullName} · ${group.committee.name}`
                                       : member.fullName
                                   }
+                                  aria-describedby={`${contactId}-${key}`}
                                 />
-                                <span className="min-w-0 flex-1 truncate">{member.fullName}</span>
+                                <span className="grid min-w-0 flex-1">
+                                  <span className="truncate">{member.fullName}</span>
+                                  {/* What tells two members with the same name apart. The phone
+                                      is shown only while the search is for one. */}
+                                  <span
+                                    id={`${contactId}-${key}`}
+                                    className="flex flex-wrap gap-x-2 text-xs text-fg-muted"
+                                  >
+                                    <bdi dir="ltr">{member.uniEmail}</bdi>
+                                    {phoneMatchesSearch(member.phone, search) ? (
+                                      <bdi dir="ltr">{member.phone}</bdi>
+                                    ) : null}
+                                  </span>
+                                </span>
                                 {refusal ? (
                                   <Badge variant="danger">
                                     {t(

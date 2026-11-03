@@ -42,6 +42,8 @@ export interface PointsMember {
   /** Membership id. */
   id: string;
   fullName: string;
+  /** Shown under the name, so the right one of two members with the same name is opened. */
+  uniEmail: string;
   clubId: string;
   clubName: string;
   /** Committees to offer when recording points for the member. */
@@ -113,6 +115,7 @@ function MemberLedger({ member }: { member: PointsMember }) {
         <SheetDescription>{t('description')}</SheetDescription>
         <p className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
           <Badge variant="outline">{member.clubName}</Badge>
+          <bdi dir="ltr">{member.uniEmail}</bdi>
         </p>
       </SheetHeader>
 
@@ -270,6 +273,7 @@ function MemberLedger({ member }: { member: PointsMember }) {
         mode={{
           type: 'add',
           memberName: member.fullName,
+          memberEmail: member.uniEmail,
           committees: writableCommittees,
           onSubmit: async (targetCommitteeId, body) => {
             await add.mutateAsync({ committeeId: targetCommitteeId, body });
