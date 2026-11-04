@@ -9,7 +9,7 @@ import {
   membershipTypesScope,
   type Actor,
 } from '@/server/authz';
-import { assertUniversityEmail } from '@/server/email-policy';
+import { assertAllowedEmail } from '@/server/email-policy';
 import {
   clubArchived,
   clubHasNoMembershipTypes,
@@ -294,7 +294,7 @@ export async function createMember(
     uniEmail: normalizeEmail(body.person.uniEmail),
     fullName: normalizePersonName(body.person.fullName),
   };
-  assertUniversityEmail(person.uniEmail, ['body', 'person', 'uniEmail']);
+  assertAllowedEmail(person.uniEmail, ['body', 'person', 'uniEmail']);
   // Unscoped on purpose: one account per person, so adding must find the existing one. It returns
   // ids only, and only a club's officers and full admins get here — they see every membership of
   // the club anyway, removed ones included. The restore itself still goes through their scope.
@@ -356,7 +356,7 @@ export async function admitMember(
     uniEmail: normalizeEmail(body.person.uniEmail),
     fullName: normalizePersonName(body.person.fullName),
   };
-  assertUniversityEmail(person.uniEmail, ['body', 'person', 'uniEmail']);
+  assertAllowedEmail(person.uniEmail, ['body', 'person', 'uniEmail']);
 
   const memberId = await saveAdmittedMember(
     {
@@ -445,7 +445,7 @@ export async function updateMember(
   }
   // Which domains are allowed is configuration, so the server checks it, not the contract. An
   // address already used by someone else is caught by the unique constraint (409 already_exists).
-  if (uniEmail !== undefined) assertUniversityEmail(uniEmail);
+  if (uniEmail !== undefined) assertAllowedEmail(uniEmail);
 
   // Nothing really changes: answer with the member rather than open a transaction that would
   // write nothing.

@@ -279,12 +279,34 @@ describe('adding a member', () => {
     );
     await expectInvalid(
       createMember(officerA, s.clubA.id, {
-        person: { uniEmail: 'someone@gmail.com', fullName: 'بريد خارجي' },
+        person: { uniEmail: 'someone@example.com', fullName: 'بريد خارجي' },
         profile: {},
         committeeIds: [],
       }),
       'email_domain_not_allowed',
     );
+    await expectInvalid(
+      createMember(officerA, s.clubA.id, {
+        person: { uniEmail: 'someone+club@outlook.com', fullName: 'بريد بوسم' },
+        profile: {},
+        committeeIds: [],
+      }),
+      'email_alias_not_allowed',
+    );
+    expect(
+      await db.user.count({
+        where: { uniEmail: { in: ['someone@example.com', 'someone+club@outlook.com'] } },
+      }),
+    ).toBe(0);
+  });
+
+  it('adds a person by a Gmail address', async () => {
+    const member = await createMember(officerA, s.clubA.id, {
+      person: { uniEmail: 'Lama.Ali@Gmail.com', fullName: 'لمى علي' },
+      profile: {},
+      committeeIds: [],
+    });
+    expect(member).toMatchObject({ user: { uniEmail: 'lama.ali@gmail.com' } });
   });
 
   it('adds nothing to an archived club or an archived committee', async () => {

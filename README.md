@@ -532,20 +532,21 @@ None of this needs Vercel Pro. Hobby's limits: non-commercial use, one member (o
 
 The same names in **Production** and **Preview**. The app refuses to start, naming the variable, when one is missing or unsafe (`src/server/env.ts`).
 
-| Variable                  | Production                                          | Preview (dev)                                       |
-| ------------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| `DATABASE_URL`            | production **pooled** URL, `digital_minds_app`      | dev **pooled** URL, `digital_minds_app`             |
-| `ALLOWED_EMAIL_DOMAINS`   | `uqu.edu.sa`                                        | `uqu.edu.sa`                                        |
-| `APP_ORIGIN`              | `https://digitalmindsint.org`                       | `https://dev.digitalmindsint.org`                   |
-| `AUTH_SECRET`             | the production secret                               | the dev secret                                      |
-| `VIEW_LINK_SECRET`        | the production secret                               | the dev secret                                      |
-| `CLIENT_IP_HEADER`        | `x-real-ip`                                         | `x-real-ip`                                         |
-| `AUTH_SELF_SIGNUP`        | `false`                                             | `false`                                             |
-| `RESEND_API_KEY`          | the production key                                  | the dev key                                         |
-| `EMAIL_FROM`              | `Digital Minds <no-reply@auth.digitalmindsint.org>` | `Digital Minds <no-reply@auth.digitalmindsint.org>` |
-| `DEV_ACTOR_SWITCHER`      | `false`                                             | `false`                                             |
-| `NEXT_PUBLIC_API_MOCKING` | `disabled`                                          | `disabled`                                          |
-| `EMAIL_ALLOWLIST`         | **never set**                                       | the testers' addresses, comma-separated             |
+| Variable                         | Production                                                         | Preview (dev)                                       |
+| -------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
+| `DATABASE_URL`                   | production **pooled** URL, `digital_minds_app`                     | dev **pooled** URL, `digital_minds_app`             |
+| `ALLOWED_EMAIL_DOMAINS`          | `uqu.edu.sa`                                                       | `uqu.edu.sa`                                        |
+| `ALLOWED_PERSONAL_EMAIL_DOMAINS` | `gmail.com,outlook.com,hotmail.com,live.com,outlook.sa,hotmail.sa` | the same                                            |
+| `APP_ORIGIN`                     | `https://digitalmindsint.org`                                      | `https://dev.digitalmindsint.org`                   |
+| `AUTH_SECRET`                    | the production secret                                              | the dev secret                                      |
+| `VIEW_LINK_SECRET`               | the production secret                                              | the dev secret                                      |
+| `CLIENT_IP_HEADER`               | `x-real-ip`                                                        | `x-real-ip`                                         |
+| `AUTH_SELF_SIGNUP`               | `false`                                                            | `false`                                             |
+| `RESEND_API_KEY`                 | the production key                                                 | the dev key                                         |
+| `EMAIL_FROM`                     | `Digital Minds <no-reply@auth.digitalmindsint.org>`                | `Digital Minds <no-reply@auth.digitalmindsint.org>` |
+| `DEV_ACTOR_SWITCHER`             | `false`                                                            | `false`                                             |
+| `NEXT_PUBLIC_API_MOCKING`        | `disabled`                                                         | `disabled`                                          |
+| `EMAIL_ALLOWLIST`                | **never set**                                                      | the testers' addresses, comma-separated             |
 
 - **`EMAIL_ALLOWLIST` (dev only):** with it set, only the listed addresses receive email (sign-in codes and invitations). Every other send is logged as `Email skipped: the recipient is not on EMAIL_ALLOWLIST.`, without the address, and the API answers exactly as if it had gone out. So on dev, nobody outside the list is ever emailed, whatever address someone types or grants a role to. Add each tester (and yourself) before they sign in, then start a new dev deployment for the change to apply (Actions → the latest **Deploy** run on `develop` → **Re-run all jobs**). Vercel applies changed variables only to new deployments. A production deployment refuses to start with it set: the check uses `VERCEL_ENV`, which Vercel sets to `production` only there, so leave **Settings → Environment Variables → Automatically expose System Environment Variables** on.
 - **Do not set** `DIRECT_URL` (it lives only in GitHub), `EMAIL_TRANSPORT` (production defaults to `resend` and refuses `console`), `NODE_ENV` (Vercel sets it) or `TEST_DATABASE_URL`.

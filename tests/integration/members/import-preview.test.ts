@@ -225,7 +225,7 @@ describe('previewing a members CSV', () => {
         '2:invalid', // no name, a phone that is not one, an impossible level, an unknown type
         '3:add',
         '4:invalid', // the same address as line 3
-        '5:invalid', // not a university address
+        '5:invalid', // not an allowed address
         '6:invalid', // a committee of another club
         '7:invalid', // an archived committee
         '9:add', // line 8 is blank

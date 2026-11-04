@@ -78,14 +78,33 @@ describe('requesting a code', () => {
     expect(await db.session.count({ where: { email } })).toBe(0);
   });
 
-  it('rejects addresses outside the university domains, sending nothing', async () => {
-    const response = await auth.request('someone@gmail.com');
-    expect(response.status).toBe(422);
-    expect((await errorOf(response)).issues?.[0]).toMatchObject({
+  it('rejects addresses outside the allowed domains, sending nothing', async () => {
+    for (const email of ['someone@example.com', 'someone@mail.gmail.com']) {
+      const response = await auth.request(email);
+      expect(response.status).toBe(422);
+      expect((await errorOf(response)).issues?.[0]).toMatchObject({
+        path: ['body', 'email'],
+        code: 'email_domain_not_allowed',
+      });
+      expect(emailsTo(email)).toBe(0);
+    }
+  });
+
+  it('rejects a +tag on a personal provider at both steps, sending nothing', async () => {
+    const email = 'someone+club@gmail.com';
+    const requested = await auth.request(email);
+    expect(requested.status).toBe(422);
+    expect((await errorOf(requested)).issues?.[0]).toMatchObject({
       path: ['body', 'email'],
-      code: 'email_domain_not_allowed',
+      code: 'email_alias_not_allowed',
     });
-    expect(emailsTo('someone@gmail.com')).toBe(0);
+    expect(emailsTo(email)).toBe(0);
+
+    const verified = await auth.verify(email, '000000');
+    expect(verified.status).toBe(422);
+    expect((await errorOf(verified)).issues?.[0]).toMatchObject({
+      code: 'email_alias_not_allowed',
+    });
   });
 
   it('trims and lower-cases the address before anything else', async () => {
@@ -116,6 +135,19 @@ describe('after a correct code', () => {
     const me = await auth.me({ session });
     expect(me.status).toBe(200);
     expect(((await me.json()) as { user: { id: string } }).user.id).toBe(s.users.officerA.id);
+  });
+
+  it('signs up a Gmail or Outlook address like a university one', async () => {
+    for (const [index, domain] of ['gmail.com', 'outlook.com', 'hotmail.sa'].entries()) {
+      const email = `new.person${index}@${domain}`;
+      const { step, session } = await signIn(email);
+      expect(step).toEqual({ step: 'enter_name' });
+      const done = await auth.completeName('شخص جديد', { session });
+      expect(done.status).toBe(200);
+      expect(await db.user.findUnique({ where: { uniEmail: email } })).toMatchObject({
+        registeredAt: expect.any(Date) as Date,
+      });
+    }
   });
 
   it('asks an admin-added person to confirm their stored name, then registers them', async () => {
