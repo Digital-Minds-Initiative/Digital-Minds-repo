@@ -71,6 +71,7 @@ function toPointsMember(member: Member): PointsMember {
   return {
     id: member.id,
     fullName: member.user.fullName,
+    uniEmail: member.user.uniEmail,
     clubId: member.club.id,
     clubName: member.club.name,
     committees: member.committees.map(({ id, name }) => ({ id, name })),
@@ -220,5 +221,20 @@ describe('MemberPointsSheet — changing the ledger', { timeout: 20_000 }, () =>
     if (!edited) throw new Error('no transaction');
     await user.click(await within(edited).findByRole('button', { expanded: false }));
     expect((await screen.findAllByText(/قبل التغيير/)).length).toBeGreaterThan(0);
+  });
+});
+
+describe('MemberPointsSheet — telling members apart', { timeout: 20_000 }, () => {
+  it('shows the member’s university email under their name, and in the form that records points', async () => {
+    const member = membersSeenBy(LEAD).find((candidate) =>
+      candidate.committees.some((c) => c.name === 'لجنة البرمجة'),
+    );
+    if (!member) throw new Error('demo data has no programming member');
+    const user = await openSheet(LEAD, member);
+    expect(screen.getByText(member.user.uniEmail)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'إضافة أو خصم' }));
+    const form = await screen.findByRole('dialog', { name: 'إضافة أو خصم نقاط' });
+    expect(within(form).getByText(member.user.uniEmail)).toBeTruthy();
   });
 });

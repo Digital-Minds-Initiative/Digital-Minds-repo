@@ -44,6 +44,8 @@ type PointsFormMode =
   | {
       type: 'add';
       memberName: string;
+      /** Shown under the name, so the right one of two members with the same name is chosen. */
+      memberEmail: string;
       /** Committees the person may record points in for this member. */
       committees: ReadonlyArray<{ id: string; name: string }>;
       onSubmit: (committeeId: string, body: CreatePointTransactionBody) => Promise<unknown>;
@@ -204,6 +206,11 @@ function PointsForm({ onOpenChange, mode }: PointsFormDialogProps) {
               ? t('addDescription', { name: mode.memberName })
               : t('editDescription')}
           </DialogDescription>
+          {mode.type === 'add' ? (
+            <p className="text-xs text-fg-muted">
+              <bdi dir="ltr">{mode.memberEmail}</bdi>
+            </p>
+          ) : null}
         </DialogHeader>
         <form onSubmit={onFormSubmit} noValidate className="grid gap-4">
           {mode.type === 'add' ? (

@@ -37,6 +37,8 @@ const members = (count: number, prefix = 'عضو', offset = 0) =>
   Array.from({ length: count }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index + offset).padStart(12, '0')}`,
     fullName: `${prefix} ${index + 1}`,
+    uniEmail: `s${index + offset + 1}@st.uqu.edu.sa`,
+    phone: index % 2 === 0 ? `+96650000${String(index + offset).padStart(4, '0')}` : null,
   }));
 
 const programming = { id: '11111111-1111-4111-8111-111111111111', name: 'لجنة البرمجة' };
@@ -182,7 +184,10 @@ describe('BulkPointsDialog — choosing members', { timeout: 20_000 }, () => {
   it('keeps what was ticked while the search narrows the list', async () => {
     const { user } = renderDialog({});
     await user.click(screen.getByRole('checkbox', { name: 'عضو 1' }));
-    await user.type(screen.getByRole('searchbox', { name: 'ابحث في الأعضاء' }), 'عضو 3');
+    await user.type(
+      screen.getByRole('searchbox', { name: 'ابحث بالاسم أو البريد الجامعي أو الجوال' }),
+      'عضو 3',
+    );
     expect(screen.queryByRole('checkbox', { name: 'عضو 1' })).toBeNull();
     // The count is of everything ticked, not of what is visible.
     expect(screen.getByText('1 من 5 محدد')).toBeTruthy();
@@ -195,7 +200,7 @@ describe('BulkPointsDialog — choosing members', { timeout: 20_000 }, () => {
   it('says so when the search matches nobody, and when the committee has nobody', async () => {
     const { user } = renderDialog({});
     await user.type(screen.getByRole('searchbox'), 'لا أحد');
-    expect(screen.getByText('لا أحد بهذا الاسم.')).toBeTruthy();
+    expect(screen.getByText('لا أحد يطابق هذا البحث.')).toBeTruthy();
   });
 
   it('shows an empty committee as empty', () => {
@@ -410,5 +415,149 @@ describe('BulkPointsDialog — what the server says', { timeout: 20_000 }, () =>
     await user.click(screen.getByRole('button', { name: 'إلغاء' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('BulkPointsDialog — finding members by email and phone', { timeout: 20_000 }, () => {
+  const SEARCH = 'ابحث بالاسم أو البريد الجامعي أو الجوال';
+  const firstSalem = {
+    id: '00000000-0000-4000-8000-0000000000a1',
+    fullName: 'سالم الغامدي',
+    uniEmail: 's4400001@st.uqu.edu.sa',
+    phone: '+966501234567',
+  };
+  const secondSalem = {
+    id: '00000000-0000-4000-8000-0000000000a2',
+    fullName: 'سالم الغامدي',
+    uniEmail: 's4400002@st.uqu.edu.sa',
+    phone: null,
+  };
+  const other = {
+    id: '00000000-0000-4000-8000-0000000000a3',
+    fullName: 'نورة الحربي',
+    uniEmail: 's4400003@st.uqu.edu.sa',
+    phone: '+966507654321',
+  };
+  const groups: BulkGroup[] = [
+    { committee: programming, members: [firstSalem, secondSalem, other] },
+  ];
+  const search = () => screen.getByRole('searchbox', { name: SEARCH });
+  const emailLine = (email: string) => screen.queryByText(email);
+
+  it('shows each member’s university email under their name, and no phone', () => {
+    renderDialog({ groups });
+    expect(emailLine('s4400001@st.uqu.edu.sa')).toBeTruthy();
+    expect(emailLine('s4400002@st.uqu.edu.sa')).toBeTruthy();
+    expect(screen.queryByText('+966501234567')).toBeNull();
+    expect(screen.queryByText('+966507654321')).toBeNull();
+  });
+
+  it('finds a member by email in any case', async () => {
+    const { user } = renderDialog({ groups });
+    await user.type(search(), 'S4400003@ST.UQU');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox', { name: 'نورة الحربي' })).toBeTruthy();
+  });
+
+  it('finds a member by phone, in the formats people type, and shows that phone', async () => {
+    const { user } = renderDialog({ groups });
+    await user.type(search(), '0501234567');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByText('+966501234567')).toBeTruthy();
+    await user.clear(search());
+    await user.type(search(), '+966 50 765 4321');
+    expect(screen.getByRole('checkbox', { name: 'نورة الحربي' })).toBeTruthy();
+    expect(screen.getByText('+966507654321')).toBeTruthy();
+  });
+
+  it('lists two members with one name apart, and ticks only the one chosen', async () => {
+    const { user, onSubmit } = renderDialog({ groups });
+    await user.type(search(), 'سالم');
+    const twins = screen.getAllByRole('checkbox', { name: 'سالم الغامدي' });
+    expect(twins).toHaveLength(2);
+    expect(twins[0]?.getAttribute('aria-describedby')).not.toBe(
+      twins[1]?.getAttribute('aria-describedby'),
+    );
+
+    // Narrowed to the second one by its email, then ticked.
+    await user.clear(search());
+    await user.type(search(), 's4400002');
+    await user.click(screen.getByRole('checkbox', { name: 'سالم الغامدي' }));
+    await user.clear(search());
+    expect(
+      screen
+        .getAllByRole('checkbox', { name: 'سالم الغامدي' })
+        .map((box) => box.getAttribute('aria-checked')),
+    ).toEqual(['false', 'true']);
+
+    await fill(user, '5');
+    await user.click(submitButton());
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect((onSubmit.mock.calls[0]?.[0] as Request).pairs).toEqual([
+      { memberId: secondSalem.id, committeeId: programming.id },
+    ]);
+  });
+
+  it('keeps a tick made under one search after the search changes, and selects only what shows', async () => {
+    const { user, onSubmit } = renderDialog({ groups });
+    await user.click(screen.getByRole('checkbox', { name: 'نورة الحربي' }));
+    await user.type(search(), 'سالم');
+    await user.click(screen.getByRole('button', { name: 'تحديد الظاهرين' }));
+    expect(screen.getByText('3 من 3 محدد')).toBeTruthy();
+    await user.clear(search());
+    await user.type(search(), 's4400001');
+    await user.click(screen.getByRole('button', { name: 'إلغاء التحديد' }));
+    await user.clear(search());
+    expect(screen.getByText('0 من 3 محدد')).toBeTruthy();
+    await user.click(screen.getByRole('checkbox', { name: 'نورة الحربي' }));
+    await fill(user, '1');
+    await user.click(submitButton());
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect((onSubmit.mock.calls[0]?.[0] as Request).pairs).toEqual([
+      { memberId: other.id, committeeId: programming.id },
+    ]);
+  });
+
+  it('lists a member without a phone, and says so when nobody matches a number', async () => {
+    const { user } = renderDialog({ groups });
+    expect(screen.getByText('s4400002@st.uqu.edu.sa')).toBeTruthy();
+    await user.type(search(), '0555555555');
+    expect(screen.getByText('لا أحد يطابق هذا البحث.')).toBeTruthy();
+  });
+});
+
+describe('BulkPointsDialog — a club batch found by email', { timeout: 20_000 }, () => {
+  const SEARCH = 'ابحث بالاسم أو البريد الجامعي أو الجوال';
+  const sameId = '00000000-0000-4000-8000-0000000000b1';
+  const inBoth = (email: string) => ({
+    id: sameId,
+    fullName: 'ريم الشهري',
+    uniEmail: email,
+    phone: null,
+  });
+  const alone = {
+    id: '00000000-0000-4000-8000-0000000000b2',
+    fullName: 'ريم الشهري',
+    uniEmail: 's4400009@st.uqu.edu.sa',
+    phone: null,
+  };
+
+  it('shows only the committees where the match is, and sends that committee’s pair', async () => {
+    const { user, onSubmit } = renderDialog({
+      kind: 'club',
+      groups: [
+        { committee: programming, members: [inBoth('s4400008@st.uqu.edu.sa'), alone] },
+        { committee: design, members: [inBoth('s4400008@st.uqu.edu.sa')] },
+      ],
+    });
+    await user.type(screen.getByRole('searchbox', { name: SEARCH }), 'S4400009');
+    expect(screen.queryByRole('group', { name: design.name })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: `ريم الشهري · ${programming.name}` }));
+    await fill(user, '2');
+    await user.click(submitButton());
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect((onSubmit.mock.calls[0]?.[0] as Request).pairs).toEqual([
+      { memberId: alone.id, committeeId: programming.id },
+    ]);
   });
 });
