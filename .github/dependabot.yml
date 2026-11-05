@@ -1,0 +1,27 @@
+# Weekly dependency + GitHub Actions update PRs, grouped to keep the noise down.
+# Pairs with the `audit` job in ci.yml (F-03): the audit gate flags advisories,
+# these PRs clear them. The github-actions updates also keep action versions fresh.
+version: 2
+updates:
+  # npm dependencies (reads pnpm-lock.yaml)
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # One PR for all non-major updates; majors come as their own PRs.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions — keeps action versions current (relevant to F-06).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(ci)"
