@@ -516,15 +516,15 @@ None of this needs Vercel Pro. Hobby's limits: non-commercial use, one member (o
 
 6. **Environments:** Settings → Environments → **New environment**, three of them:
 
-   | Environment  | Deployment branches and tags | Required reviewers | Secrets                                                                                                           |
-   | ------------ | ---------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-   | `dev`        | Selected: `develop`          | —                  | `VERCEL_TOKEN` (§12.2), `DIRECT_URL` = **dev** direct URL, `digital_minds_owner`                                  |
-   | `production` | Selected: `main`             | you (+ one more)   | `VERCEL_TOKEN` (same token), `DIRECT_URL` = **production** direct URL, `digital_minds_owner`                      |
-   | `backup`     | Selected: `develop`          | —                  | `BACKUP_DATABASE_URL` = production direct URL, `digital_minds_backup` (§12.1 step 4); `BACKUP_PASSPHRASE` (below) |
+   | Environment  | Deployment branches and tags | Required reviewers | Secrets                                                                                      |
+   | ------------ | ---------------------------- | ------------------ | -------------------------------------------------------------------------------------------- |
+   | `dev`        | Selected: `develop`          | —                  | `VERCEL_TOKEN` (§12.2), `DIRECT_URL` = **dev** direct URL, `digital_minds_owner`             |
+   | `production` | Selected: `main`             | you (+ one more)   | `VERCEL_TOKEN` (same token), `DIRECT_URL` = **production** direct URL, `digital_minds_owner` |
+   | `backup`     | Selected: `develop`          | —                  | `BACKUP_DATABASE_URL` = production direct URL, `digital_minds_backup` (§12.1 step 4)         |
 
    Tick **Prevent self-review** on `production` if two people can approve. The token is stored per environment rather than as a repository secret on purpose: a repository secret reaches any workflow on any branch, an environment secret only the branch its environment allows. The backup runs on a schedule, and schedules run from the default branch, so `backup` allows `develop`. It holds read-only access and needs no approval, so it never waits on anyone.
 
-   Generate the backup passphrase with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and **store it in your password manager as well**: without it no backup can be read.
+   The backup needs no passphrase or key secret: it is encrypted to the public key in `scripts/backup-recipients.txt` (§12.9).
 
 7. **Repository secrets** (Settings → Secrets and variables → Actions → _Repository secrets_): `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` from `.vercel/project.json` (§12.2). They identify the project and are not sensitive, but the workflow reads them as secrets.
 
@@ -637,34 +637,49 @@ Run it on **dev** first, then on **production** with real but harmless data. On 
 
 ### 12.9 Backups
 
-**Daily:** `.github/workflows/backup.yml` runs at 03:17 Riyadh time. It writes an encrypted dump (`pg_dump` custom format, AES-256 with `BACKUP_PASSPHRASE`) and keeps it as an artifact for **30 days**: Actions → **Backup** → a run → _Artifacts_. The repository is public, so anyone can download these files. The passphrase is what protects them: keep it long, keep it only in GitHub and your password manager, and rotate it if it might have leaked. GitHub stops scheduled workflows after 60 days without a commit and emails a warning first.
+**Daily:** `.github/workflows/backup.yml` runs at 03:17 Riyadh time. It writes an encrypted dump (`pg_dump` custom format) and keeps it as an artifact for **30 days**: Actions → **Backup** → a run → _Artifacts_. GitHub stops scheduled workflows after 60 days without a commit and emails a warning first.
 
-**By hand:** Actions → **Backup** → **Run workflow**. Or locally, with Docker and gpg (Git Bash):
+**How it is encrypted:** with [age](https://age-encryption.org), to the public key(s) in `scripts/backup-recipients.txt`. The public key can only lock a backup; the matching private key (one line, `AGE-SECRET-KEY-1…`) is the only thing that opens it, and it is kept in a password manager, never on GitHub. So the artifacts are public, but nothing on GitHub, the workflow included, can read them.
+
+**Set up the key, once.** Install age (`winget install FiloSottile.age` on Windows, `brew install age` on macOS, `apt install age` on Ubuntu), then:
+
+```bash
+age-keygen
+# Public key: age1…                 → add it to scripts/backup-recipients.txt in a PR
+# AGE-SECRET-KEY-1…                 → save it in the team's password manager, nowhere else
+```
+
+Close the terminal afterwards. Make sure at least two people can open that password-manager entry: if the private key is lost, no backup can be read. If it might have leaked, generate a new one and replace the public key; backups older than that expire within 30 days. A second person may also add their own key; then either key opens every backup.
+
+**By hand:** Actions → **Backup** → **Run workflow**. Or locally, with Docker and age (Git Bash):
 
 ```bash
 read -rs BACKUP_DATABASE_URL && export BACKUP_DATABASE_URL   # production direct URL, digital_minds_backup
-read -rs BACKUP_PASSPHRASE && export BACKUP_PASSPHRASE
-pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump.gpg (git-ignored)
+pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump.age (git-ignored)
 ```
 
-**Restore**, into a new branch first, never straight into production:
+**Restore**, into a new branch first, never straight into production. Only someone with the private key can do this:
 
-1. Download the artifact you want and unzip it to get the `.dump.gpg` file.
+1. Download the artifact you want and unzip it to get the `.dump.age` file.
 2. Neon → Branches → **Create branch** from `production`, named e.g. `restore-2026-11-03`. Take its **direct** URL with `digital_minds_owner` (§12.1 step 1).
-3. Restore into it:
+3. Restore into it, pasting the private key from the password manager when asked:
 
    ```bash
    read -rs RESTORE_DATABASE_URL && export RESTORE_DATABASE_URL   # the restore branch's direct URL
-   read -rs BACKUP_PASSPHRASE && export BACKUP_PASSPHRASE
-   pnpm db:restore path/to/digital-minds-….dump.gpg
+   read -rs BACKUP_KEY && export BACKUP_KEY                       # AGE-SECRET-KEY-1…
+   pnpm db:restore path/to/digital-minds-….dump.age
    ```
 
-   It shows the target and asks you to type its host. Then it replaces every table in **one transaction**: all of the backup lands, or nothing changes.
+   It shows the target and asks you to type its host. Then it replaces every table in **one transaction**: all of the backup lands, or nothing changes. A wrong key changes nothing.
 
 4. Re-apply the grants (the dump carries none), with the same direct URL: `( read -rsp 'direct URL: ' DIRECT_URL && export DIRECT_URL && pnpm exec prisma db execute --file scripts/sql/app-role.sql )` — in PowerShell, `$env:DIRECT_URL = Get-Clipboard` then `try { pnpm exec prisma db execute --file scripts/sql/app-role.sql } finally { Remove-Item Env:DIRECT_URL }`.
 5. Check it in the Neon SQL Editor on that branch: the rows you expect, the latest `createdAt` values, and the environment marker (§12.1 step 2). The dump does not carry the database comment, so the branch keeps the one it was created with (`app.environment=production` for a branch of production); make sure it is the one you expect.
 6. **Switch:** create one more branch from `production` as a snapshot of the state you are replacing. Then run steps 3 and 4 again with production's direct owner URL. Anything written to production after the backup was taken is lost, so compare first if that matters.
 7. Delete the restore branch when you are done.
+
+**Try a restore once** after setting up the key (steps 1–5 and 7), and again whenever the people with access to the key change. A backup that has never been restored is not known to work.
+
+**Backups made before the switch to age** are `.dump.gpg` files encrypted with the old `BACKUP_PASSPHRASE`. `pnpm db:restore` still reads them, with `BACKUP_PASSPHRASE` set instead of `BACKUP_KEY`. Once the last one has expired (30 days after the switch), delete the `BACKUP_PASSPHRASE` secret from the `backup` environment.
 
 **A better home for backups, later:** workflow artifacts are public in a public repository, and they last at most 90 days. For real data, a private bucket (Cloudflare R2's free tier, with object lock) or Neon's paid plan (longer history) is better. `scripts/db-backup.sh` writes one file, so moving it means adding an upload step.
 
