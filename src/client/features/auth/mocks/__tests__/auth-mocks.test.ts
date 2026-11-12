@@ -63,10 +63,12 @@ describe('sign-in mocks', () => {
     const { client } = browser();
     const email = unregistered?.uniEmail ?? '';
     const stored = unregistered?.fullName ?? '';
-    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '١٢٣٤ ٥٦٧٨' } })).toEqual({
-      step: 'confirm_name',
-      fullName: stored,
-    });
+    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '١٢٣٤ ٥٦٧٨' } })).toEqual(
+      {
+        step: 'confirm_name',
+        fullName: stored,
+      },
+    );
     await expect(client.request(meEndpoint, {})).rejects.toMatchObject({ status: 401 });
 
     // The step only confirms: the name an admin stored cannot be changed here.

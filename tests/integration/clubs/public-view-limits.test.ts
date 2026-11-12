@@ -121,7 +121,7 @@ describe('separate from sign-in', () => {
 
     expect(response.status).toBe(200);
     expect(emailsTo(email)).toBe(before + 1);
-    expect(lastCodeFor(email)).toMatch(/^[0-9]{6}$/);
+    expect(lastCodeFor(email)).toMatch(/^[0-9]{8}$/);
   });
 
   it('keeps one counter per limit and subject, so no surface spends another’s budget', async () => {

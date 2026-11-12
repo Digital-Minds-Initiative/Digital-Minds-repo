@@ -20,7 +20,7 @@ let sequence = 0;
 const newEmail = () => `s7${String((sequence += 1)).padStart(8, '0')}@st.uqu.edu.sa`;
 
 /** A code that is certainly not `code`. */
-const wrong = (code: string) => (code === '000000' ? '111111' : '000000');
+const wrong = (code: string) => (code === '00000000' ? '11111111' : '00000000');
 
 beforeAll(async () => {
   s = await buildScenario();

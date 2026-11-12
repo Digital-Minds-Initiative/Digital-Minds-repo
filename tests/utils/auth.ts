@@ -70,7 +70,7 @@ export const auth = {
 /** The code in the last email sent to `email` (the dev sender keeps them in memory). */
 export function lastCodeFor(email: string): string {
   const message = sentEmails().findLast((sent) => sent.to === email);
-  const code = message?.text.match(/\b([0-9]{6})\b/)?.[1];
+  const code = message?.text.match(/\b([0-9]{8})\b/)?.[1];
   if (!code) throw new Error(`No sign-in code was emailed to ${email}`);
   return code;
 }

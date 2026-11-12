@@ -16,11 +16,14 @@ describe('otpCodeSchema', () => {
     expect(otpCodeSchema.parse(input)).toBe(expected);
   });
 
-  it.each(['1234567', '123456789', '12a45678', '12-45678', '', '１２３４５６７８'])('rejects %j', (input) => {
-    const result = otpCodeSchema.safeParse(input);
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe('invalid_code_format');
-  });
+  it.each(['1234567', '123456789', '12a45678', '12-45678', '', '１２３４５６７８'])(
+    'rejects %j',
+    (input) => {
+      const result = otpCodeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.message).toBe('invalid_code_format');
+    },
+  );
 
   it('normalises the email and the code in the verify body', () => {
     expect(
