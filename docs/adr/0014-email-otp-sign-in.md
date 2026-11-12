@@ -18,7 +18,7 @@ Every person is identified by their university email. Admins add people to clubs
 
 **One flow for sign-up and sign-in, email first.**
 
-1. `POST /api/v1/auth/otp/request { email }`: the domain must be in `ALLOWED_EMAIL_DOMAINS`. A 6-digit code is emailed. The answer is identical for every allowed address, because this step never reads the `User` table.
+1. `POST /api/v1/auth/otp/request { email }`: the domain must be in `ALLOWED_EMAIL_DOMAINS`. An 8-digit code is emailed. The answer is identical for every allowed address, because this step never reads the `User` table.
 2. `POST /api/v1/auth/otp/verify { email, code }`: opens a session (cookie) and answers the next step:
    - `signed_in`: the person has registered before;
    - `confirm_name` (with the stored `fullName`): an admin added them and they have not registered;
@@ -29,7 +29,7 @@ Every person is identified by their university email. Admins add people to clubs
 
 **Codes** (`src/server/modules/auth`):
 
-- 6 digits from `crypto.randomInt`. Each code is stored as `HMAC-SHA256(AUTH_SECRET, email + code)`, never in plain text. A plain hash of six digits is reversed by trying all million codes. `OtpChallenge` is keyed by an HMAC of the address, so the table holds no email addresses.
+- 8 digits from `crypto.randomInt`. Each code is stored as `HMAC-SHA256(AUTH_SECRET, email + code)`, never in plain text. A plain hash of eight digits is reversed by trying all hundred million codes. `OtpChallenge` is keyed by an HMAC of the address, so the table holds no email addresses.
 - One live code per address: requesting a new one replaces the old one. Codes expire after 10 minutes and are deleted on use, so they are single use; deleting the row is atomic, so two simultaneous verifies cannot both succeed.
 - 5 wrong guesses lock the code. The attempt is counted in the same `UPDATE` that checks expiry and the limit, so parallel guesses cannot exceed it.
 - A 60-second resend cooldown per address. It is enforced in the same `INSERT … ON CONFLICT … WHERE` that stores the code.

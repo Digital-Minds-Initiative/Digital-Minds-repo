@@ -88,7 +88,7 @@ describe('requesting a code', () => {
     const withoutAccess = unknownEmail();
     await request(withAccess);
     await request(withoutAccess);
-    const wrong = lastCodeFor(withAccess) === '000000' ? '111111' : '000000';
+    const wrong = lastCodeFor(withAccess) === '00000000' ? '11111111' : '00000000';
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const expected = attempt < 5 ? 'invalid_code' : 'too_many_attempts';
@@ -175,7 +175,7 @@ describe('verifying and the name step', () => {
     for (const email of [unknownEmail(), s.users.plain.uniEmail, s.users.memberB1.uniEmail]) {
       await db.otpChallenge.deleteMany({});
       await request(email);
-      expect(await codeRejection(await auth.verify(email, '123456'))).toMatch(
+      expect(await codeRejection(await auth.verify(email, '12345678'))).toMatch(
         /invalid_code|code_expired/,
       );
     }

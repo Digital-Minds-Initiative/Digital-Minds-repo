@@ -44,11 +44,11 @@ beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterAll(() => server.close());
 
 describe('sign-in mocks', () => {
-  it('sign a registered persona in with 123456, so /me works, until logout', async () => {
+  it('sign a registered persona in with 12345678, so /me works, until logout', async () => {
     const { client } = browser();
     const email = registered?.uniEmail ?? '';
     await client.request(requestOtpEndpoint, { body: { email } });
-    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '123456' } })).toEqual({
+    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '12345678' } })).toEqual({
       step: 'signed_in',
     });
     expect((await client.request(meEndpoint, {})).user.uniEmail).toBe(email);
@@ -63,10 +63,12 @@ describe('sign-in mocks', () => {
     const { client } = browser();
     const email = unregistered?.uniEmail ?? '';
     const stored = unregistered?.fullName ?? '';
-    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '١٢٣ ٤٥٦' } })).toEqual({
-      step: 'confirm_name',
-      fullName: stored,
-    });
+    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '١٢٣٤ ٥٦٧٨' } })).toEqual(
+      {
+        step: 'confirm_name',
+        fullName: stored,
+      },
+    );
     await expect(client.request(meEndpoint, {})).rejects.toMatchObject({ status: 401 });
 
     // The step only confirms: the name an admin stored cannot be changed here.
@@ -83,7 +85,7 @@ describe('sign-in mocks', () => {
   it('ask a new address for a name', async () => {
     const { client } = browser();
     const email = 's449999999@st.uqu.edu.sa';
-    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '123456' } })).toEqual({
+    expect(await client.request(verifyOtpEndpoint, { body: { email, code: '12345678' } })).toEqual({
       step: 'enter_name',
     });
     expect(await client.request(sessionStateEndpoint, {})).toEqual({ step: 'enter_name' });
@@ -95,9 +97,9 @@ describe('sign-in mocks', () => {
   });
 
   it.each([
-    ['000000', 'invalid_code'],
-    ['111111', 'code_expired'],
-    ['222222', 'too_many_attempts'],
+    ['00000000', 'invalid_code'],
+    ['11111111', 'code_expired'],
+    ['22222222', 'too_many_attempts'],
   ])('refuse code %s with %s', async (code, reason) => {
     const { client } = browser();
     const error = await client

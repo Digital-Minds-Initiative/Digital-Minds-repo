@@ -75,6 +75,9 @@ CLAUDE.local.md
 backups/
 *.dump
 *.dump.gpg
+*.dump.age
+# A backup private key never belongs in a repository, not even this one's working tree.
+digital-minds-backup.key*
 
 # Hand-run SQL with real data or connection details (e.g. a one-off purge) stays on this machine.
 *.local.sql
