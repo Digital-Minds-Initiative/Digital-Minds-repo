@@ -9,6 +9,7 @@ import {
   assertCanChangeMembershipType,
   assertCanEditClubFields,
   assertCanEditFullName,
+  assertCanEditSharedAccount,
   assertCanEditUniEmail,
   assertCanImportMembers,
   assertCanRemoveFromClub,
@@ -113,6 +114,42 @@ describe('the university email', () => {
         expect(() => assertCanEditUniEmail(actor, { clubId: CLUB, isRegistered })).toThrow(
           AuthzError,
         );
+      }
+    }
+  });
+});
+
+describe('the shared account (name and university email)', () => {
+  const ownClubOnly = { isFullAdmin: false, inOtherClub: false, holdsRole: false };
+  const reachingBeyond = {
+    'a full admin': { ...ownClubOnly, isFullAdmin: true },
+    'in another club': { ...ownClubOnly, inOtherClub: true },
+    'holding a role': { ...ownClubOnly, holdsRole: true },
+  };
+  const reasons = {
+    uniEmail: 'uni_email_requires_full_admin',
+    fullName: 'full_name_requires_full_admin',
+  } as const;
+
+  it('is an officer’s to change only when the account is their club’s alone', () => {
+    for (const field of ['uniEmail', 'fullName'] as const) {
+      expect(() => assertCanEditSharedAccount(officer, field, ownClubOnly)).not.toThrow();
+      for (const [name, account] of Object.entries(reachingBeyond)) {
+        try {
+          assertCanEditSharedAccount(officer, field, account);
+          expect.unreachable(`${field}: ${name} should have thrown`);
+        } catch (error) {
+          // One reason per field, whatever the cause.
+          expect((error as AuthzError).reason, `${field}: ${name}`).toBe(reasons[field]);
+        }
+      }
+    }
+  });
+
+  it('is always a full admin’s to change', () => {
+    for (const field of ['uniEmail', 'fullName'] as const) {
+      for (const account of [ownClubOnly, ...Object.values(reachingBeyond)]) {
+        expect(() => assertCanEditSharedAccount(admin, field, account)).not.toThrow();
       }
     }
   });

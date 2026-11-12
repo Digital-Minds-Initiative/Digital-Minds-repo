@@ -4,9 +4,11 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { listMemberFixtures } from '@/client/features/members/mocks';
 import type * as ApiClientModule from '@/client/lib/api-client';
-import { resetMockDb } from '@/client/mocks/db';
+import { findMockActor, getMockDb, resetMockDb } from '@/client/mocks/db';
 import { server } from '@/client/mocks/node';
+import { listMembersQuerySchema, type Member } from '@/shared/contracts/members';
 import { renderWithProviders } from '@tests/utils/render';
 
 import { PointsScreen } from '../points-screen';
@@ -147,7 +149,9 @@ describe('PointsScreen — members and their points', { timeout: 30_000 }, () =>
     const first = rows[0];
     if (!first) throw new Error('no row');
     const name = within(first).getByRole('button', { name: /^سجل / }).textContent ?? '';
-    const search = screen.getByRole('searchbox', { name: 'ابحث باسم العضو' });
+    const search = screen.getByRole('searchbox', {
+      name: 'ابحث بالاسم أو البريد الجامعي أو الجوال',
+    });
     await user.type(search, name);
     await waitFor(() =>
       expect(within(screen.getByRole('table')).getAllByRole('row').slice(1)).toHaveLength(1),
@@ -198,5 +202,92 @@ describe('PointsScreen — members and their points', { timeout: 30_000 }, () =>
     if (!first) throw new Error('no row');
     await user.click(within(first).getByRole('button', { name: /^عرض سجل / }));
     expect(await screen.findByTestId('member-balance', undefined, { timeout: 8000 })).toBeTruthy();
+  });
+});
+
+/** The members `email` can see in a committee, exactly as the members list would give them. */
+function committeeMembersSeenBy(email: string, committeeName: string): Member[] {
+  const db = getMockDb();
+  const persona = findMockActor(db, email);
+  if (!persona) throw new Error(`no persona ${email}`);
+  return listMemberFixtures(
+    db,
+    persona,
+    listMembersQuerySchema.parse({ pageSize: 100, status: 'active' }),
+  ).items.filter((member) => member.committees.some((c) => c.name === committeeName));
+}
+
+const SEARCH = 'ابحث بالاسم أو البريد الجامعي أو الجوال';
+const rowsOf = () => within(screen.getByRole('table')).getAllByRole('row').slice(1);
+const kpis = () =>
+  ['members', 'total', 'top'].map((key) => screen.getByTestId(`kpi-${key}`).textContent);
+
+describe('PointsScreen — finding a member by email or phone', { timeout: 30_000 }, () => {
+  it('shows every member’s university email under their name, and no phone', async () => {
+    await renderPage(LEAD);
+    await screen.findByRole('table');
+    const expected = committeeMembersSeenBy(LEAD, 'لجنة البرمجة');
+    expect(rowsOf()).toHaveLength(expected.length);
+    for (const member of expected) {
+      expect(screen.getByText(member.user.uniEmail)).toBeTruthy();
+      if (member.profile.phone) expect(screen.queryByText(member.profile.phone)).toBeNull();
+    }
+  });
+
+  it('finds a member by their email in any case, leaving the figures as they were', async () => {
+    const user = await renderPage(LEAD);
+    await screen.findByRole('table');
+    const before = kpis();
+    const target = committeeMembersSeenBy(LEAD, 'لجنة البرمجة')[0];
+    if (!target) throw new Error('no member');
+    await user.type(
+      screen.getByRole('searchbox', { name: SEARCH }),
+      target.user.uniEmail.toUpperCase(),
+    );
+    await waitFor(() => expect(rowsOf()).toHaveLength(1));
+    expect(within(rowsOf().at(0) ?? document.body).getByText(target.user.fullName)).toBeTruthy();
+    expect(kpis()).toEqual(before);
+  });
+
+  it('finds a member by their phone as typed in Saudi format, and shows the number only then', async () => {
+    const user = await renderPage(LEAD);
+    await screen.findByRole('table');
+    const target = committeeMembersSeenBy(LEAD, 'لجنة البرمجة').find((m) => m.profile.phone);
+    const phone = target?.profile.phone;
+    if (!phone) throw new Error('no member with a phone');
+    const local = `0${phone.replace(/^\+966/, '')}`;
+    await user.type(screen.getByRole('searchbox', { name: SEARCH }), local);
+    await waitFor(() => expect(rowsOf().length).toBeGreaterThan(0));
+    expect(within(rowsOf().at(0) ?? document.body).getByText(phone)).toBeTruthy();
+    await user.clear(screen.getByRole('searchbox', { name: SEARCH }));
+    await waitFor(() => expect(screen.queryByText(phone)).toBeNull());
+  });
+
+  it('finds nobody from outside the lead’s committee, even by their exact email', async () => {
+    const user = await renderPage(LEAD);
+    await screen.findByRole('table');
+    const inScope = new Set(
+      committeeMembersSeenBy(LEAD, 'لجنة البرمجة').map((member) => member.user.uniEmail),
+    );
+    const outsider = committeeMembersSeenBy(ADMIN, 'لجنة التصميم').find(
+      (member) => !inScope.has(member.user.uniEmail),
+    );
+    if (!outsider) throw new Error('no member outside the lead’s committee');
+    await user.type(screen.getByRole('searchbox', { name: SEARCH }), outsider.user.uniEmail);
+    expect(await screen.findByText('لا نتائج مطابقة')).toBeTruthy();
+  });
+
+  it('shows the member’s email in the dialog that records their points', async () => {
+    const user = await renderPage(LEAD);
+    const first = (await screen.findAllByRole('row'))[1];
+    if (!first) throw new Error('no row');
+    const name = within(first).getByRole('button', { name: /^سجل / }).textContent ?? '';
+    await user.click(within(first).getByRole('button', { name: `رصد نقاط لـ ${name}` }));
+    const dialog = await screen.findByRole('dialog', { name: 'إضافة أو خصم نقاط' });
+    const email = committeeMembersSeenBy(LEAD, 'لجنة البرمجة').find(
+      (member) => member.user.fullName === name,
+    )?.user.uniEmail;
+    if (!email) throw new Error('the row’s member is not in the committee');
+    expect(within(dialog).getByText(email)).toBeTruthy();
   });
 });

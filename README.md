@@ -240,11 +240,11 @@ Restart `pnpm dev` after changing it. Pick an account from **«حساب التج
 | `pnpm test`             | Unit tests (Vitest, no database). `pnpm test:watch` for watch mode.                                                                  |
 | `pnpm test:integration` | Integration tests against the `digital_minds_test` database (created and wiped automatically).                                       |
 | `pnpm test:e2e`         | Browser tests of the whole app per seeded persona, on `digital_minds_e2e_test` (created, reseeded).                                  |
-| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`.                                                             |
+| `pnpm db:migrate`       | Creates and applies a migration after you change `prisma/schema.prisma`. Local or `app.environment=dev` databases only.              |
 | `pnpm db:deploy`        | Applies pending migrations without creating new ones (the deploy workflow runs it).                                                  |
 | `pnpm db:seed`          | Replaces all data in your local database with the demo data (hosted: dev only, §12.6).                                               |
-| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds.                                                                    |
-| `pnpm db:studio`        | Opens Prisma Studio to browse the database.                                                                                          |
+| `pnpm db:reset`         | Drops the local database, re-applies every migration, then seeds. Local or `app.environment=dev` databases only.                     |
+| `pnpm db:studio`        | Opens Prisma Studio to browse the database. Local or `app.environment=dev` databases only.                                           |
 | `pnpm db:generate`      | Regenerates the Prisma client (runs automatically after `pnpm install`).                                                             |
 | `pnpm db:backup`        | Encrypted `pg_dump` of a hosted database ([§12.9](#129-backups)).                                                                    |
 | `pnpm db:restore`       | Restores such a backup into a database, after you type its host ([§12.9](#129-backups)).                                             |
@@ -426,7 +426,10 @@ Three database roles per Neon branch:
 | `digital_minds_app`    | the running app (`DATABASE_URL`, pooled)            | read and write rows; no DDL, no `TRUNCATE`, no `_prisma_migrations` |
 | `digital_minds_backup` | the daily backup (`BACKUP_DATABASE_URL`)            | read                                                                |
 
-> **Secrets never go into the chat, an issue, a commit or a file in this folder.** For the commands below that need a database URL, set it in the terminal so it is not saved in your shell history: `read -rs DIRECT_URL && export DIRECT_URL` (Git Bash; paste, then Enter), or `$env:DIRECT_URL = Read-Host` (PowerShell). Close the terminal when you are done.
+> **Secrets never go into the chat, an issue, a commit or a file in this folder.** The commands below that need a database URL keep it for **that one command only**, so a later command in the same terminal cannot reach the database by mistake:
+>
+> - **Git Bash:** each command is one line wrapped in `( … )`, a subshell that reads the URL without echoing it or saving it in history, and forgets it when the command ends: `( read -rsp 'URL: ' DIRECT_URL && export DIRECT_URL && pnpm … )`. Paste that line, press Enter, then paste the URL at the prompt and press Enter. Paste one line at a time: in a pasted block, `read` would take the next line as the URL.
+> - **PowerShell:** copy the URL, then `$env:DIRECT_URL = Get-Clipboard`, the command, and `Remove-Item Env:DIRECT_URL` right after — written as `try { pnpm … } finally { Remove-Item Env:DIRECT_URL }` so it is removed even when the command fails. Copy something else afterwards (Windows clipboard history, Win+V, keeps what you copied).
 
 Follow the steps in order the first time. Each one says where a value comes from.
 
@@ -529,20 +532,21 @@ None of this needs Vercel Pro. Hobby's limits: non-commercial use, one member (o
 
 The same names in **Production** and **Preview**. The app refuses to start, naming the variable, when one is missing or unsafe (`src/server/env.ts`).
 
-| Variable                  | Production                                          | Preview (dev)                                       |
-| ------------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| `DATABASE_URL`            | production **pooled** URL, `digital_minds_app`      | dev **pooled** URL, `digital_minds_app`             |
-| `ALLOWED_EMAIL_DOMAINS`   | `uqu.edu.sa`                                        | `uqu.edu.sa`                                        |
-| `APP_ORIGIN`              | `https://digitalmindsint.org`                       | `https://dev.digitalmindsint.org`                   |
-| `AUTH_SECRET`             | the production secret                               | the dev secret                                      |
-| `VIEW_LINK_SECRET`        | the production secret                               | the dev secret                                      |
-| `CLIENT_IP_HEADER`        | `x-real-ip`                                         | `x-real-ip`                                         |
-| `AUTH_SELF_SIGNUP`        | `false`                                             | `false`                                             |
-| `RESEND_API_KEY`          | the production key                                  | the dev key                                         |
-| `EMAIL_FROM`              | `Digital Minds <no-reply@auth.digitalmindsint.org>` | `Digital Minds <no-reply@auth.digitalmindsint.org>` |
-| `DEV_ACTOR_SWITCHER`      | `false`                                             | `false`                                             |
-| `NEXT_PUBLIC_API_MOCKING` | `disabled`                                          | `disabled`                                          |
-| `EMAIL_ALLOWLIST`         | **never set**                                       | the testers' addresses, comma-separated             |
+| Variable                         | Production                                                         | Preview (dev)                                       |
+| -------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
+| `DATABASE_URL`                   | production **pooled** URL, `digital_minds_app`                     | dev **pooled** URL, `digital_minds_app`             |
+| `ALLOWED_EMAIL_DOMAINS`          | `uqu.edu.sa`                                                       | `uqu.edu.sa`                                        |
+| `ALLOWED_PERSONAL_EMAIL_DOMAINS` | `gmail.com,outlook.com,hotmail.com,live.com,outlook.sa,hotmail.sa` | the same                                            |
+| `APP_ORIGIN`                     | `https://digitalmindsint.org`                                      | `https://dev.digitalmindsint.org`                   |
+| `AUTH_SECRET`                    | the production secret                                              | the dev secret                                      |
+| `VIEW_LINK_SECRET`               | the production secret                                              | the dev secret                                      |
+| `CLIENT_IP_HEADER`               | `x-real-ip`                                                        | `x-real-ip`                                         |
+| `AUTH_SELF_SIGNUP`               | `false`                                                            | `false`                                             |
+| `RESEND_API_KEY`                 | the production key                                                 | the dev key                                         |
+| `EMAIL_FROM`                     | `Digital Minds <no-reply@auth.digitalmindsint.org>`                | `Digital Minds <no-reply@auth.digitalmindsint.org>` |
+| `DEV_ACTOR_SWITCHER`             | `false`                                                            | `false`                                             |
+| `NEXT_PUBLIC_API_MOCKING`        | `disabled`                                                         | `disabled`                                          |
+| `EMAIL_ALLOWLIST`                | **never set**                                                      | the testers' addresses, comma-separated             |
 
 - **`EMAIL_ALLOWLIST` (dev only):** with it set, only the listed addresses receive email (sign-in codes and invitations). Every other send is logged as `Email skipped: the recipient is not on EMAIL_ALLOWLIST.`, without the address, and the API answers exactly as if it had gone out. So on dev, nobody outside the list is ever emailed, whatever address someone types or grants a role to. Add each tester (and yourself) before they sign in, then start a new dev deployment for the change to apply (Actions → the latest **Deploy** run on `develop` → **Re-run all jobs**). Vercel applies changed variables only to new deployments. A production deployment refuses to start with it set: the check uses `VERCEL_ENV`, which Vercel sets to `production` only there, so leave **Settings → Environment Variables → Automatically expose System Environment Variables** on.
 - **Do not set** `DIRECT_URL` (it lives only in GitHub), `EMAIL_TRANSPORT` (production defaults to `resend` and refuses `console`), `NODE_ENV` (Vercel sets it) or `TEST_DATABASE_URL`.
@@ -573,16 +577,25 @@ Vercel shows each domain as _Valid Configuration_ once DNS has propagated (minut
 3. **Seed dev** (replaces everything in the dev database with the demo data), with dev's **direct** owner URL:
 
    ```bash
-   read -rs DIRECT_URL && export DIRECT_URL      # paste the dev direct URL
-   ALLOW_SEED=true pnpm db:seed
+   ( read -rsp 'dev direct URL: ' DIRECT_URL && export DIRECT_URL && ALLOW_SEED=true pnpm db:seed )
+   ```
+
+   ```powershell
+   $env:DIRECT_URL = Get-Clipboard   # with the dev direct URL copied
+   try { $env:ALLOW_SEED = 'true'; pnpm db:seed } finally { Remove-Item Env:DIRECT_URL, Env:ALLOW_SEED }
    ```
 
    It refuses unless the database's comment says `app.environment=dev` (§12.1 step 2).
 
-4. **Make yourself a full admin**, on dev and on production. The full-admin flag cannot be granted through the website. Set `DIRECT_URL` to that environment's direct URL (as above), then:
+4. **Make yourself a full admin**, on dev and on production. The full-admin flag cannot be granted through the website. With that environment's direct URL:
 
    ```bash
-   pnpm admin:grant s44xxxxxxx@st.uqu.edu.sa --name "الاسم الكامل"
+   ( read -rsp 'direct URL: ' DIRECT_URL && export DIRECT_URL && pnpm admin:grant s44xxxxxxx@st.uqu.edu.sa --name "الاسم الكامل" )
+   ```
+
+   ```powershell
+   $env:DIRECT_URL = Get-Clipboard   # with that environment's direct URL copied
+   try { pnpm admin:grant s44xxxxxxx@st.uqu.edu.sa --name "الاسم الكامل" } finally { Remove-Item Env:DIRECT_URL }
    ```
 
    It prints the database (host and `app.environment`) and what it did: _Created and granted_, _Granted_ or _No change_. `--name` is needed only for an address with no account yet; it is the name you confirm at your first sign-in. Seeding dev again wipes this, so run it again after every seed. On dev your address must also be in `EMAIL_ALLOWLIST`, or the code is never sent. The demo personas cannot sign in on dev: their addresses (`s000000001@st.uqu.edu.sa`, `demo-staff-01@uqu.edu.sa`…) are deliberately ones no person has.
@@ -617,7 +630,7 @@ Run it on **dev** first, then on **production** with real but harmless data. On 
 
 1. Read the error in the job log. Prisma has recorded the migration as failed, and later deploys refuse to migrate (`P3009`) until it is resolved.
 2. Check what the migration changed before it failed (Neon SQL Editor). Undo any part of it that was applied.
-3. Mark it rolled back, with `DIRECT_URL` set for that environment: `pnpm exec prisma migrate resolve --rolled-back <migration_folder_name>`.
+3. Mark it rolled back, with that environment's direct URL: `( read -rsp 'direct URL: ' DIRECT_URL && export DIRECT_URL && pnpm exec prisma migrate resolve --rolled-back <migration_folder_name> )` — in PowerShell, `$env:DIRECT_URL = Get-Clipboard` then `try { pnpm exec prisma migrate resolve --rolled-back <migration_folder_name> } finally { Remove-Item Env:DIRECT_URL }`.
 4. Fix the migration in a PR. A migration that never applied anywhere may be edited; otherwise add a new one. Merge it, and the deploy runs again.
 
 **A migration that ran but damaged data:** within **6 hours**, Neon can restore the branch to a point in time (Neon → Branches → `production` → **Restore**, choosing a time before the deploy). Neon keeps the replaced state as a backup branch. After 6 hours, restore last night's backup (§12.9).
@@ -648,7 +661,7 @@ pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump
 
    It shows the target and asks you to type its host. Then it replaces every table in **one transaction**: all of the backup lands, or nothing changes.
 
-4. Re-apply the grants (the dump carries none): `DIRECT_URL="$RESTORE_DATABASE_URL" pnpm exec prisma db execute --file scripts/sql/app-role.sql`.
+4. Re-apply the grants (the dump carries none), with the same direct URL: `( read -rsp 'direct URL: ' DIRECT_URL && export DIRECT_URL && pnpm exec prisma db execute --file scripts/sql/app-role.sql )` — in PowerShell, `$env:DIRECT_URL = Get-Clipboard` then `try { pnpm exec prisma db execute --file scripts/sql/app-role.sql } finally { Remove-Item Env:DIRECT_URL }`.
 5. Check it in the Neon SQL Editor on that branch: the rows you expect, the latest `createdAt` values, and the environment marker (§12.1 step 2). The dump does not carry the database comment, so the branch keeps the one it was created with (`app.environment=production` for a branch of production); make sure it is the one you expect.
 6. **Switch:** create one more branch from `production` as a snapshot of the state you are replacing. Then run steps 3 and 4 again with production's direct owner URL. Anything written to production after the backup was taken is lost, so compare first if that matters.
 7. Delete the restore branch when you are done.
@@ -659,13 +672,15 @@ pnpm db:backup                       # → backups/digital-minds-<UTC time>.dump
 
 Not part of the launch: the club limit is already 2000 pairs with a 20 s transaction ([ADR 0022](docs/adr/0022-bulk-points.md), amendment). Run this against dev, never production, **before raising** `CLUB_POINTS_BULK_MAX` or the bulk transaction's timeout:
 
+One line at a time, each asking for the dev direct URL (the script refuses non-dev databases):
+
 ```bash
-read -rs DIRECT_URL && export DIRECT_URL            # the dev direct URL (the script refuses non-dev databases)
-pnpm measure:bulk setup                             # scratch club «قياس الحمل (مؤقت)»: CLUB_POINTS_BULK_MAX / 2 people × 2 committees
-export MEASURE_ORIGIN=https://dev.digitalmindsint.org
-read -rs MEASURE_SESSION && export MEASURE_SESSION  # your __Host-dm-session cookie value on dev (DevTools → Application → Cookies)
-pnpm measure:bulk run 3                             # then `run 2`; prints each request's status and time
-pnpm measure:bulk teardown                          # removes the scratch club, its people and its points
+# scratch club «قياس الحمل (مؤقت)»: CLUB_POINTS_BULK_MAX / 2 people × 2 committees
+( read -rsp 'dev direct URL: ' DIRECT_URL && export DIRECT_URL && pnpm measure:bulk setup )
+# then `run 2`; prints each request's status and time. The session is your __Host-dm-session cookie value on dev (DevTools → Application → Cookies)
+( read -rsp 'dev direct URL: ' DIRECT_URL && echo && read -rsp 'session: ' MEASURE_SESSION && export DIRECT_URL MEASURE_SESSION MEASURE_ORIGIN=https://dev.digitalmindsint.org && pnpm measure:bulk run 3 )
+# removes the scratch club, its people and its points
+( read -rsp 'dev direct URL: ' DIRECT_URL && export DIRECT_URL && pnpm measure:bulk teardown )
 ```
 
 Use **teardown**, not the full-admin club delete: that refuses a club that ever had members. A request that takes longer than 20 seconds inside its transaction fails with a 500 and writes nothing. That is the edge the measurement is looking for.

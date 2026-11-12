@@ -12,13 +12,13 @@ import {
  * cheap place to pin down the formats Excel actually produces (docs/adr/0021-csv-member-import.md).
  */
 
-const DOMAINS = ['uqu.edu.sa'];
+const EMAIL_POLICY = { institutional: ['uqu.edu.sa'], personal: ['gmail.com'] };
 const HEADER = 'الاسم الكامل,البريد الجامعي,رقم الجوال,الكلية,المستوى,نوع العضوية,اللجان';
 
 const base64 = (text: string, encoding: BufferEncoding = 'utf8') =>
   Buffer.from(text, encoding).toString('base64');
 
-const parse = (text: string) => parseImportFile(text, { allowedDomains: DOMAINS });
+const parse = (text: string) => parseImportFile(text, { emailPolicy: EMAIL_POLICY });
 
 /** The issue codes of a row, which is what a caller acts on. */
 const codes = (row: { issues: Array<{ field: string; code: string }> } | undefined) =>
@@ -217,7 +217,7 @@ describe('parseImportFile', () => {
   });
 
   it('collects every problem in a row, not just the first', () => {
-    const file = parse([HEADER, ',s441000001@gmail.com,0abc,كلية,99,عضو,لجنة'].join('\n'));
+    const file = parse([HEADER, ',s441000001@example.com,0abc,كلية,99,عضو,لجنة'].join('\n'));
     expect(codes(file.rows[0])).toEqual([
       'fullName:required',
       'uniEmail:email_domain_not_allowed',
@@ -225,6 +225,20 @@ describe('parseImportFile', () => {
       'level:invalid_level',
     ]);
     expect(file.rows[0]).toMatchObject({ fullName: null, uniEmail: null });
+  });
+
+  it('reads a listed provider like a university address, and refuses its +tag', () => {
+    const file = parse(
+      [
+        'الاسم الكامل,البريد الجامعي',
+        'أحمد علي,Ahmed.Ali@Gmail.com',
+        'سارة علي,sara+club@gmail.com',
+        'ريم علي,reem@mail.gmail.com',
+      ].join('\n'),
+    );
+    expect(file.rows[0]).toMatchObject({ uniEmail: 'ahmed.ali@gmail.com', issues: [] });
+    expect(codes(file.rows[1])).toEqual(['uniEmail:email_alias_not_allowed']);
+    expect(codes(file.rows[2])).toEqual(['uniEmail:email_domain_not_allowed']);
   });
 
   it('reports each bad cell with its own code', () => {

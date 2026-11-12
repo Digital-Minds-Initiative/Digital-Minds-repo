@@ -3,7 +3,7 @@ import 'server-only';
 import { afterResponse } from '@/server/after-response';
 import { findActorByUserId, type Actor } from '@/server/authz';
 import { emailSender } from '@/server/email';
-import { assertUniversityEmail } from '@/server/email-policy';
+import { assertAllowedEmail } from '@/server/email-policy';
 import { env } from '@/server/env';
 import {
   ConflictError,
@@ -100,7 +100,7 @@ export async function requestOtp(
   client: SignInClient,
 ): Promise<{ expiresInSeconds: number; resendAfterSeconds: number }> {
   const now = new Date();
-  assertUniversityEmail(body.email, ['body', 'email']);
+  assertAllowedEmail(body.email, ['body', 'email']);
   // The limit first: the sweep below is three deletes, and a request that is over its limit must
   // not be able to spend them (docs/reviews/2026-10-backend-review.md).
   await consumeLimit('requestPerIp', client.ip, now);
@@ -167,7 +167,7 @@ export async function verifyOtp(
   client: SignInClient,
 ): Promise<WithSessionCookie<SignInStep>> {
   const now = new Date();
-  assertUniversityEmail(body.email, ['body', 'email']);
+  assertAllowedEmail(body.email, ['body', 'email']);
   await consumeLimit('verifyPerIp', client.ip, now);
   await consumeLimit('verifyPerEmail', body.email, now);
 

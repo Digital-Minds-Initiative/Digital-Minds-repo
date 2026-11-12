@@ -75,3 +75,6 @@ CLAUDE.local.md
 backups/
 *.dump
 *.dump.gpg
+
+# Hand-run SQL with real data or connection details (e.g. a one-off purge) stays on this machine.
+*.local.sql

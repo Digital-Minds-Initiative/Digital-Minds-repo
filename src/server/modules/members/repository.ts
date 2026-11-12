@@ -27,6 +27,8 @@ import type {
 import { normalizeForSearch } from '@/shared/lib/arabic';
 import { phoneSearchDigits } from '@/shared/lib/phone';
 
+import type { SharedAccount } from './policies';
+
 /*
  * Prisma access for members (club memberships). Reads and writes of scoped rows take a scope
  * from src/server/authz and AND it into the query — including writes, so a service bug cannot
@@ -611,15 +613,21 @@ export async function saveMemberChanges(
   scope: MemberScope,
   memberId: string,
   changes: UpdateMemberBody,
-  alsoInTransaction?: (tx: TransactionClient) => Promise<unknown>,
+  options: {
+    /** Runs before the account is written, with its rows locked; throwing writes nothing. */
+    checkAccount?: (account: SharedAccount) => void;
+    alsoInTransaction?: (tx: TransactionClient) => Promise<unknown>;
+  } = {},
 ): Promise<void> {
   const { uniEmail, fullName, ...clubFields } = changes;
   const account: Prisma.UserUpdateManyMutationInput = {
     ...(uniEmail !== undefined ? { uniEmail } : {}),
     ...(fullName !== undefined ? { fullName, searchName: normalizeForSearch(fullName) } : {}),
   };
+  const { checkAccount, alsoInTransaction } = options;
   await db.$transaction(async (tx) => {
     if (hasValues(account)) {
+      if (checkAccount) checkAccount(await lockSharedAccount(tx, scope, memberId));
       const { count } = await tx.user.updateMany({
         where: { memberships: { some: { AND: [scope, { id: memberId, removedAt: null }] } } },
         data: account,
@@ -636,6 +644,43 @@ export async function saveMemberChanges(
     // After the scoped updates: it only runs when they matched a row the actor can reach.
     if (alsoInTransaction) await alsoInTransaction(tx);
   });
+}
+
+/**
+ * Locks the account behind an active member in the scope, then all of its memberships, then their
+ * committee memberships — the order `lockPerson` uses — and says what the account reaches beyond
+ * this membership. Until the transaction ends nobody can add the person to another club (the
+ * insert waits on the account row), grant them a role, make them a full admin or register them.
+ */
+async function lockSharedAccount(
+  tx: TransactionClient,
+  scope: MemberScope,
+  memberId: string,
+): Promise<SharedAccount> {
+  const member = await tx.membership.findFirst({
+    where: { AND: [scope, { id: memberId, removedAt: null }] },
+    select: { userId: true, clubId: true },
+  });
+  if (!member) throw new NotFoundError('Member');
+  const users = await tx.$queryRaw<Array<{ isFullAdmin: boolean }>>`
+    SELECT "isFullAdmin" FROM "User" WHERE "id" = ${member.userId}::uuid FOR UPDATE
+  `;
+  const memberships = await tx.$queryRaw<Array<{ clubId: string; role: string }>>`
+    SELECT "clubId", "role" FROM "Membership"
+    WHERE "userId" = ${member.userId}::uuid ORDER BY "id" FOR UPDATE
+  `;
+  const committeeRoles = await tx.$queryRaw<Array<{ role: string }>>`
+    SELECT cm."role" FROM "CommitteeMembership" cm
+    JOIN "Membership" m ON m."id" = cm."membershipId"
+    WHERE m."userId" = ${member.userId}::uuid ORDER BY cm."id" FOR UPDATE OF cm
+  `;
+  return {
+    isFullAdmin: users[0]?.isFullAdmin ?? false,
+    inOtherClub: memberships.some((row) => row.clubId !== member.clubId),
+    holdsRole:
+      memberships.some((row) => row.role !== 'MEMBER') ||
+      committeeRoles.some((row) => row.role !== 'MEMBER'),
+  };
 }
 
 function hasValues(data: object): boolean {

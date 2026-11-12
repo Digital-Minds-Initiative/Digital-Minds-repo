@@ -1,11 +1,11 @@
 /*
- * Makes one person a full admin: `pnpm admin:grant <university email> [--name "<full name>"]`.
+ * Makes one person a full admin: `pnpm admin:grant <email> [--name "<full name>"]`.
  *
  * The full-admin flag is deliberately not grantable through the API (docs/adr/0018-granting-roles.md),
  * so the first one on a new database — and any later one — is made here, by someone who holds the
  * database URL. An existing account is flagged; an address with no account gets one, which needs
- * --name: it is the name the person confirms at their first sign-in (ADR 0014), and only an officer
- * can change it afterwards.
+ * --name: it is the name the person confirms at their first sign-in (ADR 0014), and only a full
+ * admin can change it afterwards (an officer never can on a full admin's account, ADR 0017).
  *
  * It connects with DIRECT_URL when set, else DATABASE_URL, and prints which database it touched.
  */
@@ -17,14 +17,14 @@ import { PrismaClient } from '../src/server/db/generated/client';
 import { personNameSchema } from '../src/shared/contracts/core/fields';
 import { normalizeForSearch } from '../src/shared/lib/arabic';
 import {
-  isAllowedEmailDomain,
+  checkEmailAddress,
   normalizeEmail,
   parseEmailDomains,
 } from '../src/shared/lib/email-domains';
 
 nextEnv.loadEnvConfig(process.cwd(), true, { info: () => {}, error: console.error });
 
-const USAGE = 'Usage: pnpm admin:grant <university email> [--name "<full name>"]';
+const USAGE = 'Usage: pnpm admin:grant <email> [--name "<full name>"]';
 
 function parseArgs(argv: string[]): { email: string; name: string | null } {
   let email: string | null = null;
@@ -48,10 +48,18 @@ function parseArgs(argv: string[]): { email: string; name: string | null } {
 
 async function main(): Promise<void> {
   const { email, name } = parseArgs(process.argv.slice(2));
-  const domains = parseEmailDomains(process.env.ALLOWED_EMAIL_DOMAINS ?? '');
-  if (!isAllowedEmailDomain(email, domains)) {
+  const policy = {
+    institutional: parseEmailDomains(process.env.ALLOWED_EMAIL_DOMAINS ?? ''),
+    personal: parseEmailDomains(process.env.ALLOWED_PERSONAL_EMAIL_DOMAINS ?? ''),
+  };
+  const problem = checkEmailAddress(email, policy);
+  if (problem === 'email_alias_not_allowed') {
+    throw new Error(`${email} has a "+" alias; use the address without it.`);
+  }
+  if (problem) {
     throw new Error(
-      `${email} is not a university address (ALLOWED_EMAIL_DOMAINS: ${domains.join(', ') || 'empty'}).`,
+      `${email} is not an allowed address (ALLOWED_EMAIL_DOMAINS: ${policy.institutional.join(', ') || 'empty'}; ` +
+        `ALLOWED_PERSONAL_EMAIL_DOMAINS: ${policy.personal.join(', ') || 'empty'}).`,
     );
   }
 

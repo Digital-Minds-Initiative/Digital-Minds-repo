@@ -61,6 +61,32 @@ describe('server environment', () => {
   });
 });
 
+describe('allowed email domains', () => {
+  it('allows no personal provider unless one is listed', () => {
+    expect(parseServerEnv(valid).ALLOWED_PERSONAL_EMAIL_DOMAINS).toEqual([]);
+    expect(
+      parseServerEnv({ ...valid, ALLOWED_PERSONAL_EMAIL_DOMAINS: '' })
+        .ALLOWED_PERSONAL_EMAIL_DOMAINS,
+    ).toEqual([]);
+  });
+
+  it('reads the providers like ALLOWED_EMAIL_DOMAINS', () => {
+    expect(
+      parseServerEnv({ ...valid, ALLOWED_PERSONAL_EMAIL_DOMAINS: ' Gmail.com, @outlook.com ,' })
+        .ALLOWED_PERSONAL_EMAIL_DOMAINS,
+    ).toEqual(['gmail.com', 'outlook.com']);
+    expect(() => parseServerEnv({ ...valid, ALLOWED_PERSONAL_EMAIL_DOMAINS: 'gmail' })).toThrow(
+      /ALLOWED_PERSONAL_EMAIL_DOMAINS/,
+    );
+  });
+
+  it('refuses a provider the institutional list already allows', () => {
+    expect(() =>
+      parseServerEnv({ ...valid, ALLOWED_PERSONAL_EMAIL_DOMAINS: 'gmail.com, st.uqu.edu.sa' }),
+    ).toThrow(/ALLOWED_PERSONAL_EMAIL_DOMAINS must not repeat[\s\S]*st\.uqu\.edu\.sa/);
+  });
+});
+
 describe('auth and email settings', () => {
   it('uses local defaults outside production', () => {
     const env = parseServerEnv({ ...valid, NODE_ENV: 'development', RESEND_API_KEY: '' });

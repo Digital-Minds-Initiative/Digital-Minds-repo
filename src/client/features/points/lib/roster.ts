@@ -1,11 +1,16 @@
 import type { Member } from '@/shared/contracts/members';
-import { normalizeForSearch } from '@/shared/lib/arabic';
+
+import { matchesMemberSearch } from './member-search';
 
 /** One member of the committee as the points page lists them. */
 export interface RosterRow {
   /** Membership id. */
   id: string;
   fullName: string;
+  /** Tells apart members who share a name, and is searchable. */
+  uniEmail: string;
+  /** This club's copy; null when it has none. Shown only while the search is for a phone. */
+  phone: string | null;
   /** The role in this committee. */
   role: 'LEAD' | 'MEMBER';
   /** The member's active points in this committee. */
@@ -26,22 +31,31 @@ export function buildRoster(members: readonly Member[], committeeId: string): Ro
   const rows = members.flatMap((member) => {
     const link = member.committees.find((committee) => committee.id === committeeId);
     return link
-      ? [{ id: member.id, fullName: member.user.fullName, role: link.role, balance: link.points }]
+      ? [
+          {
+            id: member.id,
+            fullName: member.user.fullName,
+            uniEmail: member.user.uniEmail,
+            phone: member.profile.phone,
+            role: link.role,
+            balance: link.points,
+          },
+        ]
       : [];
   });
   const balances = rows.map((row) => row.balance).sort((a, b) => b - a);
   return rows.map((row) => ({ ...row, rank: balances.indexOf(row.balance) + 1 }));
 }
 
-/** Keeps the rows whose name contains the search (Arabic-normalised), then orders them. */
+/**
+ * Keeps the rows that match the search — name (Arabic-normalised), university email or phone, as
+ * in the members list — then orders them. Ranks were fixed by `buildRoster`, so they do not move.
+ */
 export function arrange(
   rows: readonly RosterRow[],
   options: { search: string; sort: RosterSort },
 ): RosterRow[] {
-  const needle = normalizeForSearch(options.search);
-  const matching = needle
-    ? rows.filter((row) => normalizeForSearch(row.fullName).includes(needle))
-    : [...rows];
+  const matching = rows.filter((row) => matchesMemberSearch(row, options.search));
   const byName = (a: RosterRow, b: RosterRow) => a.fullName.localeCompare(b.fullName, 'ar');
   return matching.sort((a, b) => {
     switch (options.sort) {

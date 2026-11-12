@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { Actor } from '@/server/authz';
 import { db } from '@/server/db/client';
-import { createMember, updateMember } from '@/server/modules/members';
+import { createMember, getMember, updateMember } from '@/server/modules/members';
 import { updateMemberBodySchema } from '@/shared/contracts/members';
 import { normalizeForSearch } from '@/shared/lib/arabic';
 import { actorFor, buildScenario, type Scenario } from '@tests/factories/scenario';
@@ -88,15 +88,27 @@ describe('editing a member', () => {
   });
 
   describe('the full name', () => {
-    it('is collapsed and copied into the search name, for every club at once', async () => {
-      const member = await updateMember(officerA, s.memberships.bothClubsA, {
+    it('is collapsed and copied into the search name', async () => {
+      const person = await added();
+      const member = await updateMember(officerA, person.id, {
         fullName: '  سارة   القحطاني ',
       });
       expect(member.user.fullName).toBe('سارة القحطاني');
 
-      const user = await db.user.findUniqueOrThrow({ where: { id: s.users.bothClubs.id } });
+      const user = await db.user.findUniqueOrThrow({ where: { id: person.user.id } });
       expect(user.fullName).toBe('سارة القحطاني');
       expect(user.searchName).toBe(normalizeForSearch('سارة القحطاني'));
+    });
+
+    it('is a full admin’s to change for someone in two clubs, and changes in both at once', async () => {
+      await expectForbidden(
+        updateMember(officerA, s.memberships.bothClubsA, { fullName: 'اسم من نادٍ واحد' }),
+        'full_name_requires_full_admin',
+      );
+      await updateMember(admin, s.memberships.bothClubsA, { fullName: 'سارة القحطاني' });
+      const officerB = await actorFor(s.users.officerB.id);
+      const inB = await getMember(officerB, s.memberships.bothClubsB);
+      expect(inB.user.fullName).toBe('سارة القحطاني');
     });
   });
 
@@ -108,7 +120,7 @@ describe('editing a member', () => {
         user: { uniEmail: upper.toLowerCase() },
       });
       await expectInvalid(
-        updateMember(officerA, member.id, { uniEmail: 'someone@gmail.com' }),
+        updateMember(officerA, member.id, { uniEmail: 'someone@example.com' }),
         'email_domain_not_allowed',
       );
     });
