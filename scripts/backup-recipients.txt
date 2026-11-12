@@ -8,3 +8,5 @@
 # Format: a comment line saying whose key it is, then the key on its own line:
 #   # <name>, added <YYYY-MM-DD>
 #   age1…
+# Abdullah Al-Omari, added 2026-11-12
+age1cfl0dtpgpvx2hgvuyz9j0mz3euqmdu0v0secg73zlff8nhegjgrq2rg668
