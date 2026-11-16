@@ -20,6 +20,24 @@ const production = {
 };
 
 describe('server environment', () => {
+  it('refuses open self-signup together with personal email providers in production', () => {
+    expect(() =>
+      parseServerEnv({
+        ...production,
+        AUTH_SELF_SIGNUP: 'true',
+        ALLOWED_PERSONAL_EMAIL_DOMAINS: 'gmail.com',
+      }),
+    ).toThrow(/ALLOWED_PERSONAL_EMAIL_DOMAINS/);
+    // Invite-only with personal providers is fine, and open self-signup on institutional
+    // domains alone is fine; only the two together are refused.
+    expect(
+      parseServerEnv({ ...production, ALLOWED_PERSONAL_EMAIL_DOMAINS: 'gmail.com' }),
+    ).toMatchObject({ AUTH_SELF_SIGNUP: false });
+    expect(parseServerEnv({ ...production, AUTH_SELF_SIGNUP: 'true' })).toMatchObject({
+      AUTH_SELF_SIGNUP: true,
+    });
+  });
+
   it('refuses to start a production server with the dev actor switcher or API mocking', () => {
     expect(() =>
       parseServerEnv({ ...valid, NODE_ENV: 'production', DEV_ACTOR_SWITCHER: 'true' }),

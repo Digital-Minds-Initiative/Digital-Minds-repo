@@ -1,6 +1,6 @@
 # 0028. Vercel and Neon in Frankfurt, deployed only from GitHub Actions
 
-- Status: Accepted
+- Status: Accepted; amended 2026-11-11 — backups are encrypted to a public key ([below](#amendment-2026-11-11-backups-are-encrypted-to-a-public-key))
 - Date: 2026-10-24
 
 ## Context
@@ -37,7 +37,7 @@ The build comes first, so a commit that does not build never touches the databas
 
 **A hosted database says which environment it is.** `COMMENT ON DATABASE digital_minds IS 'app.environment=dev'` (or `=production`) is run once per branch. It is the database comment, not a custom setting, because `ALTER DATABASE … SET app.environment` needs a superuser on Postgres 15+ and Neon roles are not superusers; the owner may set the comment. The seed and the bulk measurement refuse any non-local database that does not answer `dev`, and the seed also needs `ALLOW_SEED=true`. A production URL pasted by mistake is then refused without the repository knowing any production host, and a branch copied from production inherits the refusal.
 
-**Backups.** `.github/workflows/backup.yml` runs once a day. It streams `pg_dump` into `gpg --symmetric` (AES-256) and keeps the file as a workflow artifact for 30 days. Restores go into a new Neon branch first (`scripts/db-restore.sh`).
+**Backups.** `.github/workflows/backup.yml` runs once a day. It streams `pg_dump` into `age`, encrypted to a public key (amendment below; first `gpg --symmetric`), and keeps the file as a workflow artifact for 30 days. Restores go into a new Neon branch first (`scripts/db-restore.sh`).
 
 ## Consequences
 
@@ -49,4 +49,16 @@ The build comes first, so a commit that does not build never touches the databas
 - The client IP for rate limits is `x-real-ip`, which Vercel overwrites with the connecting address (`CLIENT_IP_HEADER`).
 - Vercel caps request bodies at 4.5 MB, above the app's own 2 MB.
 - Dev sends real email but holds demo data, so `EMAIL_ALLOWLIST` limits it to the testers' addresses; every other send is skipped invisibly. A production deployment (`VERCEL_ENV=production`) refuses to start with it set. The demo dataset's university addresses are patterns no person has (`s000000001@st.uqu.edu.sa`, `demo-staff-01@uqu.edu.sa`).
-- The repository is public, so the workflow logs and backup artifacts are readable by anyone. The workflows print no secret (GitHub also masks them). `prisma migrate deploy` does print the database host, which is not a credential. A backup's only protection is its passphrase; an off-GitHub bucket is the better long-term place for them.
+- The repository is public, so the workflow logs and backup artifacts are readable by anyone. The workflows print no secret (GitHub also masks them). `prisma migrate deploy` does print the database host, which is not a credential. A backup opens only with the private key, which nothing on GitHub holds (amendment below); an off-GitHub bucket is the better long-term place for them.
+
+## Amendment (2026-11-11): backups are encrypted to a public key
+
+**Context.** Backups were encrypted with `gpg --symmetric` under one passphrase, `BACKUP_PASSPHRASE`, held in the `backup` environment. The artifacts are downloadable by anyone, so that passphrase was their only protection, and the same secret both made and opened them: whatever could read it from CI (a malicious change to the workflow, a compromised action in the job) could decrypt every backup anyone had already downloaded, and rotating it would not protect those copies.
+
+**Decision.** `scripts/db-backup.sh` encrypts with [age](https://age-encryption.org) to the public key(s) in `scripts/backup-recipients.txt`: a random file key per backup, the payload in ChaCha20-Poly1305 chunks, the file key wrapped with X25519 for each public key. The private key is one line kept in the team's password manager, reachable by at least two people; it never reaches CI, GitHub or the repository, so the workflow holds no secret that can decrypt. To keep the check that a backup decrypts to a complete dump, each run also encrypts to a one-time key it creates in memory (`/dev/shm`), decrypts once to count the tables, and deletes when it exits — no more exposure than the run itself, through which the plaintext already passes. `scripts/db-restore.sh` takes the private key pasted as `BACKUP_KEY` (or a key file as `BACKUP_IDENTITY`), and still reads the older `.dump.gpg` files with `BACKUP_PASSPHRASE` until the last one expires; the secret is deleted after that. This is deliberately simple for a student-run team: one key, no passphrase on top of it, the password manager as its only home.
+
+**Consequences.**
+
+- Leaking anything from CI no longer exposes stored backups. A compromised workflow can still read the live database through `BACKUP_DATABASE_URL` (read-only), which encryption at rest does not address.
+- `scripts/backup-recipients.txt` decides who reads every future backup, so a change to it is reviewed. Replacing the key is a PR that swaps the public key; backups made with the old one expire within 30 days.
+- The password manager entry is now the backups' single point of failure: at least two people must be able to open it, and a restore is tried once after setup and whenever those people change.

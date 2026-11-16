@@ -203,6 +203,17 @@ const envSchema = (phase: string | undefined) =>
               'is required in production: "false" for invite-only sign-in, "true" to let anyone with a university address create an account',
           });
         }
+        // Public mail providers widen self-signup from "someone with a university mailbox"
+        // to anyone on the internet, so opening both at once must be a deliberate code change,
+        // never reachable by flipping one env var in production (docs/adr/0030, review F-09).
+        if (env.AUTH_SELF_SIGNUP === 'true' && env.ALLOWED_PERSONAL_EMAIL_DOMAINS.length > 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['ALLOWED_PERSONAL_EMAIL_DOMAINS'],
+            message:
+              'must be empty when AUTH_SELF_SIGNUP is "true" in production: open self-signup with public mail providers would let anyone create an account',
+          });
+        }
         if (env.AUTH_SECRET === DEVELOPMENT_AUTH_SECRET) {
           ctx.addIssue({
             code: 'custom',

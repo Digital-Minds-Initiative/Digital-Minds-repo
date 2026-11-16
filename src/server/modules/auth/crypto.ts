@@ -6,7 +6,7 @@ import { env } from '@/server/env';
 
 /*
  * Codes are stored as HMACs keyed with AUTH_SECRET. A plain hash of a
- * 6-digit code could be reversed by trying all million codes; without the secret it cannot.
+ * 8-digit code could be reversed by trying all hundred million codes; without the secret it cannot.
  * Session tokens are 256 random bits, so a plain SHA-256 is enough for them.
  */
 
@@ -14,9 +14,9 @@ function hmac(purpose: string, value: string): string {
   return createHmac('sha256', env.AUTH_SECRET).update(`${purpose}:${value}`).digest('hex');
 }
 
-/** A 6-digit code from a cryptographically secure source, leading zeros kept. */
+/** An 8-digit code from a cryptographically secure source, leading zeros kept. */
 export function generateOtpCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+  return String(randomInt(0, 100_000_000)).padStart(8, '0');
 }
 
 /** Identifies an email in the auth tables without storing the address. */

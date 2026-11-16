@@ -120,19 +120,19 @@ describe('verifying codes', () => {
     const email = newEmail();
     await auth.request(email);
     for (let i = 0; i < 4; i += 1) {
-      expect(await codeRejection(await auth.verify(email, '000000', { ip: newIp() }))).toMatch(
+      expect(await codeRejection(await auth.verify(email, '00000000', { ip: newIp() }))).toMatch(
         /invalid_code|too_many_attempts/,
       );
     }
     advance(61 * 1000);
     await auth.request(email);
-    for (let i = 0; i < 4; i += 1) await auth.verify(email, '000000', { ip: newIp() });
+    for (let i = 0; i < 4; i += 1) await auth.verify(email, '00000000', { ip: newIp() });
     advance(61 * 1000);
     await auth.request(email);
     const code = lastCodeFor(email);
     // Attempts 9 and 10 are allowed; the 11th is refused even with the right code.
-    await auth.verify(email, '000000', { ip: newIp() });
-    await auth.verify(email, '000000', { ip: newIp() });
+    await auth.verify(email, '00000000', { ip: newIp() });
+    await auth.verify(email, '00000000', { ip: newIp() });
     const limited = await auth.verify(email, code, { ip: newIp() });
     expect(limited.status).toBe(429);
     expect((await errorOf(limited)).reason).toBe('too_many_requests');
@@ -147,12 +147,12 @@ describe('verifying codes', () => {
     const emails = Array.from({ length: 60 }, newEmail);
     for (const email of emails) {
       for (let i = 0; i < 10; i += 1) {
-        const response = await auth.verify(email, '000000', { ip });
+        const response = await auth.verify(email, '00000000', { ip });
         if (response.status !== 422) throw new Error(`verify answered ${response.status}`);
       }
     }
-    const limited = await auth.verify(newEmail(), '000000', { ip });
+    const limited = await auth.verify(newEmail(), '00000000', { ip });
     expect(limited.status).toBe(429);
-    expect((await auth.verify(newEmail(), '000000', { ip: newIp() })).status).toBe(422);
+    expect((await auth.verify(newEmail(), '00000000', { ip: newIp() })).status).toBe(422);
   }, 120_000);
 });

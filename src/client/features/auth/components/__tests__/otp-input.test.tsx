@@ -30,9 +30,9 @@ function setup() {
 }
 
 describe('OtpInput', () => {
-  it('has six single-digit boxes', () => {
+  it('has eight single-digit boxes', () => {
     const { boxes } = setup();
-    expect(boxes).toHaveLength(6);
+    expect(boxes).toHaveLength(8);
   });
 
   it('moves forward as digits are typed', async () => {
@@ -47,24 +47,24 @@ describe('OtpInput', () => {
   it('fills every box when a whole code is pasted', async () => {
     const { user, boxes, value } = setup();
     await user.click(boxes[0] as HTMLInputElement);
-    await user.paste('482915');
-    expect(boxes.map((box) => box.value)).toEqual(['4', '8', '2', '9', '1', '5']);
-    expect(value()).toBe('482915');
+    await user.paste('48291537');
+    expect(boxes.map((box) => box.value)).toEqual(['4', '8', '2', '9', '1', '5', '3', '7']);
+    expect(value()).toBe('48291537');
   });
 
   it('accepts a pasted code with spaces and Arabic-Indic digits', async () => {
     const { user, boxes, value } = setup();
     await user.click(boxes[0] as HTMLInputElement);
-    await user.paste('١٢٣ ٤٥٦');
-    expect(value()).toBe('123456');
-    expect(boxes.map((box) => box.value).join('')).toBe('123456');
+    await user.paste('١٢٣٤ ٥٦٧٨');
+    expect(value()).toBe('12345678');
+    expect(boxes.map((box) => box.value).join('')).toBe('12345678');
   });
 
   it('replaces the whole code when a full code is pasted into a later box', async () => {
     const { user, boxes, value } = setup();
     await user.click(boxes[3] as HTMLInputElement);
-    await user.paste('654321');
-    expect(value()).toBe('654321');
+    await user.paste('87654321');
+    expect(value()).toBe('87654321');
   });
 
   it('goes back and clears on Backspace from an empty box', async () => {
@@ -83,7 +83,7 @@ describe('OtpInput', () => {
     await user.keyboard('1234');
     await user.click(boxes[1] as HTMLInputElement);
     await user.keyboard('{Backspace}');
-    expect(boxes.map((box) => box.value)).toEqual(['1', '', '3', '4', '', '']);
+    expect(boxes.map((box) => box.value)).toEqual(['1', '', '3', '4', '', '', '', '']);
     expect(value()).toBe('1 34');
   });
 

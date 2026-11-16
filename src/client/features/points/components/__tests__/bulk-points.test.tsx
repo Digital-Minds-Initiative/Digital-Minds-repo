@@ -147,7 +147,7 @@ describe('bulk points — one committee', { timeout: 30_000 }, () => {
     const dialog = await openCommitteeBatch(user);
     const all = checkboxLabels(dialog);
     await user.type(
-      within(dialog).getByRole('searchbox', { name: 'ابحث في الأعضاء' }),
+      within(dialog).getByRole('searchbox', { name: 'ابحث بالاسم أو البريد الجامعي أو الجوال' }),
       all[0]?.split(' ')[0] ?? '',
     );
     await user.click(within(dialog).getByRole('button', { name: 'تحديد الظاهرين' }));
@@ -156,6 +156,33 @@ describe('bulk points — one committee', { timeout: 30_000 }, () => {
     expect(ticked.length).toBeLessThanOrEqual(all.length);
     await user.click(within(dialog).getByRole('button', { name: 'إلغاء التحديد' }));
     expect(within(dialog).queryAllByRole('checkbox', { checked: true })).toHaveLength(0);
+  });
+
+  it('finds a member by their email, in any case, and only that member gets the points', async () => {
+    const user = await renderPage(LEAD);
+    const [first = '', second = ''] = memberNames();
+    const before = { first: balanceOf(first), second: balanceOf(second) };
+
+    const dialog = await openCommitteeBatch(user);
+    const email =
+      document.getElementById(
+        within(dialog).getByRole('checkbox', { name: second }).getAttribute('aria-describedby') ??
+          '',
+      )?.textContent ?? '';
+    expect(email).toContain('@');
+    await user.type(
+      within(dialog).getByRole('searchbox', { name: 'ابحث بالاسم أو البريد الجامعي أو الجوال' }),
+      email.toUpperCase(),
+    );
+    const found = within(dialog).getAllByRole('checkbox');
+    expect(found).toHaveLength(1);
+    await user.click(found[0] as HTMLElement);
+    await fill(user, dialog, '6');
+    await user.click(within(dialog).getByRole('button', { name: 'تسجيل النقاط لعضو واحد' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 8000 });
+    await waitFor(() => expect(balanceOf(second)).toBe(before.second + 6), { timeout: 8000 });
+    expect(balanceOf(first)).toBe(before.first);
   });
 
   it('asks for the points and the reason, and refuses a zero, before sending anything', async () => {

@@ -17,7 +17,7 @@ import { toLatinDigits } from '@/shared/lib/arabic';
 /*
  * ─── Sign-in with a one-time code (docs/adr/0014-email-otp-sign-in.md) ───────────────────────
  *
- *   1. POST /auth/otp/request { email }        → a 6-digit code is emailed (same answer for any
+ *   1. POST /auth/otp/request { email }        → an 8-digit code is emailed (same answer for any
  *                                                 allowed address, registered or not)
  *   2. POST /auth/otp/verify  { email, code }  → session cookie + the next step:
  *        signed_in     already registered: done
@@ -34,13 +34,13 @@ export const OTP_TTL_SECONDS = 600;
 export const OTP_RESEND_COOLDOWN_SECONDS = 60;
 
 /**
- * The 6-digit code. Arabic-Indic (٠-٩) and Persian (۰-۹) digits are converted and spaces dropped
- * before validation, so "١٢٣ ٤٥٦" is accepted as 123456.
+ * The 8-digit code. Arabic-Indic (٠-٩) and Persian (۰-۹) digits are converted and spaces dropped
+ * before validation, so "١٢٣٤ ٥٦٧٨" is accepted as 12345678.
  */
 export const otpCodeSchema = z
   .string()
   .transform((value) => toLatinDigits(value).replace(/\s/g, ''))
-  .refine((value) => /^[0-9]{6}$/.test(value), { message: 'invalid_code_format' });
+  .refine((value) => /^[0-9]{8}$/.test(value), { message: 'invalid_code_format' });
 
 /**
  * Why a code was refused. Sent as a validation issue on `body.code`:

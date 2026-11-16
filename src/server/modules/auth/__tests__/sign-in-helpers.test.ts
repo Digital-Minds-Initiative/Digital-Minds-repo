@@ -13,9 +13,9 @@ import {
 import { buildOtpEmail } from '../otp-email';
 
 describe('sign-in crypto', () => {
-  it('generates 6-digit codes, leading zeros included', () => {
+  it('generates 8-digit codes, leading zeros included', () => {
     const codes = Array.from({ length: 2000 }, generateOtpCode);
-    expect(codes.every((code) => /^[0-9]{6}$/.test(code))).toBe(true);
+    expect(codes.every((code) => /^[0-9]{8}$/.test(code))).toBe(true);
     expect(new Set(codes).size).toBeGreaterThan(1900);
   });
 

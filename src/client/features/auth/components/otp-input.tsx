@@ -9,7 +9,7 @@ import { toLatinDigits } from '@/shared/lib/arabic';
 
 import { paperInputClass } from './paper-classes';
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 8;
 
 /** Only the digits of a string; Arabic-Indic and Persian digits become Latin ones. */
 const digitsOf = (value: string) => toLatinDigits(value).replace(/\D/g, '');
@@ -34,7 +34,7 @@ export interface OtpInputProps {
 }
 
 /**
- * The sign-in code as six single-digit boxes. Typing moves forward, Backspace and the arrows move
+ * The sign-in code as eight single-digit boxes. Typing moves forward, Backspace and the arrows move
  * back and forth, and pasting (or an SMS autofill) fills every box at once, whatever digits and
  * spaces the text has. Boxes read left to right, like the number itself.
  */

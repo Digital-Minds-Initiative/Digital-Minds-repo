@@ -51,21 +51,21 @@ describe('SignInFlow (against the MSW mocks)', () => {
 
   it('signs a registered person in after the code and opens the dashboard', async () => {
     const user = await requestCode(REGISTERED);
-    await user.type(await screen.findByLabelText(/رمز التأكيد/), '123456');
+    await user.type(await screen.findByLabelText(/رمز التأكيد/), '12345678');
     await user.click(screen.getByRole('button', { name: 'تأكيد' }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
   });
 
   it('accepts the code typed with Arabic-Indic digits', async () => {
     const user = await requestCode(REGISTERED);
-    await user.type(await screen.findByLabelText(/رمز التأكيد/), '١٢٣٤٥٦');
+    await user.type(await screen.findByLabelText(/رمز التأكيد/), '١٢٣٤٥٦٧٨');
     await user.click(screen.getByRole('button', { name: 'تأكيد' }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
   });
 
   it('explains a wrong code in a dialog and stays on the code step', async () => {
     const user = await requestCode(FOR_WRONG_CODE);
-    await user.type(await screen.findByLabelText(/رمز التأكيد/), '000000');
+    await user.type(await screen.findByLabelText(/رمز التأكيد/), '00000000');
     await user.click(screen.getByRole('button', { name: 'تأكيد' }));
     expect(await screen.findByText('الرمز غير صحيح')).toBeTruthy();
     expect(replace).not.toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe('SignInFlow (against the MSW mocks)', () => {
 
   it('sends an expired code back to the email step', async () => {
     const user = await requestCode(FOR_EXPIRED_CODE);
-    await user.type(await screen.findByLabelText(/رمز التأكيد/), '111111');
+    await user.type(await screen.findByLabelText(/رمز التأكيد/), '11111111');
     await user.click(screen.getByRole('button', { name: 'تأكيد' }));
     await user.click(await screen.findByRole('button', { name: 'اطلب رمزاً جديداً' }));
     expect(await screen.findByLabelText(/البريد الجامعي/)).toBeTruthy();
@@ -83,7 +83,7 @@ describe('SignInFlow (against the MSW mocks)', () => {
 
   it('asks an admin-added person to confirm the stored name', async () => {
     const user = await requestCode(UNREGISTERED);
-    await user.type(await screen.findByLabelText(/رمز التأكيد/), '123456');
+    await user.type(await screen.findByLabelText(/رمز التأكيد/), '12345678');
     await user.click(screen.getByRole('button', { name: 'تأكيد' }));
     const name = await screen.findByLabelText(/الاسم الكامل/);
     expect((name as HTMLInputElement).value).toBe('رهف ماجد الجهني');

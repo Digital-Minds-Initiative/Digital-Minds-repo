@@ -103,6 +103,7 @@ export function PointsScreen({ title, description }: PointsScreenProps) {
     setOpen({
       id: member.id,
       fullName: member.fullName,
+      uniEmail: member.uniEmail,
       clubId: selected.clubId,
       clubName: clubName(selected.clubId),
       committees: [{ id: selected.id, name: selected.name }],
@@ -120,7 +121,16 @@ export function PointsScreen({ title, description }: PointsScreenProps) {
             committee={selected}
             clubName={clubName(selected.clubId)}
             clubCommittees={committees.filter((committee) => committee.clubId === selected.clubId)}
-            members={rows ? rows.map((row) => ({ id: row.id, fullName: row.fullName })) : null}
+            members={
+              rows
+                ? rows.map((row) => ({
+                    id: row.id,
+                    fullName: row.fullName,
+                    uniEmail: row.uniEmail,
+                    phone: row.phone,
+                  }))
+                : null
+            }
             canWrite={canWrite}
             canWriteClub={!leadOnly}
           />

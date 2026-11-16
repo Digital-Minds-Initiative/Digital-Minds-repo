@@ -73,7 +73,7 @@ describe('requesting a code', () => {
   it('never creates a User for an address that has not been verified', async () => {
     const email = newEmail();
     expect((await auth.request(email)).status).toBe(200);
-    expect((await auth.verify(email, '000000')).status).toBe(422);
+    expect((await auth.verify(email, '00000000')).status).toBe(422);
     expect(await db.user.count({ where: { uniEmail: email } })).toBe(0);
     expect(await db.session.count({ where: { email } })).toBe(0);
   });
@@ -100,7 +100,7 @@ describe('requesting a code', () => {
     });
     expect(emailsTo(email)).toBe(0);
 
-    const verified = await auth.verify(email, '000000');
+    const verified = await auth.verify(email, '00000000');
     expect(verified.status).toBe(422);
     expect((await errorOf(verified)).issues?.[0]).toMatchObject({
       code: 'email_alias_not_allowed',

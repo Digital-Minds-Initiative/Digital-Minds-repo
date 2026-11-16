@@ -2,7 +2,7 @@
 
 import { Crown, History, Plus, SearchX, UsersRound, X } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { EmptyState } from '@/components/patterns/empty-state';
 import { Avatar } from '@/components/ui/avatar';
@@ -21,6 +21,7 @@ import { toast } from '@/components/ui/toaster';
 import { Pager } from './pager';
 import { PointsFormDialog } from './points-form-dialog';
 import { useAddPoints } from '../hooks/use-points';
+import { phoneMatchesSearch } from '../lib/member-search';
 import { arrange, type RosterRow, type RosterSort } from '../lib/roster';
 
 const PAGE_SIZE = 12;
@@ -28,6 +29,7 @@ const PAGE_SIZE = 12;
 export interface BalanceMember {
   id: string;
   fullName: string;
+  uniEmail: string;
 }
 
 interface BalancesPanelProps {
@@ -65,6 +67,7 @@ export function BalancesPanel({
 }: BalancesPanelProps) {
   const t = useTranslations('points.screen.balances');
   const format = useFormatter();
+  const contactId = useId();
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState<BalanceMember | null>(null);
 
@@ -115,11 +118,23 @@ export function BalancesPanel({
                       <button
                         type="button"
                         aria-label={t('open', { name: row.fullName })}
+                        aria-describedby={`${contactId}-${row.id}`}
                         onClick={() => onOpenMember(row)}
                         className="w-fit max-w-full cursor-pointer truncate rounded-sm text-start font-medium outline-none hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid"
                       >
                         {row.fullName}
                       </button>
+                      {/* What tells two members with the same name apart. The phone is shown only
+                          while the search is for one. */}
+                      <span
+                        id={`${contactId}-${row.id}`}
+                        className="flex flex-wrap gap-x-2 text-xs text-fg-muted"
+                      >
+                        <bdi dir="ltr">{row.uniEmail}</bdi>
+                        {phoneMatchesSearch(row.phone, search) ? (
+                          <bdi dir="ltr">{row.phone}</bdi>
+                        ) : null}
+                      </span>
                       {row.role === 'LEAD' ? (
                         <Badge variant="info" className="w-fit">
                           <Crown aria-hidden />
@@ -210,6 +225,7 @@ function AddForMember({
       mode={{
         type: 'add',
         memberName: member.fullName,
+        memberEmail: member.uniEmail,
         committees: [committee],
         onSubmit: async (committeeId, body) => {
           await add.mutateAsync({ committeeId, body });

@@ -12,8 +12,14 @@ function member(
   id: string,
   fullName: string,
   committees: Array<{ id: string; role: 'LEAD' | 'MEMBER'; points: number }>,
+  contact: { uniEmail?: string; phone?: string | null } = {},
 ): Member {
-  return { id, user: { fullName }, committees } as unknown as Member;
+  return {
+    id,
+    user: { fullName, uniEmail: contact.uniEmail ?? `${id}@st.uqu.edu.sa` },
+    profile: { phone: contact.phone ?? null },
+    committees,
+  } as unknown as Member;
 }
 
 const members = [
@@ -22,6 +28,17 @@ const members = [
   member('c', 'ثامر سعد', [{ id: COMMITTEE, role: 'MEMBER', points: 80 }]),
   member('d', 'جود محمد', [{ id: COMMITTEE, role: 'MEMBER', points: -5 }]),
   member('e', 'هيا فهد', [{ id: OTHER, role: 'MEMBER', points: 999 }]),
+];
+
+// Two people with one name, told apart by their email; only the first has a phone.
+const twins = [
+  member('f', 'سالم الغامدي', [{ id: COMMITTEE, role: 'MEMBER', points: 10 }], {
+    uniEmail: 's4400001@st.uqu.edu.sa',
+    phone: '+966501234567',
+  }),
+  member('g', 'سالم الغامدي', [{ id: COMMITTEE, role: 'MEMBER', points: 20 }], {
+    uniEmail: 's4400002@st.uqu.edu.sa',
+  }),
 ];
 
 describe('buildRoster', () => {
@@ -41,20 +58,50 @@ describe('buildRoster', () => {
       d: 4,
     });
   });
+
+  it('carries the university email and the phone, which may be missing', () => {
+    const [first, second] = buildRoster(twins, COMMITTEE);
+    expect(first).toMatchObject({ uniEmail: 's4400001@st.uqu.edu.sa', phone: '+966501234567' });
+    expect(second).toMatchObject({ uniEmail: 's4400002@st.uqu.edu.sa', phone: null });
+  });
 });
 
 describe('arrange', () => {
-  const rows = buildRoster(members, COMMITTEE);
+  const rows = buildRoster([...members, ...twins], COMMITTEE);
   const ids = (list: ReturnType<typeof arrange>) => list.map((row) => row.id);
 
   it('sorts by points, lowest first and by name', () => {
-    expect(ids(arrange(rows, { search: '', sort: 'points' }))).toEqual(['b', 'c', 'a', 'd']);
-    expect(ids(arrange(rows, { search: '', sort: 'lowest' }))).toEqual(['d', 'a', 'b', 'c']);
-    expect(ids(arrange(rows, { search: '', sort: 'name' }))).toEqual(['a', 'b', 'c', 'd']);
+    const plain = buildRoster(members, COMMITTEE);
+    expect(ids(arrange(plain, { search: '', sort: 'points' }))).toEqual(['b', 'c', 'a', 'd']);
+    expect(ids(arrange(plain, { search: '', sort: 'lowest' }))).toEqual(['d', 'a', 'b', 'c']);
+    expect(ids(arrange(plain, { search: '', sort: 'name' }))).toEqual(['a', 'b', 'c', 'd']);
   });
 
   it('searches names ignoring Arabic letter variants', () => {
     expect(ids(arrange(rows, { search: 'احمد', sort: 'name' }))).toEqual(['a']);
     expect(ids(arrange(rows, { search: 'زززز', sort: 'name' }))).toEqual([]);
+  });
+
+  it('searches the university email in any case', () => {
+    expect(ids(arrange(rows, { search: 'S4400002@ST.UQU', sort: 'name' }))).toEqual(['g']);
+    expect(ids(arrange(rows, { search: ' b@st.uqu ', sort: 'name' }))).toEqual(['b']);
+  });
+
+  it('searches the phone in the formats people type', () => {
+    for (const search of ['0501234567', '501234567', '+966501234567', '00966 50 123 4567']) {
+      expect(ids(arrange(rows, { search, sort: 'name' }))).toEqual(['f']);
+    }
+  });
+
+  it('returns members who share a name, and not the one without a matching phone', () => {
+    expect(ids(arrange(rows, { search: 'سالم', sort: 'name' })).sort()).toEqual(['f', 'g']);
+    expect(ids(arrange(rows, { search: '0501234567', sort: 'name' }))).not.toContain('g');
+  });
+
+  it('keeps every rank and balance while the list is filtered', () => {
+    const everyone = Object.fromEntries(rows.map((row) => [row.id, [row.rank, row.balance]]));
+    for (const found of arrange(rows, { search: 'S44', sort: 'lowest' })) {
+      expect([found.rank, found.balance]).toEqual(everyone[found.id]);
+    }
   });
 });

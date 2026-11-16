@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { useErrorText } from '@/client/lib/use-error-text';
 import { Button } from '@/components/ui/button';
 
-import { BulkPointsDialog, type BulkGroup } from './bulk-points-dialog';
+import { BulkPointsDialog, type BulkGroup, type BulkMember } from './bulk-points-dialog';
 import { useClubBulkPoints, useClubMembers, useCommitteeBulkPoints } from '../hooks/use-points';
 
 interface BulkPointsActionsProps {
@@ -16,7 +16,7 @@ interface BulkPointsActionsProps {
   /** The club's committees the person sees (all of them for an officer). */
   clubCommittees: ReadonlyArray<{ id: string; name: string }>;
   /** The selected committee's members, from the page's roster. */
-  members: ReadonlyArray<{ id: string; fullName: string }> | null;
+  members: readonly BulkMember[] | null;
   /** May record points in the selected committee (its lead, the club's officers, full admins). */
   canWrite: boolean;
   /** May record points across the club: officers and full admins, not a lead. */
@@ -54,7 +54,12 @@ export function BulkPointsActions({
         committee: each,
         members: (roster.data ?? [])
           .filter((member) => member.committees.some((c) => c.id === each.id))
-          .map((member) => ({ id: member.id, fullName: member.user.fullName })),
+          .map((member) => ({
+            id: member.id,
+            fullName: member.user.fullName,
+            uniEmail: member.user.uniEmail,
+            phone: member.profile.phone,
+          })),
       })),
     [clubCommittees, roster.data],
   );

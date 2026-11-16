@@ -21,10 +21,10 @@ export { buildMeFixture } from './fixtures';
 /*
  * Mock sign-in, for building the screens without a server or an inbox:
  *
- *   code 123456 → accepted       000000 → invalid_code
- *   code 111111 → code_expired   222222 → too_many_attempts   (anything else → invalid_code)
+ *   code 12345678 → accepted       00000000 → invalid_code
+ *   code 11111111 → code_expired   22222222 → too_many_attempts   (anything else → invalid_code)
  *
- * After 123456: a registered demo persona is signed in (the dev actor cookie is set, so /me works),
+ * After 12345678: a registered demo persona is signed in (the dev actor cookie is set, so /me works),
  * the unregistered persona gets confirm_name (which only confirms — a different name is refused),
  * any other address gets enter_name. A second request for the same address within 60 seconds
  * answers the resend cooldown.
@@ -37,10 +37,10 @@ const MOCK_SIGN_IN_COOKIE = 'dm-mock-sign-in';
 /** Matches ALLOWED_EMAIL_DOMAINS in .env.example. */
 const MOCK_EMAIL_DOMAINS = ['uqu.edu.sa'];
 const MOCK_CODES: Record<string, OtpRejection | 'ok'> = {
-  '123456': 'ok',
-  '000000': 'invalid_code',
-  '111111': 'code_expired',
-  '222222': 'too_many_attempts',
+  '12345678': 'ok',
+  '00000000': 'invalid_code',
+  '11111111': 'code_expired',
+  '22222222': 'too_many_attempts',
 };
 
 const lastRequested = new Map<string, number>();
