@@ -139,6 +139,8 @@ describe('deleting a club', () => {
         membershipTypes: 2,
         memberExports: 1,
         pointBatches: 0,
+        // The second type was added through the service, which recorded it (ADR 0031).
+        membershipTypeChanges: 1,
       });
 
       expect(await db.club.count({ where: { id: club.id } })).toBe(0);
@@ -149,6 +151,7 @@ describe('deleting a club', () => {
         clubs: before.clubs - 1,
         committees: before.committees - 2,
         membershipTypes: before.membershipTypes - 2,
+        membershipTypeChanges: before.membershipTypeChanges - 1,
         memberExports: before.memberExports - 1,
         deletionRecords: before.deletionRecords + 1,
       });

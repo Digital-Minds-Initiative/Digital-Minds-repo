@@ -76,6 +76,7 @@ import {
   saveNewMember,
   type MemberRow,
 } from './repository';
+import { typeChangeRecorder } from './type-history';
 
 /*
  * Members service. Every function takes the Actor first and reads through its scopes:
@@ -326,6 +327,7 @@ export async function createMember(
       membershipTypeId,
       committeeIds,
     },
+    typeChangeRecorder(actor, membersScope(actor), 'RESTORE'),
   );
   return getMember(actor, memberId);
 }
@@ -371,6 +373,7 @@ export async function admitMember(
       committeeId: committee.id,
       membershipTypeId,
     },
+    typeChangeRecorder(actor, memberAdmissionScope(actor), 'RESTORE'),
   );
   return getMember(actor, memberId);
 }
@@ -463,6 +466,8 @@ export async function updateMember(
       // half-done (an unregistered person waiting on the name step holds a session too).
       alsoInTransaction:
         uniEmail !== undefined ? (tx) => endUserSessions(tx, row.user.id) : undefined,
+      // The type history is the clubs module's (docs/adr/0031-membership-type-history.md).
+      recordTypeChanges: typeChangeRecorder(actor, membersScope(actor), 'EDIT'),
     });
   }
   return getMember(actor, memberId);

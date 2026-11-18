@@ -1,6 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 
 import { meQueryKey } from '@/client/features/auth';
 import { apiClient } from '@/client/lib/api-client';
@@ -13,6 +19,7 @@ import {
   deleteMembershipTypeEndpoint,
   disableCommitteeViewLinkEndpoint,
   getCommitteeViewLinkEndpoint,
+  listClubMembershipTypeHistoryEndpoint,
   listClubsEndpoint,
   listCommitteesEndpoint,
   listMembershipTypesEndpoint,
@@ -47,7 +54,12 @@ const clubsKeys = {
     [...clubsKeys.all, 'committees', clubId, { includeArchived }] as const,
   types: (clubId: string) => [...clubsKeys.all, 'types', clubId] as const,
   viewLink: (committeeId: string) => [...clubsKeys.all, 'view-link', committeeId] as const,
+  // Under `clubs`, so every type change below refreshes it; member writes refresh it by this key.
+  typeHistory: (clubId: string, page: number) =>
+    [...clubsKeys.all, 'type-history', clubId, page] as const,
 };
+
+const TYPE_HISTORY_PAGE_SIZE = 20;
 
 export function useClubs(includeArchived: boolean) {
   return useQuery({
@@ -74,6 +86,23 @@ export function useMembershipTypes(clubId: string) {
     queryKey: clubsKeys.types(clubId),
     queryFn: ({ signal }) =>
       apiClient.request(listMembershipTypesEndpoint, { params: { clubId } }, { signal }),
+  });
+}
+
+/**
+ * The club's membership-type history, newest first, as much of it as the person's scope holds: a
+ * lead gets only their committees' members' type changes (docs/adr/0031-membership-type-history.md).
+ */
+export function useClubTypeHistory(clubId: string, page: number) {
+  return useQuery({
+    queryKey: clubsKeys.typeHistory(clubId, page),
+    queryFn: ({ signal }) =>
+      apiClient.request(
+        listClubMembershipTypeHistoryEndpoint,
+        { params: { clubId }, query: { page, pageSize: TYPE_HISTORY_PAGE_SIZE } },
+        { signal },
+      ),
+    placeholderData: keepPreviousData,
   });
 }
 

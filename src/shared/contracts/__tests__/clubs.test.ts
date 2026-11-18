@@ -6,6 +6,7 @@ import {
   createClubBodySchema,
   createCommitteeBodySchema,
   membershipTypeBodySchema,
+  membershipTypeChangeSchema,
   PUBLIC_MEMBER_SEARCH_LIMIT,
   PUBLIC_MEMBER_SEARCH_MIN,
   publicCommitteeViewEndpoint,
@@ -204,4 +205,62 @@ describe('viewTokenSchema', () => {
       expect(viewTokenSchema.safeParse(value).success).toBe(false);
     },
   );
+});
+
+describe('membership-type history rows', () => {
+  const base = {
+    id: ID,
+    clubId: OTHER_ID,
+    changedBy: { userId: ID, fullName: null },
+    createdAt: '2026-11-16T10:00:00.000Z',
+  };
+
+  it('accepts each kind with its own fields', () => {
+    for (const row of [
+      { ...base, kind: 'TYPE_CREATED', name: 'متطوع' },
+      { ...base, kind: 'TYPE_RENAMED', previousName: 'متطوع', newName: 'متطوع نشط' },
+      { ...base, kind: 'TYPE_DELETED', name: 'مؤقت', movedMembers: 0, movedTo: null },
+      { ...base, kind: 'TYPE_DELETED', name: 'مؤقت', movedMembers: 3, movedTo: 'عضو' },
+      {
+        ...base,
+        kind: 'MEMBER_TYPE_CHANGED',
+        member: { memberId: ID, fullName: 'ريم' },
+        source: 'RESTORE',
+        previousType: 'عضو',
+        newType: 'عضو فعال',
+      },
+    ]) {
+      expect(membershipTypeChangeSchema.safeParse(row).success, row.kind).toBe(true);
+    }
+  });
+
+  // Each kind is a whitelist: a field of another kind never leaves the server on it.
+  it.each([
+    [{ ...base, kind: 'TYPE_CREATED', name: 'متطوع', member: { memberId: ID, fullName: 'ريم' } }],
+    [{ ...base, kind: 'TYPE_RENAMED', previousName: 'أ', newName: 'ب', movedMembers: 0 }],
+    [
+      {
+        ...base,
+        kind: 'TYPE_DELETED',
+        name: 'مؤقت',
+        movedMembers: 1,
+        movedTo: 'عضو',
+        source: 'EDIT',
+      },
+    ],
+    [
+      {
+        ...base,
+        kind: 'MEMBER_TYPE_CHANGED',
+        member: { memberId: ID, fullName: 'ريم' },
+        source: 'EDIT',
+        previousType: 'عضو',
+        newType: 'عضو فعال',
+        name: 'عضو',
+      },
+    ],
+    [{ ...base, kind: 'TYPE_REORDERED' }],
+  ])('refuses %o', (row) => {
+    expect(membershipTypeChangeSchema.safeParse(row).success).toBe(false);
+  });
 });

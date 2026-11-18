@@ -5,6 +5,7 @@ import {
   committeeMembershipsScope,
   committeesScope,
   membersScope,
+  membershipTypeChangesScope,
   membershipTypesScope,
   peopleScope,
   pointTransactionsScope,
@@ -17,6 +18,7 @@ import { endPersonSignIn } from '@/server/modules/auth';
 import {
   deleteClubTree,
   deleteCommitteeRow,
+  deleteMembershipTypeChanges,
   findClubForDeletion,
   findCommitteeForDeletion,
   lockClub,
@@ -123,6 +125,7 @@ export async function deleteClub(actor: Actor, clubId: string): Promise<ClubDele
           clubs: clubsScope(actor),
           committees: committeesScope(actor),
           membershipTypes: membershipTypesScope(actor),
+          membershipTypeChanges: membershipTypeChangesScope(actor),
         },
         club.id,
       );
@@ -219,9 +222,9 @@ export async function deleteCommittee(
 /**
  * Everything that identifies the person behind the member, in every club
  * (docs/adr/0026-person-deletion.md): their memberships and committee memberships, the
- * transactions on them with their revisions, the role history about them, their sessions and
- * sign-in code — and the account itself is emptied in place, so what they recorded for others
- * keeps pointing at someone, now shown as a deleted person.
+ * transactions on them with their revisions, the role and membership-type history about them,
+ * their sessions and sign-in code — and the account itself is emptied in place, so what they
+ * recorded for others keeps pointing at someone, now shown as a deleted person.
  */
 export async function deletePerson(
   actor: Actor,
@@ -250,6 +253,11 @@ export async function deletePerson(
       await lockTransactions(tx, target);
       const points = await deleteTransactions(tx, pointTransactionsScope(actor), target);
       const roleChanges = await deleteRoleChanges(tx, roleChangesScope(actor), { userId });
+      const membershipTypeChanges = await deleteMembershipTypeChanges(
+        tx,
+        membershipTypeChangesScope(actor),
+        { userId },
+      );
       const roleInvitations = await deleteRoleInvitations(tx, roleInvitationsScope(actor), {
         userId,
       });
@@ -260,7 +268,14 @@ export async function deletePerson(
       );
       const sessions = await endPersonSignIn(tx, { userId, uniEmail });
       await erasePerson(tx, peopleScope(actor), userId, new Date());
-      return { ...memberships, ...points, roleChanges, roleInvitations, sessions };
+      return {
+        ...memberships,
+        ...points,
+        roleChanges,
+        roleInvitations,
+        membershipTypeChanges,
+        sessions,
+      };
     },
   );
 }

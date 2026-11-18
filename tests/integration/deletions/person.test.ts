@@ -2,10 +2,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { Actor } from '@/server/authz';
 import { db } from '@/server/db/client';
+import { listMemberTypeHistory } from '@/server/modules/clubs';
 import { deletePerson } from '@/server/modules/deletions';
 import { createMember } from '@/server/modules/members';
 import { listRoleHistory } from '@/server/modules/permissions';
 import { getMemberPoints, listPointTransactionRevisions } from '@/server/modules/points';
+import { membershipTypeHistoryQuerySchema } from '@/shared/contracts/clubs';
 import { createMemberBodySchema } from '@/shared/contracts/members';
 import { roleHistoryQuerySchema } from '@/shared/contracts/permissions';
 import { normalizeForSearch } from '@/shared/lib/arabic';
@@ -44,6 +46,7 @@ describe("deleting a person's data", () => {
     /** A batch holding only their own transaction, which the delete empties. */
     batchOfTheirs: crypto.randomUUID(),
     roleTheyGranted: '',
+    typeTheyChanged: '',
     exportTheyRan: '',
     invitationTheySent: '',
   };
@@ -146,6 +149,19 @@ describe("deleting a person's data", () => {
       where: { id: s.memberships.removedOfficer },
       data: { removedById: target.id },
     });
+    theirs.typeTheyChanged = (
+      await db.membershipTypeChange.create({
+        data: {
+          clubId: s.clubA.id,
+          kind: 'MEMBER_TYPE_CHANGED',
+          membershipId: s.memberships.memberA2,
+          source: 'EDIT',
+          previousName: 'نوع قديم',
+          newName: 'نوع جديد',
+          changedById: target.id,
+        },
+      })
+    ).id;
 
     // ─ What is about them (must go) ─
     await db.pointTransaction.update({
@@ -171,6 +187,17 @@ describe("deleting a person's data", () => {
         changedById: s.users.officerA.id,
         previousRole: 'MEMBER',
         newRole: 'LEAD',
+      },
+    });
+    await db.membershipTypeChange.create({
+      data: {
+        clubId: s.clubB.id,
+        kind: 'MEMBER_TYPE_CHANGED',
+        membershipId: s.memberships.bothClubsB,
+        source: 'EDIT',
+        previousName: 'نوع قديم',
+        newName: 'نوع جديد',
+        changedById: s.users.officerB.id,
       },
     });
     await db.roleInvitation.create({
@@ -291,6 +318,7 @@ describe("deleting a person's data", () => {
         pointBatches: 1,
         roleChanges: 1,
         roleInvitations: 1,
+        membershipTypeChanges: 1,
         sessions: 3,
       });
 
@@ -334,6 +362,14 @@ describe("deleting a person's data", () => {
         userId: target.id,
         fullName: null,
       });
+      const typeHistory = await listMemberTypeHistory(
+        officerA,
+        s.memberships.memberA2,
+        membershipTypeHistoryQuerySchema.parse({}),
+      );
+      expect(typeHistory.items.find((row) => row.id === theirs.typeTheyChanged)?.changedBy).toEqual(
+        { userId: target.id, fullName: null },
+      );
       expect(await db.pointBatch.count({ where: { id: theirs.batchForOthers } })).toBe(1);
       expect(await db.pointBatch.count({ where: { id: theirs.batchOfTheirs } })).toBe(0);
       expect(await db.memberExport.count({ where: { id: theirs.exportTheyRan } })).toBe(1);
@@ -361,6 +397,7 @@ describe("deleting a person's data", () => {
         pointBatches: before.pointBatches - 1,
         roleChanges: before.roleChanges - 1,
         roleInvitations: before.roleInvitations - 1,
+        membershipTypeChanges: before.membershipTypeChanges - 1,
         sessions: before.sessions - 3,
         otpChallenges: before.otpChallenges - 1,
         deletionRecords: before.deletionRecords + 1,

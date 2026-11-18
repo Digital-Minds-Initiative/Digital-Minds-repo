@@ -329,3 +329,84 @@ describe('ClubsScreen — who may add clubs and committees', { timeout: 30_000 }
     expect(screen.queryByRole('button', { name: 'إضافة لجنة' })).toBeNull();
   });
 });
+
+describe('ClubsScreen — the membership-type history', { timeout: 30_000 }, () => {
+  it('shows an officer who added and deleted a type', async () => {
+    const user = await renderScreen(OFFICER);
+    await screen.findByRole('heading', { name: 'نادي الحاسبات' });
+    await user.click(screen.getByRole('tab', { name: 'أنواع العضوية' }));
+    await user.click(await screen.findByRole('button', { name: 'إضافة نوع' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/اسم النوع/), 'زائر');
+    await user.click(within(dialog).getByRole('button', { name: 'إضافة النوع' }));
+    await screen.findByText('زائر');
+    await user.click(screen.getByRole('button', { name: 'قائمة النوع زائر' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'حذف' }));
+    const confirm = await screen.findByRole('dialog');
+    await user.click(within(confirm).getByRole('button', { name: 'حذف النوع' }));
+    await waitFor(() => expect(screen.queryByText('زائر')).toBeNull());
+
+    await user.click(screen.getByRole('tab', { name: 'سجل التغييرات' }));
+    const log = await screen.findByRole('region', { name: 'سجل تغييرات أنواع العضوية' });
+    const rows = within(log)
+      .getAllByRole('row')
+      .map((row) => row.textContent ?? '');
+    // Newest first, under the header row.
+    expect(rows[1]).toContain('زائر');
+    expect(rows[1]).toContain('حذف نوع');
+    expect(rows[2]).toContain('زائر');
+    expect(rows[2]).toContain('إضافة نوع');
+  });
+
+  it("shows a lead only their committee's members' type changes", async () => {
+    const db = getMockDb();
+    const club = db.clubs.find((candidate) => candidate.name === 'نادي الحاسبات');
+    const committee = db.committees.find((candidate) => candidate.name === 'لجنة البرمجة');
+    const member = db.memberships.find(
+      (row) =>
+        row.removedAt === null &&
+        row.role === 'MEMBER' &&
+        row.committees.some(
+          (link) => link.committeeId === committee?.id && !link.removed && link.role === 'MEMBER',
+        ),
+    );
+    const author = db.users.find((user) => user.uniEmail === OFFICER);
+    if (!club || !member || !author) throw new Error('demo data changed');
+    const at = new Date().toISOString();
+    db.membershipTypeChanges.push(
+      {
+        id: crypto.randomUUID(),
+        clubId: club.id,
+        kind: 'TYPE_CREATED',
+        membershipId: null,
+        source: null,
+        previousName: null,
+        newName: 'نوع لا يراه المسؤول عن اللجنة',
+        movedMembers: null,
+        changedById: author.id,
+        createdAt: at,
+      },
+      {
+        id: crypto.randomUUID(),
+        clubId: club.id,
+        kind: 'MEMBER_TYPE_CHANGED',
+        membershipId: member.id,
+        source: 'RESTORE',
+        previousName: 'عضو',
+        newName: 'عضو فعال',
+        movedMembers: null,
+        changedById: author.id,
+        createdAt: at,
+      },
+    );
+
+    const user = await renderScreen(LEAD);
+    await screen.findByRole('heading', { name: 'نادي الحاسبات' });
+    await user.click(screen.getByRole('tab', { name: 'سجل التغييرات' }));
+    const log = await screen.findByRole('region', { name: 'سجل تغييرات أنواع العضوية' });
+    expect(within(log).getByText('عضو ← عضو فعال')).toBeTruthy();
+    expect(within(log).getByText('عند إعادته إلى النادي')).toBeTruthy();
+    expect(within(log).queryByText(/نوع لا يراه المسؤول عن اللجنة/)).toBeNull();
+    expect(screen.getByText(/يظهر لك تغيير نوع عضوية أعضاء لجانك فقط/)).toBeTruthy();
+  });
+});

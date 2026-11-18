@@ -4,6 +4,7 @@ import {
   clubsScope,
   committeesScope,
   membersScope,
+  membershipTypeChangesScope,
   membershipTypesScope,
   type Actor,
 } from '@/server/authz';
@@ -26,14 +27,17 @@ import {
   type DeleteMembershipTypeQuery,
   type IncludeArchivedQuery,
   type MembershipType,
+  type MembershipTypeHistoryQuery,
+  type MembershipTypeHistoryResponse,
   type ReorderMembershipTypesBody,
   type UpdateClubBody,
   type UpdateCommitteeBody,
   type UpdateMembershipTypeBody,
 } from '@/shared/contracts/clubs';
+import { pageMeta, pageOffset } from '@/shared/contracts/core';
 import { normalizeEntityName } from '@/shared/lib/names';
 
-import { toClub, toCommittee, toMembershipType } from './mappers';
+import { toClub, toCommittee, toMembershipType, toMembershipTypeChange } from './mappers';
 import { assertCanManageClubsAndCommittees, assertCanManageMembershipTypes } from './policies';
 import {
   committeeNameTaken,
@@ -46,7 +50,9 @@ import {
   findCommittee,
   findCommitteeRefs,
   findCommittees,
+  findHistoryMember,
   findMembershipType,
+  findMembershipTypeChangesPage,
   findMembershipTypes,
   insertClub,
   insertCommittee,
@@ -230,7 +236,11 @@ export async function createMembershipType(
   const name = normalizeEntityName(body.name);
   if (await membershipTypeNameTaken(club.id, name)) throw nameTaken('membership type');
 
-  const row = await insertMembershipType(clubsScope(actor), club.id, name);
+  const row = await insertMembershipType(clubsScope(actor), {
+    clubId: club.id,
+    name,
+    changedById: actor.userId,
+  });
   // A type that was just created has no memberships yet.
   return toMembershipType(row, undefined);
 }
@@ -247,7 +257,11 @@ export async function updateMembershipType(
     throw nameTaken('membership type');
   }
 
-  const row = await updateMembershipTypeName(membershipTypesScope(actor), membershipTypeId, name);
+  const row = await updateMembershipTypeName(membershipTypesScope(actor), {
+    membershipTypeId,
+    name,
+    changedById: actor.userId,
+  });
   const [item] = await withUsage([row]);
   if (!item) throw new NotFoundError('Membership type');
   return item;
@@ -297,7 +311,7 @@ export async function deleteMembershipType(
   // (409 `membership_type_in_use` from the repository).
   await deleteMembershipTypeRow(
     { membershipTypes: membershipTypesScope(actor), members: membersScope(actor) },
-    { membershipTypeId: type.id, clubId: type.clubId, moveMembersTo },
+    { membershipTypeId: type.id, clubId: type.clubId, moveMembersTo, changedById: actor.userId },
   );
 }
 
@@ -326,6 +340,48 @@ export async function reorderMembershipTypes(
   }
   return {
     items: await withUsage(await findMembershipTypes(membershipTypesScope(actor), club.id)),
+  };
+}
+
+// ─── Membership-type history ────────────────────────────────
+// docs/adr/0031-membership-type-history.md. Reading it is scope-only: whoever can see the club or
+// the member gets the rows of it their scope holds — a lead only their committees' members' type
+// changes — so there is no role to assert and no 403.
+
+/** The club's history, newest first; members moved by a type deletion are summed up by it. */
+export async function listClubMembershipTypeHistory(
+  actor: Actor,
+  clubId: string,
+  query: MembershipTypeHistoryQuery,
+): Promise<MembershipTypeHistoryResponse> {
+  const club = await loadClub(actor, clubId);
+  const { rows, total } = await findMembershipTypeChangesPage(
+    membershipTypeChangesScope(actor),
+    { clubId: club.id },
+    pageOffset(query.page, query.pageSize),
+  );
+  return {
+    items: rows.map(toMembershipTypeChange),
+    ...pageMeta(total, query.page, query.pageSize),
+  };
+}
+
+/** One member's type changes, newest first. */
+export async function listMemberTypeHistory(
+  actor: Actor,
+  memberId: string,
+  query: MembershipTypeHistoryQuery,
+): Promise<MembershipTypeHistoryResponse> {
+  const member = await findHistoryMember(membersScope(actor), memberId);
+  if (!member) throw new NotFoundError('Member');
+  const { rows, total } = await findMembershipTypeChangesPage(
+    membershipTypeChangesScope(actor),
+    { membershipId: member.id },
+    pageOffset(query.page, query.pageSize),
+  );
+  return {
+    items: rows.map(toMembershipTypeChange),
+    ...pageMeta(total, query.page, query.pageSize),
   };
 }
 

@@ -11,6 +11,7 @@ import {
   hasDashboardAccess,
   memberAdmissionScope,
   membersScope,
+  membershipTypeChangesScope,
   membershipTypesScope,
   pointTransactionsScope,
   roleChangesScope,
@@ -85,6 +86,7 @@ describe('scopes', () => {
       committeeMembershipsScope,
       pointTransactionsScope,
       roleChangesScope,
+      membershipTypeChangesScope,
     ]) {
       expect(build(admin)).toEqual({});
     }
@@ -101,6 +103,7 @@ describe('scopes', () => {
         committeeMembershipsScope,
         pointTransactionsScope,
         roleChangesScope,
+        membershipTypeChangesScope,
       ]) {
         expect(build(actor)).toEqual(NO_ROWS);
       }
@@ -134,6 +137,26 @@ describe('scopes', () => {
     expect(scope).not.toContain(CLUB_B);
     expect(scope).not.toContain(B1);
     expect(memberAdmissionScope(mixed)).toEqual({ clubId: { in: [CLUB_A] } });
+  });
+
+  it("give the type history to officers whole and to leads only their members' type changes", () => {
+    // docs/adr/0031-membership-type-history.md: an officer reads all of their club's history...
+    expect(membershipTypeChangesScope(officerA)).toEqual({ OR: [{ clubId: { in: [CLUB_A] } }] });
+    // ...a lead only the member rows of members currently in a committee they lead — never a row
+    // about the types themselves, and not their own club as a whole.
+    expect(membershipTypeChangesScope(leadA1)).toEqual({
+      OR: [
+        {
+          kind: 'MEMBER_TYPE_CHANGED',
+          membership: {
+            is: { committeeMemberships: { some: { committeeId: { in: [A1] }, removedAt: null } } },
+          },
+        },
+      ],
+    });
+    const mixedScope = JSON.stringify(membershipTypeChangesScope(mixed));
+    expect(mixedScope).toContain(CLUB_A);
+    expect(mixedScope).not.toContain(CLUB_B);
   });
 
   it('let a lead admit any membership of their own club, and nothing in another', () => {

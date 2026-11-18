@@ -176,6 +176,7 @@ async function teardown(db: Db): Promise<void> {
       await tx.pointBatch.deleteMany({ where: { clubId } });
       await tx.roleInvitation.deleteMany({ where: { clubId } });
       await tx.roleChange.deleteMany({ where: { clubId } });
+      await tx.membershipTypeChange.deleteMany({ where: { clubId } });
       await tx.memberExport.deleteMany({ where: { clubId } });
       await tx.committeeMembership.deleteMany({ where: { clubId } });
       const memberships = await tx.membership.deleteMany({ where: { clubId } });

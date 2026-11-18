@@ -35,6 +35,42 @@ import type { SharedAccount } from './policies';
  * modify a row outside the actor's scope.
  */
 
+/**
+ * A membership whose type a write changed, read inside that write's transaction. The type history
+ * belongs to the clubs module, so the writes below hand these to a recorder the service builds
+ * with that module's `recordMemberTypeChanges` (docs/adr/0031-membership-type-history.md); an
+ * entry whose type did not really change records nothing.
+ */
+interface TypeChange {
+  membershipId: string;
+  previousTypeId: string;
+  newTypeId: string;
+}
+
+export type TypeChangeRecorder = (
+  tx: TransactionClient,
+  changes: readonly TypeChange[],
+) => Promise<unknown>;
+
+/**
+ * Locks the memberships (in id order, like `lockSharedAccount`) and returns the type each holds
+ * now. Called before a write that may change their type: nothing — an edit, a restore, a type
+ * deletion moving its members — can change it between this read and that write, so the type it
+ * returns is exactly the one the write replaces. Only ids the caller has already checked through
+ * its scope are passed in.
+ */
+async function lockMembershipTypeIds(
+  tx: TransactionClient,
+  membershipIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await tx.$queryRaw<Array<{ id: string; membershipTypeId: string }>>`
+    SELECT "id", "membershipTypeId" FROM "Membership"
+    WHERE "id" = ANY(${[...membershipIds]}::uuid[]) ORDER BY "id" FOR UPDATE
+  `;
+  return new Map(rows.map((row) => [row.id, row.membershipTypeId]));
+}
+
 // ─── Read model ──────────────────────────────────────────────
 
 /** `nested` limits the member's committee list to committees the actor may see. */
@@ -407,6 +443,8 @@ export async function saveNewMember(
     membershipTypeId: string;
     committeeIds: string[];
   },
+  /** Records a restore that changes the membership's type. */
+  recordTypeChanges: TypeChangeRecorder,
 ): Promise<string> {
   return db.$transaction(async (tx) => {
     const club = await tx.club.count({ where: { AND: [scopes.club, { id: input.clubId }] } });
@@ -451,6 +489,12 @@ export async function saveNewMember(
       ).id;
     } else {
       if (!current.removedAt) throw alreadyInClub(current.id);
+      const reachable = await tx.membership.count({
+        where: { AND: [scopes.members, { id: current.id, removedAt: { not: null } }] },
+      });
+      if (reachable !== 1) throw new NotFoundError('Member');
+      const previousTypeId = (await lockMembershipTypeIds(tx, [current.id])).get(current.id);
+      if (previousTypeId === undefined) throw new NotFoundError('Member');
       // Restored, not recreated: the membership keeps its id, so its committee memberships and
       // their points history come back with it. The role is reset, so a removed officer who is
       // added again is an ordinary member until someone appoints them.
@@ -466,6 +510,9 @@ export async function saveNewMember(
       });
       if (count !== 1) throw new NotFoundError('Member');
       membershipId = current.id;
+      await recordTypeChanges(tx, [
+        { membershipId, previousTypeId, newTypeId: input.membershipTypeId },
+      ]);
     }
 
     for (const committeeId of input.committeeIds) {
@@ -512,6 +559,8 @@ export async function saveAdmittedMember(
     committeeId: string;
     membershipTypeId: string;
   },
+  /** Records a restore that changes the membership's type. */
+  recordTypeChanges: TypeChangeRecorder,
 ): Promise<string> {
   return db.$transaction(async (tx) => {
     const club = await tx.club.count({
@@ -562,6 +611,12 @@ export async function saveAdmittedMember(
         })
       ).id;
     } else if (current.removedAt) {
+      const reachable = await tx.membership.count({
+        where: { AND: [scopes.admission, { id: current.id, removedAt: { not: null } }] },
+      });
+      if (reachable !== 1) throw new NotFoundError('Member');
+      const previousTypeId = (await lockMembershipTypeIds(tx, [current.id])).get(current.id);
+      if (previousTypeId === undefined) throw new NotFoundError('Member');
       // Restored, not recreated — the same as an officer's add — with this club's «عضو» type.
       const { count } = await tx.membership.updateMany({
         where: { AND: [scopes.admission, { id: current.id, removedAt: { not: null } }] },
@@ -575,6 +630,9 @@ export async function saveAdmittedMember(
       });
       if (count !== 1) throw new NotFoundError('Member');
       membershipId = current.id;
+      await recordTypeChanges(tx, [
+        { membershipId, previousTypeId, newTypeId: input.membershipTypeId },
+      ]);
     } else {
       // An active member: nothing on the membership changes, it only has to be one the actor
       // may bring in.
@@ -617,6 +675,8 @@ export async function saveMemberChanges(
     /** Runs before the account is written, with its rows locked; throwing writes nothing. */
     checkAccount?: (account: SharedAccount) => void;
     alsoInTransaction?: (tx: TransactionClient) => Promise<unknown>;
+    /** Records a type change; required for a change that includes `membershipTypeId`. */
+    recordTypeChanges?: TypeChangeRecorder;
   } = {},
 ): Promise<void> {
   const { uniEmail, fullName, ...clubFields } = changes;
@@ -624,7 +684,10 @@ export async function saveMemberChanges(
     ...(uniEmail !== undefined ? { uniEmail } : {}),
     ...(fullName !== undefined ? { fullName, searchName: normalizeForSearch(fullName) } : {}),
   };
-  const { checkAccount, alsoInTransaction } = options;
+  const { checkAccount, alsoInTransaction, recordTypeChanges } = options;
+  if (clubFields.membershipTypeId !== undefined && !recordTypeChanges) {
+    throw new Error('A membership type change must be recorded.');
+  }
   await db.$transaction(async (tx) => {
     if (hasValues(account)) {
       if (checkAccount) checkAccount(await lockSharedAccount(tx, scope, memberId));
@@ -634,6 +697,22 @@ export async function saveMemberChanges(
       });
       if (count !== 1) throw new NotFoundError('Member');
     }
+    // The type it replaces is read with the row locked, so two edits at once each record the type
+    // they really replaced — and one that finds its type already set records nothing.
+    let typeChange: TypeChange | null = null;
+    if (clubFields.membershipTypeId !== undefined) {
+      const reachable = await tx.membership.count({
+        where: { AND: [scope, { id: memberId, removedAt: null }] },
+      });
+      if (reachable !== 1) throw new NotFoundError('Member');
+      const previousTypeId = (await lockMembershipTypeIds(tx, [memberId])).get(memberId);
+      if (previousTypeId === undefined) throw new NotFoundError('Member');
+      typeChange = {
+        membershipId: memberId,
+        previousTypeId,
+        newTypeId: clubFields.membershipTypeId,
+      };
+    }
     if (hasValues(clubFields)) {
       const { count } = await tx.membership.updateMany({
         where: { AND: [scope, { id: memberId, removedAt: null }] },
@@ -641,6 +720,7 @@ export async function saveMemberChanges(
       });
       if (count !== 1) throw new NotFoundError('Member');
     }
+    if (typeChange && recordTypeChanges) await recordTypeChanges(tx, [typeChange]);
     // After the scoped updates: it only runs when they matched a row the actor can reach.
     if (alsoInTransaction) await alsoInTransaction(tx);
   });
@@ -985,6 +1065,8 @@ export async function saveImportedMembers(
     joins: readonly ImportJoinWrite[];
   },
   plan: (client: TransactionClient) => Promise<boolean>,
+  /** Records the restores that change a membership's type. */
+  recordTypeChanges: TypeChangeRecorder,
 ): Promise<void> {
   await db.$transaction(async (tx) => {
     // The club and the committees are checked through the actor's scopes here, inside the
@@ -1019,7 +1101,8 @@ export async function saveImportedMembers(
     const userIdByEmail = await createAccounts(tx, input.adds);
     const membershipIdByUser = await createMemberships(tx, input.clubId, input.adds, userIdByEmail);
     const restored = await restoreMemberships(tx, scopes.members, input.restores);
-    if (restored !== input.restores.length) throw importChanged();
+    if (restored.length !== input.restores.length) throw importChanged();
+    await recordTypeChanges(tx, restored);
     // The members a `join` row writes for must still be active members of this club, in scope.
     if (input.joins.length > 0) {
       const active = await tx.membership.count({
@@ -1116,8 +1199,19 @@ async function restoreMemberships(
   tx: TransactionClient,
   scope: MemberScope | MemberAdmissionScope,
   restores: readonly ImportRestoreWrite[],
-): Promise<number> {
-  let count = 0;
+): Promise<TypeChange[]> {
+  if (restores.length === 0) return [];
+  // The type each one has now, locked, to record the ones the restore changes. Only memberships in
+  // the scope are locked; one outside it matches nothing below and fails the import.
+  const reachable = await tx.membership.findMany({
+    where: { AND: [scope, { id: { in: restores.map((restore) => restore.membershipId) } }] },
+    select: { id: true },
+  });
+  const previous = await lockMembershipTypeIds(
+    tx,
+    reachable.map((row) => row.id),
+  );
+  const restored: TypeChange[] = [];
   for (const restore of restores) {
     const result = await tx.membership.updateMany({
       where: { AND: [scope, { id: restore.membershipId, removedAt: { not: null } }] },
@@ -1129,9 +1223,16 @@ async function restoreMemberships(
         membershipTypeId: restore.membershipTypeId,
       },
     });
-    count += result.count;
+    const previousTypeId = previous.get(restore.membershipId);
+    if (result.count === 1 && previousTypeId !== undefined) {
+      restored.push({
+        membershipId: restore.membershipId,
+        previousTypeId,
+        newTypeId: restore.membershipTypeId,
+      });
+    }
   }
-  return count;
+  return restored;
 }
 
 /** New committee memberships in one insert; removed ones come back with their points. */

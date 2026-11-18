@@ -47,6 +47,8 @@ export const clubDeletionCountsSchema = z.object({
   memberExports: count,
   /** Empty bulk-points batches; a club without transactions should have none. */
   pointBatches: count,
+  /** The club's membership-type history (docs/adr/0031-membership-type-history.md). */
+  membershipTypeChanges: count,
 });
 export type ClubDeletionCounts = z.infer<typeof clubDeletionCountsSchema>;
 
@@ -135,6 +137,8 @@ export const personDeletionCountsSchema = z.object({
   pointBatches: count,
   roleChanges: count,
   roleInvitations: count,
+  /** Type history about their memberships; what they changed for others stays (ADR 0031). */
+  membershipTypeChanges: count,
   sessions: count,
 });
 export type PersonDeletionCounts = z.infer<typeof personDeletionCountsSchema>;

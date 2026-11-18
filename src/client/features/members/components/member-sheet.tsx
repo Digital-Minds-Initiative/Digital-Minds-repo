@@ -1,6 +1,6 @@
 'use client';
 
-import { Crown, Pencil, RotateCw, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
+import { Crown, History, Pencil, RotateCw, ShieldCheck, Trash2, UserMinus } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -21,6 +21,7 @@ import type { Member } from '@/shared/contracts/members';
 
 import { DeletePersonDialog } from './delete-person-dialog';
 import { MemberCommittees } from './member-committees';
+import { MemberTypeHistory } from './member-type-history';
 import { useMember } from '../hooks/use-member-actions';
 import { memberAccess } from '../lib/access';
 
@@ -34,9 +35,10 @@ export interface MemberSheetProps {
 
 /**
  * One member's file, opened from the table without leaving it: their details in this club, their
- * committees with the points in each, and — for those allowed — the buttons to edit, move between
- * committees and remove. The record is read from the server when the sheet opens, so it is right
- * even for a member who is not on the page that opened it.
+ * committees with the points in each, the history of their membership type, and — for those
+ * allowed — the buttons to edit, move between committees and remove. The record is read from the
+ * server when the sheet opens, so it is right even for a member who is not on the page that
+ * opened it.
  */
 export function MemberSheet({ memberId, onClose, onEdit, onRemove }: MemberSheetProps) {
   return (
@@ -236,6 +238,14 @@ function MemberFile({
           {t('sections.committees')}
         </h3>
         <MemberCommittees member={record} canManage={access.canManage} />
+      </section>
+
+      <section aria-label={t('sections.typeHistory')} className="grid gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <History className="size-4 text-fg-muted" aria-hidden />
+          {t('sections.typeHistory')}
+        </h3>
+        <MemberTypeHistory memberId={record.id} />
       </section>
 
       {canDeletePerson ? (

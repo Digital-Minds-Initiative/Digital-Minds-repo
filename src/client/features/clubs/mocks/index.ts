@@ -1,12 +1,17 @@
 import {
   canManageClub,
+  canSeeMembership,
   findMockActor,
   getMockDb,
+  mockAuthorName,
+  must,
+  recordMockTypeChange,
   type MockActor,
   type MockClub,
   type MockCommittee,
   type MockDb,
   type MockMembershipType,
+  type MockMembershipTypeChange,
 } from '@/client/mocks/db';
 import { mockEndpoint, mockError, type MockError } from '@/client/mocks/endpoint';
 import { DEV_ACTOR_COOKIE } from '@/shared/contracts/auth';
@@ -19,8 +24,10 @@ import {
   DEFAULT_MEMBERSHIP_TYPE_NAME,
   deleteMembershipTypeEndpoint,
   listClubsEndpoint,
+  listClubMembershipTypeHistoryEndpoint,
   listCommitteesEndpoint,
   listMembershipTypesEndpoint,
+  listMemberTypeHistoryEndpoint,
   reorderMembershipTypesEndpoint,
   restoreClubEndpoint,
   restoreCommitteeEndpoint,
@@ -30,7 +37,9 @@ import {
   type Club,
   type Committee,
   type MembershipType,
+  type MembershipTypeChange,
 } from '@/shared/contracts/clubs';
+import { pageMeta } from '@/shared/contracts/core';
 import { demoId } from '@/shared/demo/ids';
 import { normalizeEntityName } from '@/shared/lib/names';
 
@@ -111,6 +120,85 @@ function renumber(db: MockDb, clubId: string): void {
   typesOf(db, clubId).forEach((type, order) => {
     type.order = order;
   });
+}
+
+// ─── Membership-type history ────────────────────────────────
+
+/**
+ * The rows the actor's scope holds, as `membershipTypeChangesScope` gives them: everything for a
+ * full admin, their clubs' rows for an officer, and for a lead only the member rows of members
+ * currently in a committee they lead.
+ */
+function visibleTypeChanges({ db, actor }: Context): MockMembershipTypeChange[] {
+  return db.membershipTypeChanges.filter((change) => {
+    if (canManageClub(actor, change.clubId)) return true;
+    if (change.membershipId === null) return false;
+    const membership = db.memberships.find((row) => row.id === change.membershipId);
+    return (
+      membership !== undefined &&
+      membership.committees.some(
+        (link) => !link.removed && actor.ledCommitteeIds.includes(link.committeeId),
+      )
+    );
+  });
+}
+
+function toTypeChange(db: MockDb, change: MockMembershipTypeChange): MembershipTypeChange {
+  const author = must(db.usersById.get(change.changedById), 'user');
+  const base = {
+    id: change.id,
+    clubId: change.clubId,
+    changedBy: { userId: author.id, fullName: mockAuthorName(author) },
+    createdAt: change.createdAt,
+  };
+  switch (change.kind) {
+    case 'TYPE_CREATED':
+      return { ...base, kind: change.kind, name: must(change.newName ?? undefined, 'name') };
+    case 'TYPE_RENAMED':
+      return {
+        ...base,
+        kind: change.kind,
+        previousName: must(change.previousName ?? undefined, 'name'),
+        newName: must(change.newName ?? undefined, 'name'),
+      };
+    case 'TYPE_DELETED':
+      return {
+        ...base,
+        kind: change.kind,
+        name: must(change.previousName ?? undefined, 'name'),
+        movedMembers: change.movedMembers ?? 0,
+        movedTo: change.newName,
+      };
+    case 'MEMBER_TYPE_CHANGED': {
+      const membership = must(
+        db.memberships.find((row) => row.id === change.membershipId),
+        'membership',
+      );
+      const person = must(db.usersById.get(membership.userId), 'user');
+      return {
+        ...base,
+        kind: change.kind,
+        member: { memberId: membership.id, fullName: person.fullName },
+        source: must(change.source ?? undefined, 'source'),
+        previousType: must(change.previousName ?? undefined, 'name'),
+        newType: must(change.newName ?? undefined, 'name'),
+      };
+    }
+  }
+}
+
+/** Newest first, one page of it. */
+function typeHistoryPage(
+  db: MockDb,
+  rows: MockMembershipTypeChange[],
+  query: { page: number; pageSize: number },
+) {
+  const sorted = [...rows].reverse();
+  const start = (query.page - 1) * query.pageSize;
+  return {
+    items: sorted.slice(start, start + query.pageSize).map((change) => toTypeChange(db, change)),
+    ...pageMeta(sorted.length, query.page, query.pageSize),
+  };
 }
 
 // ─── Shared steps ───────────────────────────────────────────
@@ -359,6 +447,15 @@ export const clubsHandlers = [
     };
     ctx.db.membershipTypes.push(type);
     ctx.db.membershipTypesById.set(type.id, type);
+    recordMockTypeChange(ctx.db, ctx.actor, {
+      clubId: club.id,
+      kind: 'TYPE_CREATED',
+      membershipId: null,
+      source: null,
+      previousName: null,
+      newName: name,
+      movedMembers: null,
+    });
     return toMembershipType(ctx.db, type);
   }),
 
@@ -375,6 +472,17 @@ export const clubsHandlers = [
       typesOf(ctx.db, type.clubId).some((sibling) => sibling.name === name)
     ) {
       return nameTaken();
+    }
+    if (name !== type.name) {
+      recordMockTypeChange(ctx.db, ctx.actor, {
+        clubId: type.clubId,
+        kind: 'TYPE_RENAMED',
+        membershipId: null,
+        source: null,
+        previousName: type.name,
+        newName: name,
+        movedMembers: null,
+      });
     }
     type.name = name;
     return toMembershipType(ctx.db, type);
@@ -400,12 +508,33 @@ export const clubsHandlers = [
       }
     }
     const holders = ctx.db.memberships.filter((membership) => membership.typeId === type.id);
+    const targetType = target === undefined ? undefined : ctx.db.membershipTypesById.get(target);
     if (holders.length > 0) {
-      if (target === undefined) {
+      if (!targetType) {
         return conflict('membership_type_in_use', 'The membership type is in use.');
       }
-      for (const membership of holders) membership.typeId = target;
+      for (const membership of holders) {
+        membership.typeId = targetType.id;
+        recordMockTypeChange(ctx.db, ctx.actor, {
+          clubId: type.clubId,
+          kind: 'MEMBER_TYPE_CHANGED',
+          membershipId: membership.id,
+          source: 'TYPE_DELETED',
+          previousName: type.name,
+          newName: targetType.name,
+          movedMembers: null,
+        });
+      }
     }
+    recordMockTypeChange(ctx.db, ctx.actor, {
+      clubId: type.clubId,
+      kind: 'TYPE_DELETED',
+      membershipId: null,
+      source: null,
+      previousName: type.name,
+      newName: holders.length > 0 ? (targetType?.name ?? null) : null,
+      movedMembers: holders.length,
+    });
     ctx.db.membershipTypes.splice(ctx.db.membershipTypes.indexOf(type), 1);
     ctx.db.membershipTypesById.delete(type.id);
     renumber(ctx.db, type.clubId);
@@ -428,6 +557,28 @@ export const clubsHandlers = [
       if (type) type.order = order;
     });
     return { items: typesOf(ctx.db, club.id).map((type) => toMembershipType(ctx.db, type)) };
+  }),
+
+  // The membership-type history (docs/adr/0031-membership-type-history.md).
+  mockEndpoint(listClubMembershipTypeHistoryEndpoint, ({ cookies, params, query }) => {
+    const ctx = context(cookies);
+    if (isError(ctx)) return ctx;
+    const club = loadClub(ctx, params.clubId);
+    if (failed(club)) return club;
+    const rows = visibleTypeChanges(ctx).filter(
+      // A deletion's row sums up the members it moved.
+      (change) => change.clubId === club.id && change.source !== 'TYPE_DELETED',
+    );
+    return typeHistoryPage(ctx.db, rows, query);
+  }),
+
+  mockEndpoint(listMemberTypeHistoryEndpoint, ({ cookies, params, query }) => {
+    const ctx = context(cookies);
+    if (isError(ctx)) return ctx;
+    const membership = ctx.db.memberships.find((row) => row.id === params.memberId);
+    if (!membership || !canSeeMembership(ctx.actor, membership)) return mockError('NOT_FOUND');
+    const rows = visibleTypeChanges(ctx).filter((change) => change.membershipId === membership.id);
+    return typeHistoryPage(ctx.db, rows, query);
   }),
 
   // The view link and the public page it opens (ADR 0023).

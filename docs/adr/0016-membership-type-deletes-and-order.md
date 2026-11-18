@@ -2,6 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-14
+- Amended by: [ADR 0031](0031-membership-type-history.md) — adding, renaming and deleting a type,
+  and moving its members, are recorded in the type history
 
 ## Context
 
