@@ -65,6 +65,28 @@ enum PointRevisionAction {
   CANCELLED
 }
 
+/// What a membership-type history row records (docs/adr/0031-membership-type-history.md).
+enum MembershipTypeChangeKind {
+  /// A type was added to the club.
+  TYPE_CREATED
+  /// A type was renamed.
+  TYPE_RENAMED
+  /// A type was deleted, with its members moved to another type when it had any.
+  TYPE_DELETED
+  /// One membership's type changed.
+  MEMBER_TYPE_CHANGED
+}
+
+/// How a membership's type changed.
+enum MemberTypeChangeSource {
+  /// Someone edited the member.
+  EDIT
+  /// A removed membership came back with a different type.
+  RESTORE
+  /// Its type was deleted and its members moved to another one.
+  TYPE_DELETED
+}
+
 /// One account per person. Admins can create the row before the person registers;
 /// registration links to it by `uniEmail` and sets `registeredAt`.
 /// It holds only what identifies the person to every club (name, university email). Contact and
@@ -96,6 +118,7 @@ model User {
   createdPointBatches        PointBatch[]
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
+  membershipTypeChangesMade  MembershipTypeChange[]
   roleInvitationsSent        RoleInvitation[]
   memberExports              MemberExport[]
   deletionsMade              DeletionRecord[]
@@ -119,6 +142,8 @@ model Club {
   roleChanges     RoleChange[]
   roleInvitations RoleInvitation[]
   memberExports   MemberExport[]
+
+  membershipTypeChanges MembershipTypeChange[]
 }
 
 model Committee {
@@ -186,14 +211,15 @@ model Membership {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  user                 User                  @relation("MembershipUser", fields: [userId], references: [id], onDelete: Restrict)
-  club                 Club                  @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  user                 User                   @relation("MembershipUser", fields: [userId], references: [id], onDelete: Restrict)
+  club                 Club                   @relation(fields: [clubId], references: [id], onDelete: Restrict)
   /// Composite FK: the type must belong to the same club.
-  membershipType       MembershipType        @relation(fields: [membershipTypeId, clubId], references: [id, clubId], onDelete: Restrict)
-  removedBy            User?                 @relation("MembershipRemovedBy", fields: [removedById], references: [id], onDelete: Restrict)
+  membershipType       MembershipType         @relation(fields: [membershipTypeId, clubId], references: [id, clubId], onDelete: Restrict)
+  removedBy            User?                  @relation("MembershipRemovedBy", fields: [removedById], references: [id], onDelete: Restrict)
   committeeMemberships CommitteeMembership[]
   roleChanges          RoleChange[]
   roleInvitations      RoleInvitation[]
+  typeChanges          MembershipTypeChange[]
 
   @@unique([userId, clubId])
   @@unique([id, clubId])
@@ -329,6 +355,41 @@ model RoleChange {
   membership Membership @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
   committee  Committee? @relation(fields: [committeeId, clubId], references: [id, clubId], onDelete: Restrict)
   changedBy  User       @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([clubId, createdAt])
+  @@index([membershipId, createdAt])
+}
+
+/// Append-only history of a club's membership types (docs/adr/0031-membership-type-history.md):
+/// types added, renamed and deleted, and each real change of a membership's type. Never updated,
+/// so it has createdAt and no updatedAt; only the full-admin deletes remove rows.
+///
+/// Type names are copied as they were at the time, not linked: types are hard-deleted (ADR 0016)
+/// and renamed, and the history must still read the way it happened. Hand-written CHECK
+/// constraints in the migration keep each kind's columns consistent.
+model MembershipTypeChange {
+  id           String                   @id @default(uuid(7)) @db.Uuid
+  clubId       String                   @db.Uuid
+  kind         MembershipTypeChangeKind
+  /// Set exactly on MEMBER_TYPE_CHANGED: whose type changed.
+  membershipId String?                  @db.Uuid
+  /// Set exactly on MEMBER_TYPE_CHANGED.
+  source       MemberTypeChangeSource?
+  /// The type's name before the change (null on TYPE_CREATED).
+  previousName String?
+  /// The type's name after the change: the new type, the new name, or, on TYPE_DELETED, the type
+  /// its members were moved to (null when there were none to move).
+  newName      String?
+  /// Set exactly on TYPE_DELETED: how many memberships were moved.
+  movedMembers Int?
+  /// Who made the change. A full admin need not be a member of the club.
+  changedById  String                   @db.Uuid
+  createdAt    DateTime                 @default(now())
+
+  club       Club        @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  /// Composite FK: the membership is in this club. Skipped by Postgres when membershipId is null.
+  membership Membership? @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
+  changedBy  User        @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@index([clubId, createdAt])
   @@index([membershipId, createdAt])

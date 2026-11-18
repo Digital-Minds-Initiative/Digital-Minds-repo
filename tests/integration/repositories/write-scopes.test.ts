@@ -35,6 +35,7 @@ import {
   saveImportedMembers,
   saveMemberExport,
   saveNewMember,
+  type TypeChangeRecorder,
 } from '@/server/modules/members/repository';
 import {
   cancelTransactionWithRevision,
@@ -51,6 +52,9 @@ import { expectConflict, expectNotFound } from '@tests/utils/assertions';
  * service tests cannot tell whether a write applies the scope itself. These tests call each write
  * directly with club B's scopes against club A rows and prove that nothing changed.
  */
+/** The writes take a recorder for type changes; these tests check the writes' own scopes. */
+const noHistory: TypeChangeRecorder = () => Promise.resolve();
+
 describe('repository writes apply the scope themselves', () => {
   let s: Scenario;
   let officerB: Actor;
@@ -78,7 +82,14 @@ describe('repository writes apply the scope themselves', () => {
     const id = s.memberships.memberA1;
     await expectNotFound(saveMemberChanges(scope, id, { fullName: 'اسم من نادٍ آخر' }));
     await expectNotFound(saveMemberChanges(scope, id, { phone: '+966500009999' }));
-    await expectNotFound(saveMemberChanges(scope, id, { membershipTypeId: s.types.a2 }));
+    await expectNotFound(
+      saveMemberChanges(
+        scope,
+        id,
+        { membershipTypeId: s.types.a2 },
+        { recordTypeChanges: noHistory },
+      ),
+    );
     expect(await memberA1()).toEqual(before);
   });
 
@@ -175,21 +186,29 @@ describe('repository writes apply the scope themselves', () => {
     };
 
     // A club outside the scope.
-    await expectNotFound(saveNewMember(officerBScopes, { ...newPerson, committeeIds: [] }));
+    await expectNotFound(
+      saveNewMember(officerBScopes, { ...newPerson, committeeIds: [] }, noHistory),
+    );
     // The lead's club, but a committee the lead does not lead.
-    await expectNotFound(saveNewMember(lead, { ...newPerson, committeeIds: [s.committees.a2.id] }));
+    await expectNotFound(
+      saveNewMember(lead, { ...newPerson, committeeIds: [s.committees.a2.id] }, noHistory),
+    );
     // A removed membership in the lead's club: restoring it is a write, so it goes through the
     // scope — the lead cannot see a member who is in no committee of theirs.
     const removed = await db.membership.findUniqueOrThrow({
       where: { id: s.memberships.removedOfficer },
     });
     await expectNotFound(
-      saveNewMember(lead, {
-        ...newPerson,
-        person: { uniEmail: s.users.removedOfficer.uniEmail, fullName: 'مدير شؤون سابق' },
-        existing: { userId: removed.userId },
-        committeeIds: [s.committees.a1.id],
-      }),
+      saveNewMember(
+        lead,
+        {
+          ...newPerson,
+          person: { uniEmail: s.users.removedOfficer.uniEmail, fullName: 'مدير شؤون سابق' },
+          existing: { userId: removed.userId },
+          committeeIds: [s.committees.a1.id],
+        },
+        noHistory,
+      ),
     );
     expect(
       await db.membership.findUniqueOrThrow({ where: { id: s.memberships.removedOfficer } }),
@@ -200,15 +219,19 @@ describe('repository writes apply the scope themselves', () => {
       where: { id: s.memberships.memberA2 },
     });
     await expectConflict(
-      saveNewMember(lead, {
-        ...newPerson,
-        person: {
-          uniEmail: s.users.memberA2.uniEmail,
-          fullName: s.users.memberA2.fullName,
+      saveNewMember(
+        lead,
+        {
+          ...newPerson,
+          person: {
+            uniEmail: s.users.memberA2.uniEmail,
+            fullName: s.users.memberA2.fullName,
+          },
+          existing: { userId: memberA2.userId },
+          committeeIds: [s.committees.a1.id],
         },
-        existing: { userId: memberA2.userId },
-        committeeIds: [s.committees.a1.id],
-      }),
+        noHistory,
+      ),
       'already_in_club',
     );
 
@@ -246,21 +269,26 @@ describe('repository writes apply the scope themselves', () => {
           admission: memberAdmissionScope(officerB),
         },
         input,
+        noHistory,
       ),
     );
     // The lead's club, but a committee they do not lead.
     await expectNotFound(
-      saveAdmittedMember(leadScopes, { ...input, committeeId: s.committees.a2.id }),
+      saveAdmittedMember(leadScopes, { ...input, committeeId: s.committees.a2.id }, noHistory),
     );
     // The club and the committee pass, but the membership is checked through the admission scope
     // itself: one from another club reaches neither a removed member nor an active one.
     const outsideAdmission = { ...leadScopes, admission: memberAdmissionScope(officerB) };
     for (const person of [s.users.removedOfficer, s.users.memberA2]) {
       await expectNotFound(
-        saveAdmittedMember(outsideAdmission, {
-          ...input,
-          person: { uniEmail: person.uniEmail, fullName: person.fullName },
-        }),
+        saveAdmittedMember(
+          outsideAdmission,
+          {
+            ...input,
+            person: { uniEmail: person.uniEmail, fullName: person.fullName },
+          },
+          noHistory,
+        ),
       );
     }
 
@@ -305,6 +333,7 @@ describe('repository writes apply the scope themselves', () => {
         officerBScopes,
         { clubId: s.clubA.id, adds: [add], restores: [], joins: [] },
         always,
+        noHistory,
       ),
     );
     // The lead's own club, but a committee they do not lead.
@@ -318,6 +347,7 @@ describe('repository writes apply the scope themselves', () => {
           joins: [],
         },
         always,
+        noHistory,
       ),
     );
     // Restoring is a write, so it goes through the members scope: the lead cannot see a member
@@ -327,6 +357,7 @@ describe('repository writes apply the scope themselves', () => {
         lead,
         { clubId: s.clubA.id, adds: [], restores: [restore], joins: [] },
         always,
+        noHistory,
       ),
       'import_changed',
     );
@@ -344,6 +375,7 @@ describe('repository writes apply the scope themselves', () => {
         officerBScopes,
         { clubId: s.clubA.id, adds: [], restores: [], joins: [join] },
         always,
+        noHistory,
       ),
     );
     await expectNotFound(
@@ -356,6 +388,7 @@ describe('repository writes apply the scope themselves', () => {
           joins: [{ membershipId: s.memberships.memberA1, committeeIds: [s.committees.a2.id] }],
         },
         always,
+        noHistory,
       ),
     );
     await expectConflict(
@@ -363,6 +396,7 @@ describe('repository writes apply the scope themselves', () => {
         lead,
         { clubId: s.clubA.id, adds: [], restores: [], joins: [join] },
         always,
+        noHistory,
       ),
       'import_changed',
     );
@@ -380,6 +414,7 @@ describe('repository writes apply the scope themselves', () => {
         },
         { clubId: s.clubA.id, adds: [add], restores: [], joins: [] },
         () => Promise.resolve(false),
+        noHistory,
       ),
       'import_changed',
     );
@@ -537,17 +572,31 @@ describe('repository writes apply the scope themselves', () => {
 
     it('insertMembershipType, updateMembershipTypeName and deleteMembershipType', async () => {
       const before = await typesOfA();
-      await expectNotFound(insertMembershipType(clubsScope(officerB), s.clubA.id, 'نوع مدسوس'));
+      const history = await db.membershipTypeChange.count();
+      const changedById = officerB.userId;
       await expectNotFound(
-        updateMembershipTypeName(membershipTypesScope(officerB), s.types.a2, 'اسم آخر'),
+        insertMembershipType(clubsScope(officerB), {
+          clubId: s.clubA.id,
+          name: 'نوع مدسوس',
+          changedById,
+        }),
+      );
+      await expectNotFound(
+        updateMembershipTypeName(membershipTypesScope(officerB), {
+          membershipTypeId: s.types.a2,
+          name: 'اسم آخر',
+          changedById,
+        }),
       );
       await expectNotFound(
         deleteMembershipType(
           { membershipTypes: membershipTypesScope(officerB), members: membersScope(officerB) },
-          { membershipTypeId: s.types.a2, clubId: s.clubA.id, moveMembersTo: null },
+          { membershipTypeId: s.types.a2, clubId: s.clubA.id, moveMembersTo: null, changedById },
         ),
       );
       expect(await typesOfA()).toEqual(before);
+      // Nothing recorded either: the history row is written in the transaction that was refused.
+      expect(await db.membershipTypeChange.count()).toBe(history);
     });
 
     it('deleteMembershipType refuses a move target outside the scope', async () => {
@@ -561,7 +610,12 @@ describe('repository writes apply the scope themselves', () => {
       await expectNotFound(
         deleteMembershipType(
           { membershipTypes: membershipTypesScope(officerB), members: membersScope(officerB) },
-          { membershipTypeId: s.types.a, clubId: s.clubA.id, moveMembersTo: s.types.a2 },
+          {
+            membershipTypeId: s.types.a,
+            clubId: s.clubA.id,
+            moveMembersTo: s.types.a2,
+            changedById: officerB.userId,
+          },
         ),
       );
       expect(await typesOfA()).toEqual(before);

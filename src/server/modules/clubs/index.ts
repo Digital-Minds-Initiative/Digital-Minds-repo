@@ -9,9 +9,11 @@ export {
   deleteMembershipType,
   listAccessibleClubs,
   listAccessibleCommittees,
+  listClubMembershipTypeHistory,
   listClubs,
   listCommittees,
   listMembershipTypes,
+  listMemberTypeHistory,
   reorderMembershipTypes,
   restoreClub,
   restoreCommittee,
@@ -38,8 +40,14 @@ export {
 export {
   deleteClubTree,
   deleteCommitteeRow,
+  deleteMembershipTypeChanges,
   findClubForDeletion,
   findCommitteeForDeletion,
   lockClub,
   lockCommittee,
 } from './repository';
+/*
+ * The type history is this module's table; the members module records the type changes its own
+ * writes make through this, with its transaction client (docs/adr/0031-membership-type-history.md).
+ */
+export { recordMemberTypeChanges } from './repository';

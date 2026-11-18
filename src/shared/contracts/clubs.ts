@@ -24,6 +24,8 @@ import {
  *   create / renew / turn off a view link .............. that committee's lead, its club's
  *                                                        officers, full admins
  *   read a committee's view link ....................... the same three (to copy and share it)
+ *   read the membership-type history ................... anyone who sees the club or the member,
+ *                                                        each only their scope's part (ADR 0031)
  *
  * Clubs and committees are never deleted — members and points history depend on them. They are
  * archived instead: hidden from lists by default, closed to new members, committee memberships
@@ -324,6 +326,93 @@ export const reorderMembershipTypesEndpoint = defineEndpoint({
   params: clubParamsSchema,
   body: reorderMembershipTypesBodySchema,
   response: z.object({ items: z.array(membershipTypeSchema) }),
+});
+
+// ─── Membership-type history ─────────────────────────────────
+// Who added, renamed and deleted a club's types, and who changed whose type from what to what
+// (docs/adr/0031-membership-type-history.md). Append-only; type names are as they were at the
+// time, since types are renamed and deleted. Reordering and a new member's first type are not
+// recorded, and neither is anything that changed nothing.
+//
+// Every reader gets the part of it in their scope, never a 403: full admins everything, a club's
+// officers all of their club, a committee lead only the type changes of members currently in a
+// committee they lead — never the rows about the types themselves.
+
+/** How a member's type changed: an edit, a restore with another type, or its type deleted. */
+export const memberTypeChangeSourceSchema = z.enum(['EDIT', 'RESTORE', 'TYPE_DELETED']);
+export type MemberTypeChangeSource = z.infer<typeof memberTypeChangeSourceSchema>;
+
+const typeChangeBaseShape = {
+  id: idSchema,
+  clubId: idSchema,
+  /**
+   * Who made the change. A full admin need not be a member of the club, so this is an account.
+   * `fullName` is null once that person's data was deleted (ADR 0026); the UI shows «عضو محذوف».
+   */
+  changedBy: z.object({ userId: idSchema, fullName: z.string().nullable() }),
+  createdAt: isoDateTimeSchema,
+};
+
+export const membershipTypeChangeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ ...typeChangeBaseShape, kind: z.literal('TYPE_CREATED'), name: z.string() }),
+  z.strictObject({
+    ...typeChangeBaseShape,
+    kind: z.literal('TYPE_RENAMED'),
+    previousName: z.string(),
+    newName: z.string(),
+  }),
+  z.strictObject({
+    ...typeChangeBaseShape,
+    kind: z.literal('TYPE_DELETED'),
+    name: z.string(),
+    /** Memberships (removed ones included) moved to `movedTo` before the type was deleted. */
+    movedMembers: z.number().int().min(0),
+    /** The type they were moved to; null when there were none to move. */
+    movedTo: z.string().nullable(),
+  }),
+  z.strictObject({
+    ...typeChangeBaseShape,
+    kind: z.literal('MEMBER_TYPE_CHANGED'),
+    /** Whose type changed — the same id the members endpoints use. */
+    member: z.object({ memberId: idSchema, fullName: z.string() }),
+    source: memberTypeChangeSourceSchema,
+    previousType: z.string(),
+    newType: z.string(),
+  }),
+]);
+export type MembershipTypeChange = z.infer<typeof membershipTypeChangeSchema>;
+
+export const membershipTypeHistoryQuerySchema = z.object({ ...paginationShape });
+export type MembershipTypeHistoryQuery = z.output<typeof membershipTypeHistoryQuerySchema>;
+
+export const membershipTypeHistoryResponseSchema = paginated(membershipTypeChangeSchema);
+export type MembershipTypeHistoryResponse = z.infer<typeof membershipTypeHistoryResponseSchema>;
+
+/**
+ * A club's history, newest first: anyone who can see the club, each limited to their scope (a
+ * club outside it is 404). Members moved by a type deletion are summed up by that deletion's row,
+ * so they are not listed one by one here — each member's own history has them.
+ */
+export const listClubMembershipTypeHistoryEndpoint = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/clubs/:clubId/membership-type-history',
+  access: 'actor',
+  params: clubParamsSchema,
+  query: membershipTypeHistoryQuerySchema,
+  response: membershipTypeHistoryResponseSchema,
+});
+
+/**
+ * One member's type changes, newest first, every source included. Anyone who can see the member
+ * (404 otherwise); a removed member's history stays readable to their club's officers.
+ */
+export const listMemberTypeHistoryEndpoint = defineEndpoint({
+  method: 'GET',
+  path: '/api/v1/members/:memberId/membership-type-history',
+  access: 'actor',
+  params: z.object({ memberId: idSchema }),
+  query: membershipTypeHistoryQuerySchema,
+  response: membershipTypeHistoryResponseSchema,
 });
 
 // ─── Committee view-only link ────────────────────────────────

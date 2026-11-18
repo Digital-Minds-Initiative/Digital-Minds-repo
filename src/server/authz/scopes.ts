@@ -24,6 +24,7 @@ export type CommitteeMembershipScope = Scope<Prisma.CommitteeMembershipWhereInpu
 export type PointTransactionScope = Scope<Prisma.PointTransactionWhereInput>;
 export type RoleChangeScope = Scope<Prisma.RoleChangeWhereInput>;
 export type RoleInvitationScope = Scope<Prisma.RoleInvitationWhereInput>;
+export type MembershipTypeChangeScope = Scope<Prisma.MembershipTypeChangeWhereInput>;
 
 declare const admissionBrand: unique symbol;
 
@@ -165,6 +166,31 @@ export function roleInvitationsScope(actor: Actor): RoleInvitationScope {
   if (actor.isFullAdmin) return scope({});
   const clubIds = officerClubIds(actor);
   return scope(clubIds.length > 0 ? { clubId: { in: clubIds } } : noRows());
+}
+
+/**
+ * Membership-type history the actor may read (docs/adr/0031-membership-type-history.md): full
+ * admins everywhere, officers every row of their clubs, and a lead only the type changes of
+ * members currently in a committee they lead — the members `membersScope` gives them. A lead never
+ * matches a row about the types themselves (added, renamed, deleted), which are the officers'.
+ */
+export function membershipTypeChangesScope(actor: Actor): MembershipTypeChangeScope {
+  if (actor.isFullAdmin) return scope({});
+  const conditions: Prisma.MembershipTypeChangeWhereInput[] = [];
+  const clubIds = officerClubIds(actor);
+  if (clubIds.length > 0) conditions.push({ clubId: { in: clubIds } });
+  const committeeIds = ledCommitteeIds(actor);
+  if (committeeIds.length > 0) {
+    conditions.push({
+      kind: 'MEMBER_TYPE_CHANGED',
+      membership: {
+        is: {
+          committeeMemberships: { some: { committeeId: { in: committeeIds }, removedAt: null } },
+        },
+      },
+    });
+  }
+  return scope(conditions.length > 0 ? { OR: conditions } : noRows());
 }
 
 /** Point transactions the actor may read and manage (uses the denormalised club/committee ids). */

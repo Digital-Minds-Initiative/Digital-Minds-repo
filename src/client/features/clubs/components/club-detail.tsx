@@ -24,6 +24,7 @@ import type { Club } from '@/shared/contracts/clubs';
 
 import { CommitteesPanel } from './committees-panel';
 import { EntityFormDialog } from './entity-form-dialog';
+import { MembershipTypeHistoryPanel } from './membership-type-history-panel';
 import { MembershipTypesPanel } from './membership-types-panel';
 import {
   useClubDeletionPreview,
@@ -45,7 +46,8 @@ interface ClubDetailProps {
 
 /**
  * One club: a header card with its identity and three numbers, joined underneath to a control bar
- * that holds the two tabs and the "show archived" switch, then the tab's content. The numbers are
+ * that holds the tabs (committees, membership types, and the type history) and the "show
+ * archived" switch, then the tab's content. The numbers are
  * read from the same lists the tabs show, limited by the server to what the person may see — a
  * committee lead's member count is the members of their own committees.
  */
@@ -142,6 +144,7 @@ export function ClubDetail({
           <TabsList>
             <TabsTrigger value="committees">{t('tabs.committees')}</TabsTrigger>
             <TabsTrigger value="types">{t('tabs.types')}</TabsTrigger>
+            <TabsTrigger value="history">{t('tabs.history')}</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-2">
             <Switch
@@ -159,6 +162,9 @@ export function ClubDetail({
       </TabsContent>
       <TabsContent value="types" className="pt-5">
         <MembershipTypesPanel club={club} access={access} />
+      </TabsContent>
+      <TabsContent value="history" className="pt-5">
+        <MembershipTypeHistoryPanel club={club} access={access} />
       </TabsContent>
 
       <EntityFormDialog

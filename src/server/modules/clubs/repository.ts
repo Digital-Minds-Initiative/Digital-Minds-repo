@@ -3,7 +3,9 @@ import 'server-only';
 import type {
   ClubScope,
   CommitteeScope,
+  MemberAdmissionScope,
   MemberScope,
+  MembershipTypeChangeScope,
   MembershipTypeScope,
   PointTransactionScope,
 } from '@/server/authz';
@@ -351,11 +353,12 @@ async function lockMembershipTypes(tx: TransactionClient, clubId: string): Promi
 }
 
 /** Appended at the end of the club's order. */
+/** Appended at the end of the club's order, and recorded in the type history. */
 export async function insertMembershipType(
   scope: ClubScope,
-  clubId: string,
-  name: string,
+  input: { clubId: string; name: string; changedById: string },
 ): Promise<MembershipTypeRow> {
+  const { clubId, name, changedById } = input;
   return db.$transaction(async (tx) => {
     const club = await tx.club.count({ where: { AND: [scope, { id: clubId }] } });
     if (club !== 1) throw new NotFoundError('Club');
@@ -365,26 +368,62 @@ export async function insertMembershipType(
       where: { clubId },
       _max: { order: true },
     });
-    return tx.membershipType.create({
+    const row = await tx.membershipType.create({
       data: { clubId, name, order: _max.order === null ? 0 : _max.order + 1 },
       select: membershipTypeSelect,
     });
+    await tx.membershipTypeChange.create({
+      data: { clubId, kind: 'TYPE_CREATED', newName: name, changedById },
+      select: { id: true },
+    });
+    return row;
   });
 }
 
+/**
+ * Renames the type and records it, in one transaction with the type's row locked: the name it
+ * held is read under the lock, so two renames at once each record the name they really replaced.
+ * The name it already has is not a change — nothing is written and nothing recorded.
+ */
 export async function updateMembershipTypeName(
   scope: MembershipTypeScope,
-  membershipTypeId: string,
-  name: string,
+  input: { membershipTypeId: string; name: string; changedById: string },
 ): Promise<MembershipTypeRow> {
-  const { count } = await db.membershipType.updateMany({
-    where: { AND: [scope, { id: membershipTypeId }] },
-    data: { name },
+  const { membershipTypeId, name, changedById } = input;
+  return db.$transaction(async (tx) => {
+    const reachable = await tx.membershipType.count({
+      where: { AND: [scope, { id: membershipTypeId }] },
+    });
+    if (reachable !== 1) throw new NotFoundError('Membership type');
+    const [before] = await tx.$queryRaw<Array<{ name: string; clubId: string }>>`
+      SELECT "name", "clubId" FROM "MembershipType" WHERE "id" = ${membershipTypeId}::uuid FOR UPDATE
+    `;
+    if (!before) throw new NotFoundError('Membership type');
+
+    if (before.name !== name) {
+      const { count } = await tx.membershipType.updateMany({
+        where: { AND: [scope, { id: membershipTypeId }] },
+        data: { name },
+      });
+      if (count !== 1) throw new NotFoundError('Membership type');
+      await tx.membershipTypeChange.create({
+        data: {
+          clubId: before.clubId,
+          kind: 'TYPE_RENAMED',
+          previousName: before.name,
+          newName: name,
+          changedById,
+        },
+        select: { id: true },
+      });
+    }
+    const row = await tx.membershipType.findFirst({
+      where: { AND: [scope, { id: membershipTypeId }] },
+      select: membershipTypeSelect,
+    });
+    if (!row) throw new NotFoundError('Membership type');
+    return row;
   });
-  if (count !== 1) throw new NotFoundError('Membership type');
-  const row = await findMembershipType(scope, membershipTypeId);
-  if (!row) throw new NotFoundError('Membership type');
-  return row;
 }
 
 /**
@@ -395,7 +434,12 @@ export async function updateMembershipTypeName(
  */
 export async function deleteMembershipType(
   scopes: { membershipTypes: MembershipTypeScope; members: MemberScope },
-  input: { membershipTypeId: string; clubId: string; moveMembersTo: string | null },
+  input: {
+    membershipTypeId: string;
+    clubId: string;
+    moveMembersTo: string | null;
+    changedById: string;
+  },
 ): Promise<void> {
   await db.$transaction(async (tx) => {
     const ids = [input.membershipTypeId, ...(input.moveMembersTo ? [input.moveMembersTo] : [])];
@@ -413,12 +457,41 @@ export async function deleteMembershipType(
       );
     }
 
+    const names = new Map(
+      (
+        await tx.membershipType.findMany({
+          where: { AND: [scopes.membershipTypes, { id: { in: ids } }] },
+          select: { id: true, name: true },
+        })
+      ).map((type) => [type.id, type.name]),
+    );
+    const deletedName = names.get(input.membershipTypeId);
+    if (deletedName === undefined) throw new NotFoundError('Membership type');
+
+    const movedTo = input.moveMembersTo ? names.get(input.moveMembersTo) : undefined;
+    if (input.moveMembersTo && movedTo === undefined) throw new NotFoundError('Membership type');
+
+    // The types are locked, so no membership can take or leave this type until the transaction
+    // ends (the foreign key check waits on the lock): the ids read here are exactly the ones moved.
+    let moved: string[] = [];
     if (input.moveMembersTo) {
-      await tx.membership.updateMany({
-        where: {
-          AND: [scopes.members, { membershipTypeId: input.membershipTypeId, clubId: input.clubId }],
-        },
-        data: { membershipTypeId: input.moveMembersTo },
+      const where = {
+        AND: [scopes.members, { membershipTypeId: input.membershipTypeId, clubId: input.clubId }],
+      };
+      moved = (await tx.membership.findMany({ where, select: { id: true } })).map((row) => row.id);
+      await tx.membership.updateMany({ where, data: { membershipTypeId: input.moveMembersTo } });
+    }
+    if (moved.length > 0 && movedTo !== undefined) {
+      await tx.membershipTypeChange.createMany({
+        data: moved.map((membershipId) => ({
+          clubId: input.clubId,
+          kind: 'MEMBER_TYPE_CHANGED' as const,
+          membershipId,
+          source: 'TYPE_DELETED' as const,
+          previousName: deletedName,
+          newName: movedTo,
+          changedById: input.changedById,
+        })),
       });
     }
     const left = await tx.membership.count({
@@ -436,6 +509,17 @@ export async function deleteMembershipType(
     });
     if (count !== 1) throw new NotFoundError('Membership type');
     await renumber(tx, scopes.membershipTypes, input.clubId);
+    await tx.membershipTypeChange.create({
+      data: {
+        clubId: input.clubId,
+        kind: 'TYPE_DELETED',
+        previousName: deletedName,
+        newName: moved.length > 0 ? (movedTo ?? null) : null,
+        movedMembers: moved.length,
+        changedById: input.changedById,
+      },
+      select: { id: true },
+    });
   });
 }
 
@@ -493,6 +577,149 @@ async function renumber(
   }
 }
 
+// ─── Membership-type history ─────────────────────────────────
+// docs/adr/0031-membership-type-history.md. This module owns `MembershipTypeChange`; the members
+// module records a member's type change through `recordMemberTypeChanges`, inside its own
+// transaction, and never writes the table itself.
+
+/** One membership whose type a write is about to change, or has just changed. */
+interface MemberTypeChangeInput {
+  membershipId: string;
+  previousTypeId: string;
+  newTypeId: string;
+}
+
+/**
+ * Records the type changes a members-module write made, with that write's transaction client.
+ * Entries whose type did not change are skipped, so a caller may pass every membership it touched.
+ *
+ * The memberships are read again through the caller's scope in this transaction, and both types
+ * must be in the membership's club; the type names are copied as they are now, which is what the
+ * history shows from then on. Returns how many rows were written.
+ */
+export async function recordMemberTypeChanges(
+  tx: TransactionClient,
+  scope: MemberScope | MemberAdmissionScope,
+  input: {
+    changes: readonly MemberTypeChangeInput[];
+    source: 'EDIT' | 'RESTORE';
+    changedById: string;
+  },
+): Promise<number> {
+  const changes = input.changes.filter((change) => change.previousTypeId !== change.newTypeId);
+  if (changes.length === 0) return 0;
+
+  const memberIds = [...new Set(changes.map((change) => change.membershipId))];
+  const memberships = await tx.membership.findMany({
+    where: { AND: [scope, { id: { in: memberIds } }] },
+    select: { id: true, clubId: true },
+  });
+  if (memberships.length !== memberIds.length) throw new NotFoundError('Member');
+  const clubOf = new Map(memberships.map((row) => [row.id, row.clubId]));
+
+  const typeIds = [...new Set(changes.flatMap((c) => [c.previousTypeId, c.newTypeId]))];
+  const types = await tx.membershipType.findMany({
+    where: { id: { in: typeIds }, clubId: { in: [...new Set(clubOf.values())] } },
+    select: { id: true, clubId: true, name: true },
+  });
+  const typeById = new Map(types.map((type) => [type.id, type]));
+
+  const data = changes.map((change) => {
+    const clubId = clubOf.get(change.membershipId);
+    const previous = typeById.get(change.previousTypeId);
+    const next = typeById.get(change.newTypeId);
+    if (!clubId || previous?.clubId !== clubId || next?.clubId !== clubId) {
+      throw new NotFoundError('Membership type');
+    }
+    return {
+      clubId,
+      kind: 'MEMBER_TYPE_CHANGED' as const,
+      membershipId: change.membershipId,
+      source: input.source,
+      previousName: previous.name,
+      newName: next.name,
+      changedById: input.changedById,
+    };
+  });
+  const { count } = await tx.membershipTypeChange.createMany({ data });
+  return count;
+}
+
+const membershipTypeChangeSelect = {
+  id: true,
+  clubId: true,
+  kind: true,
+  source: true,
+  previousName: true,
+  newName: true,
+  movedMembers: true,
+  createdAt: true,
+  membership: { select: { id: true, user: { select: { fullName: true } } } },
+  changedBy: { select: { id: true, fullName: true, deletedAt: true } },
+} satisfies Prisma.MembershipTypeChangeSelect;
+
+export type MembershipTypeChangeRow = Prisma.MembershipTypeChangeGetPayload<{
+  select: typeof membershipTypeChangeSelect;
+}>;
+
+/**
+ * A page of history, newest first: a club's, without the members a type deletion moved (that
+ * deletion's row sums them up), or one membership's, all of it.
+ */
+export async function findMembershipTypeChangesPage(
+  scope: MembershipTypeChangeScope,
+  target: { clubId: string } | { membershipId: string },
+  page: { skip: number; take: number },
+): Promise<{ rows: MembershipTypeChangeRow[]; total: number }> {
+  const filter: Prisma.MembershipTypeChangeWhereInput =
+    'clubId' in target
+      ? {
+          clubId: target.clubId,
+          // `not` alone would also drop the rows whose source is null (every type-level row).
+          OR: [{ source: null }, { source: { not: 'TYPE_DELETED' } }],
+        }
+      : { membershipId: target.membershipId };
+  const where = { AND: [scope, filter] };
+  const [total, rows] = await Promise.all([
+    db.membershipTypeChange.count({ where }),
+    db.membershipTypeChange.findMany({
+      where,
+      select: membershipTypeChangeSelect,
+      // Newest first; the id is UUIDv7, so it breaks ties in the same order.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...page,
+    }),
+  ]);
+  return { rows, total };
+}
+
+/** The membership's id when it is in the scope, removed ones included. */
+export async function findHistoryMember(
+  scope: MemberScope,
+  memberId: string,
+): Promise<{ id: string } | null> {
+  return db.membership.findFirst({
+    where: { AND: [scope, { id: memberId }] },
+    select: { id: true },
+  });
+}
+
+/**
+ * The history about a deleted person's memberships (docs/adr/0026-person-deletion.md): it points
+ * at memberships that will no longer exist. What the person changed for others
+ * (`changedById`) stays, shown as a deleted person.
+ */
+export async function deleteMembershipTypeChanges(
+  tx: TransactionClient,
+  scope: MembershipTypeChangeScope,
+  target: { userId: string },
+): Promise<number> {
+  const { count } = await tx.membershipTypeChange.deleteMany({
+    where: { AND: [scope, { membership: { is: { userId: target.userId } } }] },
+  });
+  return count;
+}
+
 // ─── Deletes (written for the deletions module) ──────────────
 // A full admin may delete an empty club, and any committee (docs/adr/0015-archive-instead-of-delete.md).
 // The deletions module runs the transaction and the rows below the committee belong to other
@@ -533,9 +760,18 @@ export async function lockClub(
  */
 export async function deleteClubTree(
   tx: TransactionClient,
-  scopes: { clubs: ClubScope; committees: CommitteeScope; membershipTypes: MembershipTypeScope },
+  scopes: {
+    clubs: ClubScope;
+    committees: CommitteeScope;
+    membershipTypes: MembershipTypeScope;
+    membershipTypeChanges: MembershipTypeChangeScope;
+  },
   clubId: string,
-): Promise<{ committees: number; membershipTypes: number }> {
+): Promise<{ committees: number; membershipTypes: number; membershipTypeChanges: number }> {
+  // A club that can be deleted never had a membership, so its type history is the types' own.
+  const membershipTypeChanges = await tx.membershipTypeChange.deleteMany({
+    where: { AND: [scopes.membershipTypeChanges, { clubId }] },
+  });
   const committees = await tx.committee.deleteMany({
     where: { AND: [scopes.committees, { clubId }] },
   });
@@ -544,7 +780,11 @@ export async function deleteClubTree(
   });
   const { count } = await tx.club.deleteMany({ where: { AND: [scopes.clubs, { id: clubId }] } });
   if (count !== 1) throw new NotFoundError('Club');
-  return { committees: committees.count, membershipTypes: membershipTypes.count };
+  return {
+    committees: committees.count,
+    membershipTypes: membershipTypes.count,
+    membershipTypeChanges: membershipTypeChanges.count,
+  };
 }
 
 export interface CommitteeForDeletion {

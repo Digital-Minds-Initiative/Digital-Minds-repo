@@ -49,6 +49,7 @@ import {
   type ImportAddWrite,
   type ImportClient,
 } from './repository';
+import { typeChangeRecorder } from './type-history';
 
 /*
  * Importing members from a CSV file (docs/adr/0021-csv-member-import.md), into a whole club or
@@ -172,14 +173,15 @@ async function confirm(
   // committee import has already been held to the rule of adding to that committee.
   if (plan.joins.length > 0 && !target.committee) assertCanAddToCommittee(actor, target.clubId);
 
+  // A committee import may bring in members the importer cannot read yet — someone removed, or
+  // not in this committee — so it writes through the admission scope, while every committee it
+  // writes into is still checked through `committeesScope`.
+  const members = target.committee ? memberAdmissionScope(actor) : membersScope(actor);
   await saveImportedMembers(
     {
       club: clubsScope(actor),
       committees: committeesScope(actor),
-      // A committee import may bring in members the importer cannot read yet — someone removed,
-      // or not in this committee — so it writes through the admission scope, while every
-      // committee it writes into is still checked through `committeesScope`.
-      members: target.committee ? memberAdmissionScope(actor) : membersScope(actor),
+      members,
     },
     {
       clubId: target.clubId,
@@ -188,6 +190,7 @@ async function confirm(
       joins: plan.joins.map(({ membershipId, committeeIds }) => ({ membershipId, committeeIds })),
     },
     async (tx) => (await planFor(actor, target, file.rows, tx)).checksum === body.checksum,
+    typeChangeRecorder(actor, members, 'RESTORE'),
   );
 
   return {

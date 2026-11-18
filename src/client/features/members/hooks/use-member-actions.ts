@@ -1,10 +1,20 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 
 import { meQueryKey } from '@/client/features/auth';
 import { apiClient } from '@/client/lib/api-client';
-import { listCommitteesEndpoint, listMembershipTypesEndpoint } from '@/shared/contracts/clubs';
+import {
+  listCommitteesEndpoint,
+  listMembershipTypesEndpoint,
+  listMemberTypeHistoryEndpoint,
+} from '@/shared/contracts/clubs';
 import { deletePersonEndpoint, type DeletePersonBody } from '@/shared/contracts/deletions';
 import {
   addMemberToCommitteeEndpoint,
@@ -65,15 +75,36 @@ export function useClubCommittees(clubId: string | undefined) {
   });
 }
 
+const TYPE_HISTORY_PAGE_SIZE = 10;
+
+/**
+ * One member's membership-type changes, newest first (docs/adr/0031-membership-type-history.md).
+ * Under the `members` key, so a change to the member — or a type deleted with its members moved,
+ * which refreshes `members` too — reads it again.
+ */
+export function useMemberTypeHistory(memberId: string, page: number) {
+  return useQuery({
+    queryKey: ['members', 'type-history', memberId, page] as const,
+    queryFn: ({ signal }) =>
+      apiClient.request(
+        listMemberTypeHistoryEndpoint,
+        { params: { memberId }, query: { page, pageSize: TYPE_HISTORY_PAGE_SIZE } },
+        { signal },
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
 /**
  * Changing a member changes the table, the member's record, the balances and ledger the points
- * page shows, who the permissions page lists, and — when the person removed or changed is the
- * signed-in one — their own access. All of them are read again.
+ * page shows, who the permissions page lists, the club's membership-type history (an edit or a
+ * restore can change a type), and — when the person removed or changed is the signed-in one —
+ * their own access. All of them are read again.
  */
 function refreshAfterChange(queryClient: QueryClient): Promise<unknown> {
   return Promise.all(
-    [['members'], ['points'], ['permissions'], meQueryKey].map((queryKey) =>
-      queryClient.invalidateQueries({ queryKey }),
+    [['members'], ['points'], ['permissions'], ['clubs', 'type-history'], meQueryKey].map(
+      (queryKey) => queryClient.invalidateQueries({ queryKey }),
     ),
   );
 }

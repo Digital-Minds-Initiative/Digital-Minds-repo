@@ -4,6 +4,7 @@ import {
   findMockActor,
   getMockDb,
   must,
+  setMockMembershipType,
   type MockActor,
   type MockDb,
   type MockMembership,
@@ -139,7 +140,7 @@ export const memberWriteHandlers = [
       membership = existing;
       membership.removedAt = null;
       membership.role = 'MEMBER';
-      membership.typeId = type.id;
+      setMockMembershipType(db, actor, membership, type.id, 'RESTORE');
       membership.profile = profile;
       for (const link of membership.committees) link.role = 'MEMBER';
     } else {
@@ -233,7 +234,7 @@ export const memberWriteHandlers = [
     } else if (membership.removedAt !== null) {
       membership.removedAt = null;
       membership.role = 'MEMBER';
-      membership.typeId = type.id;
+      setMockMembershipType(db, actor, membership, type.id, 'RESTORE');
       membership.profile = profile;
       for (const link of membership.committees) link.role = 'MEMBER';
     }
@@ -332,7 +333,7 @@ export const memberWriteHandlers = [
       if (value === undefined) continue;
       Object.assign(membership.profile, { [key]: value });
     }
-    if (typeChange !== undefined) membership.typeId = typeChange;
+    if (typeChange !== undefined) setMockMembershipType(db, actor, membership, typeChange, 'EDIT');
     return toMemberFixture(db, actor, membership);
   }),
 
@@ -439,6 +440,9 @@ export const memberWriteHandlers = [
       pointBatches: 0,
       roleChanges: db.roleChanges.filter((c) => theirs.has(c.membershipId)).length,
       roleInvitations: 0,
+      membershipTypeChanges: db.membershipTypeChanges.filter(
+        (c) => c.membershipId !== null && theirs.has(c.membershipId),
+      ).length,
       sessions: 0,
     };
     db.transactions.splice(
@@ -450,6 +454,13 @@ export const memberWriteHandlers = [
       0,
       db.roleChanges.length,
       ...db.roleChanges.filter((c) => !theirs.has(c.membershipId)),
+    );
+    db.membershipTypeChanges.splice(
+      0,
+      db.membershipTypeChanges.length,
+      ...db.membershipTypeChanges.filter(
+        (c) => c.membershipId === null || !theirs.has(c.membershipId),
+      ),
     );
     db.memberships.splice(
       0,

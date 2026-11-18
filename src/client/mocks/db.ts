@@ -115,6 +115,23 @@ interface MockRoleChange {
   createdAt: string;
 }
 
+/**
+ * One row of membership-type history (docs/adr/0031-membership-type-history.md), shaped like the
+ * table: names as they were at the time, a membership only on a member row.
+ */
+export interface MockMembershipTypeChange {
+  id: string;
+  clubId: string;
+  kind: 'TYPE_CREATED' | 'TYPE_RENAMED' | 'TYPE_DELETED' | 'MEMBER_TYPE_CHANGED';
+  membershipId: string | null;
+  source: 'EDIT' | 'RESTORE' | 'TYPE_DELETED' | null;
+  previousName: string | null;
+  newName: string | null;
+  movedMembers: number | null;
+  changedById: string;
+  createdAt: string;
+}
+
 /** One invitation email that was "sent" (docs/adr/0027-invite-only-sign-in.md). */
 interface MockRoleInvitation {
   clubId: string;
@@ -143,6 +160,8 @@ export interface MockDb {
   roleChanges: MockRoleChange[];
   /** Invitation emails, oldest first. Starts empty. */
   roleInvitations: MockRoleInvitation[];
+  /** Membership-type history, oldest first. Starts empty, like a freshly seeded database. */
+  membershipTypeChanges: MockMembershipTypeChange[];
   /** Bulk-points batches a client has submitted, by the key it sent (docs/adr/0022-bulk-points.md). */
   pointBatches: Map<string, MockPointBatch>;
   usersById: Map<string, MockUser>;
@@ -283,6 +302,7 @@ export function buildMockDb(today: string): MockDb {
     transactions,
     roleChanges: [],
     roleInvitations: [],
+    membershipTypeChanges: [],
     pointBatches: new Map(),
     usersById: new Map(users.map((user) => [user.id, user])),
     clubsById: new Map(clubs.map((club) => [club.id, club])),
@@ -339,6 +359,46 @@ export function canManageClub(actor: MockActor, clubId: string): boolean {
 
 export function canSeeCommittee(actor: MockActor, clubId: string, committeeId: string): boolean {
   return canManageClub(actor, clubId) || actor.ledCommitteeIds.includes(committeeId);
+}
+
+/** Appends a history row, as the server writes one in the same transaction as the change. */
+export function recordMockTypeChange(
+  db: MockDb,
+  actor: MockActor,
+  change: Omit<MockMembershipTypeChange, 'id' | 'changedById' | 'createdAt'>,
+): void {
+  db.membershipTypeChanges.push({
+    id: crypto.randomUUID(),
+    changedById: actor.user.id,
+    createdAt: new Date().toISOString(),
+    ...change,
+  });
+}
+
+/**
+ * Sets a membership's type and records it when it really changes, the way the members module's
+ * writes do (an edit, or a restore with another type).
+ */
+export function setMockMembershipType(
+  db: MockDb,
+  actor: MockActor,
+  membership: MockMembership,
+  typeId: string,
+  source: 'EDIT' | 'RESTORE',
+): void {
+  if (membership.typeId === typeId) return;
+  const previous = must(db.membershipTypesById.get(membership.typeId), 'membership type');
+  const next = must(db.membershipTypesById.get(typeId), 'membership type');
+  membership.typeId = typeId;
+  recordMockTypeChange(db, actor, {
+    clubId: membership.clubId,
+    kind: 'MEMBER_TYPE_CHANGED',
+    membershipId: membership.id,
+    source,
+    previousName: previous.name,
+    newName: next.name,
+    movedMembers: null,
+  });
 }
 
 export function canSeeMembership(actor: MockActor, membership: MockMembership): boolean {

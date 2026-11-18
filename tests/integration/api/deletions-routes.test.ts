@@ -87,6 +87,7 @@ describe('deletion routes', () => {
         membershipTypes: 1,
         memberExports: 0,
         pointBatches: 0,
+        membershipTypeChanges: 0,
       });
     });
   });

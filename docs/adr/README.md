@@ -34,6 +34,7 @@ Short records of decisions that shape the codebase: the context, what we decided
 | [0028](0028-hosting-and-deploys.md)               | Vercel and Neon in Frankfurt, deployed only from GitHub Actions                     | Accepted                               |
 | [0029](0029-leads-add-members.md)                 | Committee leads bring people into their own committee                               | Accepted (amends 0017, 0021)           |
 | [0030](0030-personal-email-domains.md)            | Gmail and Outlook next to the university domains, stricter rules for them           | Accepted (amends 0003, 0014)           |
+| [0031](0031-membership-type-history.md)           | Membership-type history: who changed which type, scoped per reader                  | Accepted (amends 0016, 0026)           |
 
 ## Writing a new ADR
 

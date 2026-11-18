@@ -2,6 +2,8 @@ import {
   canManageClub,
   getMockDb,
   findMockActor,
+  must,
+  setMockMembershipType,
   type MockActor,
   type MockCommittee,
   type MockDb,
@@ -128,6 +130,8 @@ function confirm(
   if (plan.checksum !== body.checksum) return conflict('import_changed');
 
   const db = getMockDb();
+  // `planOrError` has already turned away a request without an actor.
+  const actor = must(findMockActor(db, cookies[DEV_ACTOR_COOKIE]) ?? undefined, 'actor');
   let added = 0;
   let restored = 0;
   let joined = 0;
@@ -137,7 +141,7 @@ function confirm(
       joined += 1;
     }
     if (!row.write) continue;
-    apply(db, clubId, row.write);
+    apply(db, actor, clubId, row.write);
     if (row.status === 'restore') restored += 1;
     else added += 1;
   }
@@ -443,7 +447,12 @@ function toContractRow(row: MockImportRow): MemberImportRow {
 }
 
 /** Writes one planned row into the mock database, restoring a removed membership in place. */
-function apply(db: MockDb, clubId: string, write: NonNullable<MockImportRow['write']>): void {
+function apply(
+  db: MockDb,
+  actor: MockActor,
+  clubId: string,
+  write: NonNullable<MockImportRow['write']>,
+): void {
   let user = db.users.find((candidate) => candidate.uniEmail === write.uniEmail);
   if (!user) {
     user = {
@@ -466,7 +475,7 @@ function apply(db: MockDb, clubId: string, write: NonNullable<MockImportRow['wri
     // The same row comes back, so its committees and their points return with it; roles reset.
     membership.removedAt = null;
     membership.role = 'MEMBER';
-    membership.typeId = write.typeId;
+    setMockMembershipType(db, actor, membership, write.typeId, 'RESTORE');
     // An empty cell leaves what the club already has, as on the server (ADR 0021).
     membership.profile = {
       ...membership.profile,

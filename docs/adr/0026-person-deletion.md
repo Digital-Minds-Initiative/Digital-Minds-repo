@@ -2,6 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-24
+- Amended by: [ADR 0031](0031-membership-type-history.md) — the membership-type history about
+  them goes too
 - Amends: [ADR 0003](0003-data-model.md) (the "Users are never deleted" bullet becomes this),
   [ADR 0004](0004-points-ledger.md) / [ADR 0019](0019-points-rules.md) (transactions on a
   deleted person go with them), [ADR 0018](0018-granting-roles.md) (role history about them goes)
