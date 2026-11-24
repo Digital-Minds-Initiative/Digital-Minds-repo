@@ -249,6 +249,13 @@ describe('the page the QR opens', () => {
     expect(page.monthly).toHaveLength(6);
   });
 
+  it('opens a link that was printed before this browser ever listed the card', async () => {
+    const link = tokenOf(await onlyCard(LAMA));
+    // A fresh page load: the mock has forgotten every card, but the first link is still the first link.
+    resetMockDb();
+    expect((await call('GET', `/api/v1/public/cards/${link}`, null)).status).toBe(200);
+  });
+
   it('never carries a contact detail or an id someone could act on', async () => {
     const card = await onlyCard(LAMA);
     const text = await (await call('GET', `/api/v1/public/cards/${tokenOf(card)}`, null)).text();

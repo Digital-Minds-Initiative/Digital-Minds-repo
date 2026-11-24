@@ -57,7 +57,6 @@ describe('the page a QR opens', () => {
     const token = await tokenOf(LAMA);
     const { container } = renderWithProviders(<PublicCardPage token={token} />);
     const page = await screen.findByRole('article', { name: 'لمى عبدالعزيز السبيعي' });
-    expect(within(page).getByText('عضو موثّق')).toBeTruthy();
     expect(within(page).getByText('مستفيد')).toBeTruthy();
     expect(within(page).getByRole('region', { name: 'النقاط' })).toBeTruthy();
     // Six columns of cells, one for each month.

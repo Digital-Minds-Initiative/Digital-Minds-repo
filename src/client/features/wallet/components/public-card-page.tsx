@@ -111,7 +111,6 @@ export function PublicCardPage({ token }: { token: string }) {
 
   const card = data;
   const theme = badgeThemeFor({ mood: card.mood, tone: card.tone });
-  const matte = card.tone === 'matte';
 
   return (
     <article
@@ -123,7 +122,7 @@ export function PublicCardPage({ token }: { token: string }) {
         boxShadow: `inset 0 0 0 1px ${theme.ring}`,
       }}
     >
-      <div className="flex items-center justify-between gap-3" dir="ltr">
+      <div className="flex items-center gap-3" dir="ltr">
         <span className="flex items-center gap-2.5">
           <span
             aria-hidden
@@ -131,21 +130,6 @@ export function PublicCardPage({ token }: { token: string }) {
             style={{ ...MARK_MASK_STYLE, background: theme.mark }}
           />
           <span className="font-mono text-sm font-medium">Digital Minds</span>
-        </span>
-        <span
-          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-          dir="rtl"
-          style={{
-            boxShadow: `inset 0 0 0 1px ${theme.ring}`,
-            color: matte ? theme.accent : theme.accent,
-          }}
-        >
-          <span
-            aria-hidden
-            className="size-1.5 rounded-[1px]"
-            style={{ background: theme.accent }}
-          />
-          {t('verified')}
         </span>
       </div>
 

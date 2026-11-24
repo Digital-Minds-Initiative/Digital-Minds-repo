@@ -100,8 +100,9 @@ function tokenFor(membershipId: string, version: number): string {
 
 function membershipByToken(db: MockDb, token: string): MockMembership | null {
   for (const membership of db.memberships) {
-    const state = storeFor(db).cards.get(membership.id);
-    if (state && tokenFor(membership.id, state.tokenVersion) === token) return membership;
+    // A card nobody has listed yet still has its first link, as a real one is made on first use.
+    const version = storeFor(db).cards.get(membership.id)?.tokenVersion ?? 0;
+    if (tokenFor(membership.id, version) === token) return membership;
   }
   return null;
 }
