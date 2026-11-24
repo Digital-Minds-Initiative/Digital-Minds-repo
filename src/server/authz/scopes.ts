@@ -178,6 +178,36 @@ export function pointTransactionsScope(actor: Actor): PointTransactionScope {
   return scope(conditions.length > 0 ? { OR: conditions } : noRows());
 }
 
+/**
+ * The actor's own club memberships, and nothing else: what a member card is made from. It is the
+ * ids the actor was loaded with, so a removed membership is never in it — and it reaches no other
+ * person, whatever roles the actor holds (docs/adr/0031-wallet-pass.md).
+ */
+export function ownMembershipsScope(actor: Actor): MemberScope {
+  const ids = actor.memberships.map((membership) => membership.membershipId);
+  return scope(ids.length > 0 ? { id: { in: ids } } : noRows());
+}
+
+/** Point transactions recorded on the actor's own memberships: their own balance, never anyone's. */
+export function ownPointTransactionsScope(actor: Actor): PointTransactionScope {
+  const ids = actor.memberships.map((membership) => membership.membershipId);
+  return scope(ids.length > 0 ? { committeeMembership: { membershipId: { in: ids } } } : noRows());
+}
+
+/**
+ * The membership a card link opens, and the points recorded on it: what the page behind a
+ * member's QR may read (docs/adr/0032-card-link-and-stickers.md). Holding the link is the whole
+ * permission, so like the committee view's scopes these take an id and trust the caller to have
+ * proved the token. A membership that was removed is out of scope: its card goes quiet.
+ */
+export function cardLinkMemberScope(membershipId: string): MemberScope {
+  return scope({ id: membershipId, removedAt: null });
+}
+
+export function cardLinkPointsScope(membershipId: string): PointTransactionScope {
+  return scope({ committeeMembership: { membershipId } });
+}
+
 /*
  * ─── Scopes granted by a capability token ───────────────────
  *

@@ -40,6 +40,12 @@ enum GrantableRole {
   LEAD
 }
 
+/// Which badge a member chose for their card, when they chose one (null: the role decides).
+enum CardTone {
+  PAPER
+  MATTE
+}
+
 enum PointTransactionStatus {
   ACTIVE
   CANCELLED
@@ -96,6 +102,7 @@ model User {
   createdPointBatches        PointBatch[]
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
+  badgesAwarded              BadgeAward[]               @relation("BadgeAwardedBy")
   roleInvitationsSent        RoleInvitation[]
   memberExports              MemberExport[]
   deletionsMade              DeletionRecord[]
@@ -194,6 +201,8 @@ model Membership {
   committeeMemberships CommitteeMembership[]
   roleChanges          RoleChange[]
   roleInvitations      RoleInvitation[]
+  memberCard           MemberCard?
+  badgeAwards          BadgeAward[]
 
   @@unique([userId, clubId])
   @@unique([id, clubId])
@@ -453,4 +462,67 @@ model RateLimitCounter {
 
   @@id([key, windowStart])
   @@index([expiresAt])
+}
+
+/// A member's card: their own choices about it, and the link its QR opens (docs/adr/0032-card-link-and-stickers.md).
+/// One per membership, made the first time the card is read.
+model MemberCard {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  membershipId        String    @unique @db.Uuid
+  clubId              String    @db.Uuid
+  /// The badge colour the member picked; null follows their role.
+  tone                CardTone?
+  /// Whether the QR opens a page at all. Off: the link answers the same 404 as an unknown one.
+  shareEnabled        Boolean   @default(true)
+  showPoints          Boolean   @default(true)
+  /// Off by default: the reasons behind points are the member's to show.
+  showActivity        Boolean   @default(false)
+  /// HMAC of the share token (what a request is looked up by) and its AES-GCM copy (so the QR can
+  /// be drawn again). Both are useless without the server's secret.
+  shareTokenHash      String    @unique
+  shareTokenCipher    Bytes
+  shareTokenCreatedAt DateTime
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  membership Membership       @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
+  placements BadgePlacement[]
+
+  @@unique([membershipId, clubId])
+}
+
+/// A sticker someone awarded to a member: star of the month, finished the hackathon.
+/// Stickers earned by a rule (a lead, a thousand points) are worked out, never stored here.
+model BadgeAward {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  membershipId String   @db.Uuid
+  clubId       String   @db.Uuid
+  /// One of the keys in src/shared/lib/stickers.ts.
+  badgeKey     String
+  awardedById  String   @db.Uuid
+  awardedAt    DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
+  awardedBy  User       @relation("BadgeAwardedBy", fields: [awardedById], references: [id], onDelete: Restrict)
+
+  @@unique([membershipId, badgeKey])
+  @@index([clubId])
+}
+
+/// Where a member stuck an earned sticker on the back of their card. `x` and `y` are the sticker's
+/// centre as a fraction of the card, so the layout survives any size of screen.
+model BadgePlacement {
+  id       String @id @default(uuid(7)) @db.Uuid
+  cardId   String @db.Uuid
+  badgeKey String
+  x        Float
+  y        Float
+  rotation Float
+  scale    Float
+  /// Stacking order: the higher one is on top.
+  z        Int
+
+  card MemberCard @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@unique([cardId, badgeKey])
 }

@@ -57,6 +57,74 @@ function isProductionServer(nodeEnv: string, phase: string | undefined): boolean
   return nodeEnv === 'production' && phase !== 'phase-production-build';
 }
 
+/** PEM text, written as is or base64-encoded so it fits on one line of an environment file. */
+function decodePem(value: string): string {
+  return value.includes('-----BEGIN') ? value : Buffer.from(value, 'base64').toString('utf8');
+}
+
+export interface WalletSigning {
+  passTypeIdentifier: string;
+  teamIdentifier: string;
+  signerCert: string;
+  signerKey: string;
+  signerKeyPassphrase: string | undefined;
+  wwdr: string;
+}
+
+/** The Apple Wallet signing material, or null when the deployment has none. */
+function resolveWallet(env: {
+  WALLET_PASS_TYPE_ID?: string | undefined;
+  WALLET_TEAM_ID?: string | undefined;
+  WALLET_SIGNER_CERT?: string | undefined;
+  WALLET_SIGNER_KEY?: string | undefined;
+  WALLET_SIGNER_KEY_PASSPHRASE?: string | undefined;
+  WALLET_WWDR_CERT?: string | undefined;
+}): WalletSigning | null {
+  if (
+    !env.WALLET_PASS_TYPE_ID ||
+    !env.WALLET_TEAM_ID ||
+    !env.WALLET_SIGNER_CERT ||
+    !env.WALLET_SIGNER_KEY ||
+    !env.WALLET_WWDR_CERT
+  ) {
+    return null;
+  }
+  return {
+    passTypeIdentifier: env.WALLET_PASS_TYPE_ID,
+    teamIdentifier: env.WALLET_TEAM_ID,
+    signerCert: decodePem(env.WALLET_SIGNER_CERT),
+    signerKey: decodePem(env.WALLET_SIGNER_KEY),
+    signerKeyPassphrase: env.WALLET_SIGNER_KEY_PASSPHRASE,
+    wwdr: decodePem(env.WALLET_WWDR_CERT),
+  };
+}
+
+export interface GoogleWalletSettings {
+  issuerId: string;
+  serviceAccountEmail: string;
+  privateKey: string;
+}
+
+/** The Google Wallet issuer material, or null when the deployment has none. */
+function resolveGoogleWallet(env: {
+  GOOGLE_WALLET_ISSUER_ID?: string | undefined;
+  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL?: string | undefined;
+  GOOGLE_WALLET_PRIVATE_KEY?: string | undefined;
+}): GoogleWalletSettings | null {
+  if (
+    !env.GOOGLE_WALLET_ISSUER_ID ||
+    !env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL ||
+    !env.GOOGLE_WALLET_PRIVATE_KEY
+  ) {
+    return null;
+  }
+  return {
+    issuerId: env.GOOGLE_WALLET_ISSUER_ID,
+    serviceAccountEmail: env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
+    privateKey: decodePem(env.GOOGLE_WALLET_PRIVATE_KEY),
+  };
+}
+
 function fallbackSecret(nodeEnv: 'development' | 'test' | 'production'): string {
   return nodeEnv === 'production' ? randomBytes(32).toString('base64') : DEVELOPMENT_AUTH_SECRET;
 }
@@ -102,6 +170,28 @@ const envSchema = (phase: string | undefined) =>
       VIEW_LINK_SECRET: optionalString.pipe(
         z.string().min(32, 'must be at least 32 characters').optional(),
       ),
+      /**
+       * Apple Wallet signing (docs/adr/0031-wallet-pass.md). A pass is only valid if it is signed
+       * with the Pass Type ID certificate of a paid Apple Developer account, so these are all or
+       * none: with none, the app shows the member card and the Add to Apple Wallet button is
+       * off. Certificates and the key are PEM text, either as is or base64-encoded (one line, so
+       * they fit an environment variable).
+       */
+      WALLET_PASS_TYPE_ID: optionalString,
+      WALLET_TEAM_ID: optionalString,
+      WALLET_SIGNER_CERT: optionalString,
+      WALLET_SIGNER_KEY: optionalString,
+      WALLET_SIGNER_KEY_PASSPHRASE: optionalString,
+      WALLET_WWDR_CERT: optionalString,
+      /**
+       * Google Wallet, for Android (docs/adr/0031-wallet-pass.md): the issuer id from the Google
+       * Pay & Wallet console and a service account with its private key (PEM, as is or base64).
+       * All three, or none. Google fetches the card's pictures from APP_ORIGIN, so it has to be a
+       * public https address.
+       */
+      GOOGLE_WALLET_ISSUER_ID: optionalString,
+      GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: optionalString,
+      GOOGLE_WALLET_PRIVATE_KEY: optionalString,
       /**
        * The request header that holds the client IP, set by the reverse proxy in front of the app
        * (for example `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`), or `none`. Any other
@@ -222,6 +312,50 @@ const envSchema = (phase: string | undefined) =>
           });
         }
       }
+      const googleSettings = [
+        'GOOGLE_WALLET_ISSUER_ID',
+        'GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL',
+        'GOOGLE_WALLET_PRIVATE_KEY',
+      ] as const;
+      const googleSet = googleSettings.filter((name) => env[name] !== undefined);
+      if (googleSet.length > 0 && googleSet.length < googleSettings.length) {
+        for (const name of googleSettings) {
+          if (env[name] !== undefined) continue;
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message:
+              'is required when any other GOOGLE_WALLET_* variable is set: the Google Wallet pass needs all of them, or none',
+          });
+        }
+      }
+      if (googleSet.length === googleSettings.length && env.APP_ORIGIN?.startsWith('http://')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['APP_ORIGIN'],
+          message:
+            'must be https when Google Wallet is set up: Google fetches the card pictures from it',
+        });
+      }
+      const walletSettings = [
+        'WALLET_PASS_TYPE_ID',
+        'WALLET_TEAM_ID',
+        'WALLET_SIGNER_CERT',
+        'WALLET_SIGNER_KEY',
+        'WALLET_WWDR_CERT',
+      ] as const;
+      const walletSet = walletSettings.filter((name) => env[name] !== undefined);
+      if (walletSet.length > 0 && walletSet.length < walletSettings.length) {
+        for (const name of walletSettings) {
+          if (env[name] !== undefined) continue;
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message:
+              'is required when any other WALLET_* signing variable is set: the Apple Wallet pass needs all of them, or none',
+          });
+        }
+      }
       if (emailTransport === 'resend') {
         if (!env.RESEND_API_KEY) {
           ctx.addIssue({
@@ -284,6 +418,8 @@ const envSchema = (phase: string | undefined) =>
       AUTH_SELF_SIGNUP: parseSelfSignup(env.AUTH_SELF_SIGNUP),
       EMAIL_ALLOWLIST: env.EMAIL_ALLOWLIST ?? null,
       VIEW_LINK_SECRET: env.VIEW_LINK_SECRET ?? env.AUTH_SECRET ?? fallbackSecret(env.NODE_ENV),
+      WALLET: resolveWallet(env),
+      GOOGLE_WALLET: resolveGoogleWallet(env),
       CLIENT_IP_HEADER:
         env.CLIENT_IP_HEADER === undefined || env.CLIENT_IP_HEADER === 'none'
           ? null

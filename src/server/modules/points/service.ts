@@ -4,6 +4,8 @@ import {
   committeeMembershipsScope,
   committeesScope,
   membersScope,
+  cardLinkPointsScope,
+  ownPointTransactionsScope,
   pointTransactionsScope,
   type Actor,
 } from '@/server/authz';
@@ -32,9 +34,11 @@ import { toPointTransaction, toRevision } from './mappers';
 import { assertCanWritePoints } from './policies';
 import {
   cancelTransactionWithRevision,
+  countActiveTransactions,
   findPointsTarget,
   findRevisions,
   findTransaction,
+  findActiveTransactionsSince,
   findTransactionsPage,
   findVisibleCommittee,
   findVisibleMember,
@@ -74,6 +78,58 @@ export async function getActivePointsByMember(
     memberIds,
     period,
   );
+}
+
+/**
+ * The actor's own balance in each of their memberships: what their member card shows. It reads
+ * through the actor's own transactions only, so it works for a plain member who sees no one else's
+ * points (docs/adr/0031-wallet-pass.md).
+ */
+export async function getOwnPointFacts(
+  actor: Actor,
+): Promise<Map<string, { balance: number; transactions: number }>> {
+  const scope = ownPointTransactionsScope(actor);
+  const entries = await Promise.all(
+    actor.memberships.map(async (membership) => {
+      const [balance, transactions] = await Promise.all([
+        sumActiveAmount(scope, { memberId: membership.membershipId }),
+        countActiveTransactions(scope, membership.membershipId),
+      ]);
+      return [membership.membershipId, { balance, transactions }] as const;
+    }),
+  );
+  return new Map(entries);
+}
+
+/**
+ * What a member's card link may show of their points, read through the membership the token
+ * resolved to and nothing else: the balance, the number of transactions, and the active
+ * transactions of the last months, newest first (docs/adr/0032-card-link-and-stickers.md). The
+ * caller decides which of it to put on the page, from what the member allowed.
+ */
+export async function getPointsForCardLink(
+  membershipId: string,
+  since: string,
+): Promise<{
+  balance: number;
+  transactions: number;
+  recent: Array<{ workDate: string; amount: number; reason: string }>;
+}> {
+  const scope = cardLinkPointsScope(membershipId);
+  const [balance, transactions, recent] = await Promise.all([
+    sumActiveAmount(scope, { memberId: membershipId }),
+    countActiveTransactions(scope, membershipId),
+    findActiveTransactionsSince(scope, membershipId, since),
+  ]);
+  return {
+    balance,
+    transactions,
+    recent: recent.map((row) => ({
+      workDate: dateToDateOnly(row.workDate),
+      amount: row.amount,
+      reason: row.reason,
+    })),
+  };
 }
 
 export async function getMemberPoints(

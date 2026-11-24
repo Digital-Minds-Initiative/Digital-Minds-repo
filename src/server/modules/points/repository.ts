@@ -842,3 +842,32 @@ export async function deleteClubPointBatches(
   });
   return count;
 }
+
+/** How many active transactions the scope reaches for one membership (for the «first achievement» sticker). */
+export async function countActiveTransactions(
+  scope: PointTransactionScope,
+  memberId: string,
+): Promise<number> {
+  return db.pointTransaction.count({
+    where: transactionWhere(scope, { memberId, status: 'active' }),
+  });
+}
+
+export interface CardLinkTransaction {
+  workDate: Date;
+  amount: number;
+  reason: string;
+}
+
+/** Active transactions of one membership since a date, newest first: what a card link may show. */
+export async function findActiveTransactionsSince(
+  scope: PointTransactionScope,
+  memberId: string,
+  since: string,
+): Promise<CardLinkTransaction[]> {
+  return db.pointTransaction.findMany({
+    where: transactionWhere(scope, { memberId, status: 'active', from: since }),
+    select: { workDate: true, amount: true, reason: true },
+    orderBy: [{ workDate: 'desc' }, { createdAt: 'desc' }],
+  });
+}

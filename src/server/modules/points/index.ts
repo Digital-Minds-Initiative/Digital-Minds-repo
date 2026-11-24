@@ -5,6 +5,8 @@ export {
   createPointTransaction,
   getActivePointsByMember,
   getMemberPoints,
+  getOwnPointFacts,
+  getPointsForCardLink,
   listPointTransactionRevisions,
   updatePointTransaction,
 } from './service';

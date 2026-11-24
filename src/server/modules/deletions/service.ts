@@ -14,6 +14,7 @@ import {
 } from '@/server/authz';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
 import { endPersonSignIn } from '@/server/modules/auth';
+import { deletePersonCardData } from '@/server/modules/cards';
 import {
   deleteClubTree,
   deleteCommitteeRow,
@@ -253,6 +254,7 @@ export async function deletePerson(
       const roleInvitations = await deleteRoleInvitations(tx, roleInvitationsScope(actor), {
         userId,
       });
+      await deletePersonCardData(tx, membersScope(actor), userId);
       const memberships = await deletePersonMemberships(
         tx,
         { members: membersScope(actor), committeeMemberships: committeeMembershipsScope(actor) },

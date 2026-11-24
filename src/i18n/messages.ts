@@ -3,6 +3,7 @@ import clubsAr from '@/client/features/clubs/messages/ar.json';
 import membersAr from '@/client/features/members/messages/ar.json';
 import permissionsAr from '@/client/features/permissions/messages/ar.json';
 import pointsAr from '@/client/features/points/messages/ar.json';
+import walletAr from '@/client/features/wallet/messages/ar.json';
 
 import commonAr from './messages/ar/common.json';
 import dashboardAr from './messages/ar/dashboard.json';
@@ -10,6 +11,7 @@ import landingAr from './messages/ar/landing.json';
 import membersExportAr from './messages/ar/membersExport.json';
 import shellAr from './messages/ar/shell.json';
 import uiAr from './messages/ar/ui.json';
+import walletPassAr from './messages/ar/walletPass.json';
 
 /**
  * All UI strings, per locale and namespace. Shared namespaces live in ./messages/<locale>/;
@@ -29,5 +31,7 @@ export const messages = {
     clubs: clubsAr,
     points: pointsAr,
     permissions: permissionsAr,
+    wallet: walletAr,
+    walletPass: walletPassAr,
   },
 };
