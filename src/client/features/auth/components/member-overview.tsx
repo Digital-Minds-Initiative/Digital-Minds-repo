@@ -3,6 +3,7 @@
 import { Crown, UsersRound } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
+import { MyCards } from '@/client/features/wallet';
 import { EmptyState } from '@/components/patterns/empty-state';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,8 @@ export function MemberOverview({ me }: { me: Me }) {
           <p className="text-sm text-fg-muted">{t('welcomeBody')}</p>
         </div>
       </section>
+
+      <MyCards />
 
       {memberships.length === 0 ? (
         <EmptyState icon={UsersRound} title={t('noClub.title')} description={t('noClub.body')} />

@@ -4,6 +4,7 @@ import { membersHandlers } from '@/client/features/members/mocks';
 import { permissionsHandlers } from '@/client/features/permissions/mocks';
 import { pointsHandlers } from '@/client/features/points/mocks';
 import { systemHandlers } from '@/client/features/system/mocks';
+import { walletHandlers } from '@/client/features/wallet/mocks';
 
 /** Every module's MSW handlers. Add a module's `mocks/index.ts` handlers here. */
 export const handlers = [
@@ -13,4 +14,5 @@ export const handlers = [
   ...pointsHandlers,
   ...clubsHandlers,
   ...permissionsHandlers,
+  ...walletHandlers,
 ];

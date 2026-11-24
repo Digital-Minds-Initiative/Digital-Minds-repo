@@ -18,6 +18,8 @@ export interface MembershipCardProps {
   stampsEarned: number;
   stampsTotal?: number;
   clubMarkSrc?: string;
+  /** Labels the card SAMPLE. On by default, so a mock-up is never mistaken for a real card. */
+  sample?: boolean;
   className?: string;
 }
 
@@ -31,6 +33,7 @@ export function MembershipCard({
   stampsEarned,
   stampsTotal = 6,
   clubMarkSrc,
+  sample = true,
   className,
 }: MembershipCardProps) {
   const from = mood === 'tech' ? 'var(--brand)' : 'var(--uqu-teal-blue)';
@@ -98,7 +101,7 @@ export function MembershipCard({
         </div>
         <div className="flex items-center justify-between border-t border-line pt-3 font-mono text-[11px] text-muted uppercase">
           <span>Digital Minds</span>
-          <span dir="ltr">ID {memberId} · SAMPLE</span>
+          <span dir="ltr">{sample ? `ID ${memberId} · SAMPLE` : `ID ${memberId}`}</span>
         </div>
       </div>
     </div>

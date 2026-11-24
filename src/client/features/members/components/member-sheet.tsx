@@ -5,6 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import { useMe } from '@/client/features/auth';
+import { MemberStickersSection } from '@/client/features/wallet';
 import { useErrorText } from '@/client/lib/use-error-text';
 import { EmptyState } from '@/components/patterns/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -237,6 +238,8 @@ function MemberFile({
         </h3>
         <MemberCommittees member={record} canManage={access.canManage} />
       </section>
+
+      {removed ? null : <MemberStickersSection memberId={record.id} />}
 
       {canDeletePerson ? (
         <div className="border-t border-border pt-4">

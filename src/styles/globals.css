@@ -427,3 +427,55 @@
     translate: 0 0.6em;
   }
 }
+
+/*
+ * The member badge: it unfolds from its top edge when it comes into view, hangs with a slow sway,
+ * and its gradient blobs drift. All of it stops under `prefers-reduced-motion` (the component only
+ * applies these inside `motion-safe:`).
+ */
+@keyframes badge-unfold {
+  0% {
+    opacity: 0;
+    transform: rotateX(-86deg) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: rotateX(0deg) scale(1);
+  }
+}
+@keyframes badge-sway {
+  0%,
+  100% {
+    transform: rotate(-0.9deg);
+  }
+  50% {
+    transform: rotate(0.9deg);
+  }
+}
+@keyframes badge-drift-a {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: -26px 16px;
+  }
+}
+@keyframes badge-drift-b {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 30px -14px;
+  }
+}
+@keyframes badge-stamp {
+  from {
+    opacity: 0;
+    scale: 1.25;
+  }
+}

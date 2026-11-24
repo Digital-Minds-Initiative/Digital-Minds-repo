@@ -17,4 +17,6 @@
   "ignore": ["prisma/schema.prisma"],
   // Imported by the generated Prisma client (src/server/db/generated), which knip ignores.
   "ignoreDependencies": ["@prisma/client"],
+  // The wallet pass test signs a throwaway pass with the system's openssl, and skips itself without it.
+  "ignoreBinaries": ["openssl"],
 }

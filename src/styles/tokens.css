@@ -134,6 +134,23 @@
   --club-olive: #5e6b26;
   --club-slate: #4b5968;
 
+  /*
+   * The digital card badge (docs/adr/0031-wallet-pass.md). A card does not change with the room's
+   * light, so these are fixed values, like the paper and slab colours: a matte badge, a white one,
+   * and the grounds of the gradient panel that carries the points.
+   */
+  --badge-white: #fbf9f4;
+  --badge-matte: #14121a;
+  --badge-ink: #1c1a24;
+  --badge-canvas: #f4f1ea;
+  --badge-cream: #f3ead7;
+  --badge-gold: #d2b77a;
+  --badge-blue: #3b4de0;
+  --badge-panel-lilac: #e9defc;
+  --badge-panel-indigo: #1a1450;
+  --badge-panel-cyan: #14424b;
+  --badge-panel-mint: #e3efe8;
+
   /* The cell grid: three finishes (solid / perforated / outline), three sizes. */
   --cell-s: 4px;
   --cell-m: 8px;

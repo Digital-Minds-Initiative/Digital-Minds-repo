@@ -278,7 +278,9 @@ describe('member actions — editing, committees and removing', { timeout: 40_00
   it('adds the member to a committee and takes them out again', async () => {
     const user = await renderTable(OFFICER);
     const file = await openMember(user);
-    const before = within(file).getAllByRole('listitem').length;
+    // Only the committees section: the file also lists stickers, which load on their own.
+    const committees = () => within(within(file).getByRole('region', { name: 'اللجان' }));
+    const before = committees().getAllByRole('listitem').length;
     await user.click(
       await within(file).findByRole('combobox', { name: 'إضافة إلى لجنة' }, { timeout: 8000 }),
     );
@@ -288,7 +290,7 @@ describe('member actions — editing, committees and removing', { timeout: 40_00
     await user.click(option);
     await user.click(within(file).getByRole('button', { name: 'إضافة إلى لجنة' }));
     // The committee's name is also in the picker, so the list itself is what is counted.
-    await waitFor(() => expect(within(file).getAllByRole('listitem').length).toBe(before + 1), {
+    await waitFor(() => expect(committees().getAllByRole('listitem').length).toBe(before + 1), {
       timeout: 8000,
     });
 
@@ -297,7 +299,7 @@ describe('member actions — editing, committees and removing', { timeout: 40_00
     );
     const confirm = await screen.findByRole('alertdialog');
     await user.click(within(confirm).getByRole('button', { name: 'إزالة' }));
-    await waitFor(() => expect(within(file).getAllByRole('listitem').length).toBe(before), {
+    await waitFor(() => expect(committees().getAllByRole('listitem').length).toBe(before), {
       timeout: 8000,
     });
   });

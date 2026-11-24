@@ -40,6 +40,12 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   experimental: { agentUpgrade: 'security' },
+  // The wallet passes are drawn from the club logos and the pixel head in `public/`, which a
+  // serverless function does not carry unless it is told to (docs/adr/0031-wallet-pass.md).
+  outputFileTracingIncludes: {
+    '/api/v1/me/cards/[membershipId]/wallet-pass': ['./public/clubs/**/*', './public/brand/**/*'],
+    '/api/v1/public/wallet-art/[name]': ['./public/clubs/**/*', './public/brand/**/*'],
+  },
   // The dashboard shows the persona switcher only when the server honours it, so the browser needs
   // the same flag. Passed through rather than duplicated as a NEXT_PUBLIC_ variable that could
   // drift from it; it is "true" or "false", nothing secret. Production builds ignore it.
@@ -55,6 +61,7 @@ const nextConfig: NextConfig = {
       // one wins for these paths. `/v/` is the public page the link opens.
       { source: '/api/v1/public/:path*', headers: publicHeaders },
       { source: '/v/:path*', headers: publicHeaders },
+      { source: '/c/:path*', headers: publicHeaders },
       // HTTPS only, for two years, subdomains included — and only in production, because on
       // http://localhost a browser would then refuse to load the dev server at all.
       ...(isProduction
