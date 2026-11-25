@@ -22,3 +22,5 @@ allowBuilds:
 # Remove an entry once `pnpm why <package>` shows the parent already depends on a fixed version.
 overrides:
   '@vercel/cli-config>zod': 4.6.7 # GHSA-mrhx-c7xc-m3w5, via @vercel/functions > @vercel/oidc
+  joi: 17.13.9 # GHSA high advisories (<17.13.9), via passkit-generator and @hookform/resolvers
+  effect: 3.22.5 # high advisory (<=3.22.0), via @hookform/resolvers
