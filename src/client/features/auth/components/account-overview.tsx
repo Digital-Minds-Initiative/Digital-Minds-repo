@@ -3,7 +3,7 @@
 import { ArrowRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import { MyCards } from '@/client/features/wallet';
+import { CardPreviews, MyCards } from '@/client/features/wallet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -175,6 +175,7 @@ export function AccountOverview() {
         </Card>
       </div>
       <MyCards />
+      {me.user.isFullAdmin ? <CardPreviews /> : null}
     </div>
   );
 }
