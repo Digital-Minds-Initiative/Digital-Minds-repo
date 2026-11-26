@@ -5,7 +5,9 @@ import {
   cardMoodForClub,
   cardToneFor,
   cardYears,
+  chartCellValue,
   memberCodeForMembership,
+  stampIsHalf,
   stampsForPoints,
   withKashida,
 } from '../member-card';
@@ -38,6 +40,33 @@ describe('member card rules', () => {
   });
 });
 
+describe('half stamps', () => {
+  it('fills half a box once half of the next stamp is earned, never at the top', () => {
+    expect(stampIsHalf(0)).toBe(false);
+    expect(stampIsHalf(24)).toBe(false);
+    expect(stampIsHalf(25)).toBe(true);
+    expect(stampIsHalf(49)).toBe(true);
+    expect(stampIsHalf(50)).toBe(false);
+    expect(stampIsHalf(75)).toBe(true);
+    expect(stampIsHalf(275)).toBe(true);
+    // All six stamps are earned: there is no next box to half fill.
+    expect(stampIsHalf(300)).toBe(false);
+    expect(stampIsHalf(325)).toBe(false);
+    expect(stampIsHalf(-40)).toBe(false);
+  });
+
+  it('sizes a chart cell at 10, 25, 50 or 100 points, the smallest that fits the best month', () => {
+    expect(chartCellValue(0, 8)).toBe(10);
+    expect(chartCellValue(80, 8)).toBe(10);
+    expect(chartCellValue(81, 8)).toBe(25);
+    expect(chartCellValue(200, 8)).toBe(25);
+    expect(chartCellValue(201, 8)).toBe(50);
+    expect(chartCellValue(400, 8)).toBe(50);
+    expect(chartCellValue(401, 8)).toBe(100);
+    expect(chartCellValue(5000, 8)).toBe(100);
+  });
+});
+
 describe('badge tone', () => {
   it('dresses officers and committee leads in matte and everyone else in white', () => {
     expect(cardToneFor({ clubRole: 'MEMBER', ledCommittees: [] })).toBe('paper');
@@ -52,10 +81,24 @@ describe('kashida', () => {
   it('stretches a short name after a joining letter, never before the article', () => {
     const stretched = withKashida('نورة خالد الحربي');
     expect(stretched).toContain(`ن${tatweel}`);
-    expect(stretched).toContain(`خ${tatweel}`);
     expect(stretched).toContain(`الح${tatweel}`);
     expect(stretched).not.toContain(`ال${tatweel}`);
     expect(stretched.replaceAll(tatweel, '')).toBe('نورة خالد الحربي');
+  });
+
+  it('never stretches into an alef or inside a lam-alef, and leaves such a word as it is', () => {
+    // خ would stretch before the alef (خـالد), ل would stretch before the د: neither is set.
+    expect(withKashida('خالد')).toBe('خالد');
+    expect(withKashida('جلال')).not.toContain(`ل${tatweel}`);
+    const stretched = withKashida('سعد');
+    expect(stretched).toContain(`سع${tatweel}`);
+    expect(stretched).not.toMatch(new RegExp(`${tatweel}[اأإآ]`, 'u'));
+  });
+
+  it('prefers the middle of a word, and caps one stretch', () => {
+    // The ح in the middle of «محمد» beats the م that starts it.
+    expect(withKashida('محمد')).toMatch(new RegExp(`^مح${tatweel}+مد$`, 'u'));
+    expect(withKashida('سعد').match(new RegExp(tatweel, 'gu'))?.length ?? 0).toBeLessThanOrEqual(4);
   });
 
   it('leaves a long name alone so it still fits on one line', () => {

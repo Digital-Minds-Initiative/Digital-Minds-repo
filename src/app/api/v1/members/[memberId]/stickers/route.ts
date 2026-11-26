@@ -7,5 +7,5 @@ export const GET = defineRoute(listMemberStickersEndpoint, ({ actor, params }) =
 );
 
 export const POST = defineRoute(awardStickerEndpoint, ({ actor, params, body }) =>
-  awardSticker(actor, params.memberId, body.key),
+  awardSticker(actor, params.memberId, body.key, body.reason ?? null),
 );

@@ -34,6 +34,7 @@ export function buildPkpass(card: MemberCard, signing: WalletSigning, appOrigin:
 
   const strip1 = stripArt(variant, STRIP_SIZE.width, STRIP_SIZE.height);
   const strip2 = stripArt(variant, STRIP_SIZE.width * 2, STRIP_SIZE.height * 2);
+  const strip3 = stripArt(variant, STRIP_SIZE.width * 3, STRIP_SIZE.height * 3);
 
   const pass = new PKPass(
     {
@@ -45,6 +46,7 @@ export function buildPkpass(card: MemberCard, signing: WalletSigning, appOrigin:
       'logo@3x.png': markLogo(variant, 108).toPng(),
       'strip.png': strip1.toPng({ alpha: false }),
       'strip@2x.png': strip2.toPng({ alpha: false }),
+      'strip@3x.png': strip3.toPng({ alpha: false }),
     },
     {
       wwdr: signing.wwdr,

@@ -21,6 +21,12 @@ import {
   type PublicCard,
 } from '@/shared/contracts/cards';
 import {
+  createCustomStickerEndpoint,
+  listCustomStickersEndpoint,
+  updateCustomStickerEndpoint,
+  type StudioSticker,
+} from '@/shared/contracts/stickers';
+import {
   googleWalletEndpoint,
   myCardsEndpoint,
   walletPassEndpoint,
@@ -34,16 +40,23 @@ import {
   cardYears,
   lastSixMonths,
   memberCodeForMembership,
+  stampIsHalf,
   stampsForPoints,
 } from '@/shared/lib/member-card';
 import {
   AWARDABLE_STICKER_KEYS,
+  canAwardCustomSticker,
   canAwardSticker,
+  CUSTOM_STICKER_LIMITS,
+  customStickerKey,
   derivedStickers,
+  isCustomStickerKey,
   STICKER_KEYS,
   STICKER_RULES,
+  type CustomStickerDef,
   type StickerKey,
   type StickerPlacement,
+  type StickerRef,
 } from '@/shared/lib/stickers';
 import { cardRoleLabel } from '@/shared/lib/wallet-pass';
 
@@ -62,9 +75,26 @@ interface CardState {
   placements: StickerPlacement[];
 }
 
+/** One award: when it was given and what for. */
+interface MockAward {
+  awardedAt: string;
+  reason: string | null;
+}
+
+interface MockCustomSticker {
+  id: string;
+  clubId: string;
+  createdById: string;
+  createdAt: string;
+  archived: boolean;
+  awardableBy: 'LEAD' | 'OFFICER';
+  def: Omit<CustomStickerDef, 'key'>;
+}
+
 interface MockCards {
   cards: Map<string, CardState>;
-  awards: Map<string, Map<StickerKey, string>>;
+  awards: Map<string, Map<string, MockAward>>;
+  customs: Map<string, MockCustomSticker>;
 }
 
 const stores = new WeakMap<MockDb, MockCards>();
@@ -72,7 +102,7 @@ const stores = new WeakMap<MockDb, MockCards>();
 function storeFor(db: MockDb): MockCards {
   let store = stores.get(db);
   if (!store) {
-    store = { cards: new Map(), awards: new Map() };
+    store = { cards: new Map(), awards: new Map(), customs: new Map() };
     stores.set(db, store);
   }
   return store;
@@ -123,10 +153,15 @@ function factsOf(db: MockDb, membership: MockMembership) {
   };
 }
 
+function defOf(custom: MockCustomSticker): CustomStickerDef {
+  return { key: customStickerKey(custom.id), ...custom.def };
+}
+
 function stickersOf(db: MockDb, membership: MockMembership) {
   const facts = factsOf(db, membership);
   const state = cardStateFor(db, membership.id);
-  const awarded = storeFor(db).awards.get(membership.id) ?? new Map<StickerKey, string>();
+  const store = storeFor(db);
+  const awarded = store.awards.get(membership.id) ?? new Map<string, MockAward>();
   const earned = new Set<StickerKey>(
     derivedStickers({
       clubRole: facts.clubRole,
@@ -136,11 +171,50 @@ function stickersOf(db: MockDb, membership: MockMembership) {
     }),
   );
   for (const key of AWARDABLE_STICKER_KEYS) if (awarded.has(key)) earned.add(key);
-  return STICKER_KEYS.filter((key) => earned.has(key)).map((key) => ({
-    key,
+  const detail = (key: string) => ({
+    earnedAt: awarded.get(key)?.awardedAt ?? null,
+    reason: awarded.get(key)?.reason ?? null,
+  });
+  const placed = (key: string) =>
+    state.placements.find((placement) => placement.key === key) ?? null;
+  const builtin = STICKER_KEYS.filter((key) => earned.has(key)).map((key) => ({
+    key: key as StickerRef,
     source: STICKER_RULES[key].source,
-    placement: state.placements.find((placement) => placement.key === key) ?? null,
+    placement: placed(key),
+    ...detail(key),
+    custom: null,
   }));
+  const customs = [...awarded.entries()]
+    .filter(([key]) => isCustomStickerKey(key))
+    .flatMap(([key]) => {
+      const custom = store.customs.get(key.slice('custom:'.length));
+      if (!custom || custom.clubId !== membership.clubId) return [];
+      return [
+        {
+          key: key as StickerRef,
+          source: 'awarded' as const,
+          placement: placed(key),
+          ...detail(key),
+          custom: defOf(custom),
+        },
+      ];
+    });
+  return [...builtin, ...customs];
+}
+
+/** The club's visible, live custom stickers this member has not earned: shown locked in the tray. */
+function lockedOf(db: MockDb, membership: MockMembership): CustomStickerDef[] {
+  const store = storeFor(db);
+  const held = store.awards.get(membership.id) ?? new Map<string, MockAward>();
+  return [...store.customs.values()]
+    .filter(
+      (custom) =>
+        custom.clubId === membership.clubId &&
+        !custom.archived &&
+        !custom.def.hidden &&
+        !held.has(customStickerKey(custom.id)),
+    )
+    .map(defOf);
 }
 
 function buildCard(db: MockDb, actor: MockActor, membership: MockMembership): MemberCard {
@@ -167,11 +241,13 @@ function buildCard(db: MockDb, actor: MockActor, membership: MockMembership): Me
     ...cardYears(new Date()),
     points: facts.points,
     stampsEarned: stampsForPoints(facts.points),
+    stampsHalf: stampIsHalf(facts.points),
     stampsTotal: CARD_STAMPS_TOTAL,
     tone:
       state.tone ?? cardToneFor({ clubRole: facts.clubRole, ledCommittees: facts.ledCommittees }),
     tonePreference: state.tone,
     stickers: stickersOf(db, membership),
+    lockedStickers: lockedOf(db, membership),
     share: { ...state.share, url },
     qr: url ?? memberCode,
     wallet: { apple: false, google: false },
@@ -207,6 +283,46 @@ function standingFor(actor: MockActor, membership: MockMembership) {
 }
 
 const notFound = (what: string) => mockError('NOT_FOUND', `${what} not found.`);
+const denied = () =>
+  mockError('FORBIDDEN', 'You cannot design stickers here.', {
+    reason: 'sticker_design_not_allowed',
+  });
+
+const canSeeClub = (actor: MockActor, clubId: string) =>
+  actor.user.isFullAdmin ||
+  getMockDb().memberships.some(
+    (membership) =>
+      membership.userId === actor.user.id &&
+      membership.clubId === clubId &&
+      membership.removedAt === null,
+  );
+
+/** Officers, full admins and the leads of the club's committees may design stickers. */
+function canDesign(actor: MockActor, clubId: string): boolean {
+  if (actor.user.isFullAdmin || actor.officerClubIds.includes(clubId)) return true;
+  const db = getMockDb();
+  return actor.ledCommitteeIds.some((id) => db.committeesById.get(id)?.clubId === clubId);
+}
+
+function canEditCustom(actor: MockActor, custom: MockCustomSticker): boolean {
+  if (actor.user.isFullAdmin || actor.officerClubIds.includes(custom.clubId)) return true;
+  return custom.createdById === actor.user.id && canDesign(actor, custom.clubId);
+}
+
+function studioOf(db: MockDb, actor: MockActor, custom: MockCustomSticker): StudioSticker {
+  const key = customStickerKey(custom.id);
+  const heldBy = [...storeFor(db).awards.values()].filter((held) => held.has(key)).length;
+  return {
+    ...defOf(custom),
+    id: custom.id,
+    clubId: custom.clubId,
+    awardableBy: custom.awardableBy,
+    archived: custom.archived,
+    createdAt: custom.createdAt,
+    heldBy,
+    canEdit: canEditCustom(actor, custom),
+  };
+}
 
 export const walletHandlers = [
   mockEndpoint(myCardsEndpoint, ({ cookies }) => {
@@ -290,18 +406,44 @@ export const walletHandlers = [
     if (!actor) return mockError('UNAUTHENTICATED');
     const membership = db.memberships.find((candidate) => candidate.id === params.memberId);
     if (!membership || !canSeeMembership(actor, membership)) return notFound('Member');
-    const held = storeFor(db).awards.get(membership.id) ?? new Map<StickerKey, string>();
+    const store = storeFor(db);
+    const held = store.awards.get(membership.id) ?? new Map<string, MockAward>();
     const standing = standingFor(actor, membership);
     const mayAward = actor.user.isFullAdmin || actor.user.id !== membership.userId;
+    const customs = [...store.customs.values()].filter(
+      (custom) => custom.clubId === membership.clubId,
+    );
+    const awardedCustom = customs.filter((custom) => held.has(customStickerKey(custom.id)));
+    const awardableCustom = mayAward
+      ? customs.filter(
+          (custom) =>
+            !custom.archived &&
+            !held.has(customStickerKey(custom.id)) &&
+            canAwardCustomSticker(standing, custom.awardableBy),
+        )
+      : [];
     return {
-      awarded: AWARDABLE_STICKER_KEYS.filter((key) => held.has(key)).map((key) => ({
-        key,
-        awardedAt: held.get(key) ?? new Date().toISOString(),
-        revocable: mayAward && canAwardSticker(standing, key),
-      })),
-      awardable: mayAward
-        ? AWARDABLE_STICKER_KEYS.filter((key) => !held.has(key) && canAwardSticker(standing, key))
-        : [],
+      awarded: [
+        ...AWARDABLE_STICKER_KEYS.filter((key) => held.has(key)).map((key) => ({
+          key: key as StickerRef,
+          awardedAt: held.get(key)?.awardedAt ?? new Date().toISOString(),
+          reason: held.get(key)?.reason ?? null,
+          revocable: mayAward && canAwardSticker(standing, key),
+        })),
+        ...awardedCustom.map((custom) => ({
+          key: customStickerKey(custom.id) as StickerRef,
+          awardedAt: held.get(customStickerKey(custom.id))?.awardedAt ?? new Date().toISOString(),
+          reason: held.get(customStickerKey(custom.id))?.reason ?? null,
+          revocable: mayAward && canAwardCustomSticker(standing, custom.awardableBy),
+        })),
+      ],
+      awardable: [
+        ...(mayAward
+          ? AWARDABLE_STICKER_KEYS.filter((key) => !held.has(key) && canAwardSticker(standing, key))
+          : []),
+        ...awardableCustom.map((custom) => customStickerKey(custom.id) as StickerRef),
+      ],
+      custom: [...awardedCustom, ...awardableCustom].map(defOf),
     };
   }),
 
@@ -315,7 +457,20 @@ export const walletHandlers = [
         reason: 'cannot_award_self',
       });
     }
-    if (!canAwardSticker(standingFor(actor, membership), body.key)) {
+    const standing = standingFor(actor, membership);
+    const store = storeFor(db);
+    if (isCustomStickerKey(body.key)) {
+      const custom = store.customs.get(body.key.slice('custom:'.length));
+      if (!custom || custom.clubId !== membership.clubId) return notFound('Sticker');
+      if (!canAwardCustomSticker(standing, custom.awardableBy)) {
+        return mockError('FORBIDDEN', 'This role cannot award that sticker.', {
+          reason: 'sticker_award_not_allowed',
+        });
+      }
+      if (custom.archived) {
+        return mockError('CONFLICT', 'The sticker is archived.', { reason: 'sticker_archived' });
+      }
+    } else if (!canAwardSticker(standing, body.key as StickerKey)) {
       return mockError('FORBIDDEN', 'This role cannot award that sticker.', {
         reason: 'sticker_award_not_allowed',
       });
@@ -325,13 +480,16 @@ export const walletHandlers = [
         reason: 'member_removed',
       });
     }
-    const store = storeFor(db);
-    const held = store.awards.get(membership.id) ?? new Map<StickerKey, string>();
-    if (!held.has(body.key)) held.set(body.key, new Date().toISOString());
+    const held = store.awards.get(membership.id) ?? new Map<string, MockAward>();
+    if (!held.has(body.key)) {
+      held.set(body.key, { awardedAt: new Date().toISOString(), reason: body.reason ?? null });
+    }
     store.awards.set(membership.id, held);
+    const award = held.get(body.key);
     return {
       key: body.key,
-      awardedAt: held.get(body.key) ?? new Date().toISOString(),
+      awardedAt: award?.awardedAt ?? new Date().toISOString(),
+      reason: award?.reason ?? null,
       revocable: true,
     };
   }),
@@ -346,16 +504,87 @@ export const walletHandlers = [
         reason: 'cannot_award_self',
       });
     }
-    if (!canAwardSticker(standingFor(actor, membership), params.key)) {
+    const standing = standingFor(actor, membership);
+    const store = storeFor(db);
+    const allowed = isCustomStickerKey(params.key)
+      ? (() => {
+          const custom = store.customs.get(params.key.slice('custom:'.length));
+          return custom !== undefined && canAwardCustomSticker(standing, custom.awardableBy);
+        })()
+      : canAwardSticker(standing, params.key as StickerKey);
+    if (!allowed) {
       return mockError('FORBIDDEN', 'This role cannot take that sticker back.', {
         reason: 'sticker_award_not_allowed',
       });
     }
-    const held = storeFor(db).awards.get(membership.id);
+    const held = store.awards.get(membership.id);
     if (!held?.delete(params.key)) return notFound('Sticker');
     const state = cardStateFor(db, membership.id);
     state.placements = state.placements.filter((placement) => placement.key !== params.key);
     return undefined;
+  }),
+
+  // ─── The sticker studio ─────────────────────────────────────
+
+  mockEndpoint(listCustomStickersEndpoint, ({ cookies, params, query }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    if (!canSeeClub(actor, params.clubId)) return notFound('Club');
+    if (!canDesign(actor, params.clubId)) return denied();
+    const store = storeFor(db);
+    return {
+      stickers: [...store.customs.values()]
+        .filter((custom) => custom.clubId === params.clubId)
+        .filter((custom) => query.includeArchived === true || !custom.archived)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((custom) => studioOf(db, actor, custom)),
+    };
+  }),
+
+  mockEndpoint(createCustomStickerEndpoint, ({ cookies, params, body }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    if (!canSeeClub(actor, params.clubId)) return notFound('Club');
+    if (!canDesign(actor, params.clubId)) return denied();
+    const club = must(db.clubsById.get(params.clubId), 'club');
+    if (club.archivedAt !== null) {
+      return mockError('CONFLICT', 'The club is archived.', { reason: 'club_archived' });
+    }
+    const store = storeFor(db);
+    const live = [...store.customs.values()].filter(
+      (custom) => custom.clubId === params.clubId && !custom.archived,
+    );
+    if (live.length >= CUSTOM_STICKER_LIMITS.perClub) {
+      return mockError('CONFLICT', 'Too many stickers.', { reason: 'sticker_limit_reached' });
+    }
+    const { awardableBy, ...def } = body;
+    const custom: MockCustomSticker = {
+      id: crypto.randomUUID(),
+      clubId: params.clubId,
+      createdById: actor.user.id,
+      createdAt: new Date().toISOString(),
+      archived: false,
+      awardableBy,
+      def,
+    };
+    store.customs.set(custom.id, custom);
+    return studioOf(db, actor, custom);
+  }),
+
+  mockEndpoint(updateCustomStickerEndpoint, ({ cookies, params, body }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    const custom = storeFor(db).customs.get(params.stickerId);
+    if (!custom || !canSeeClub(actor, custom.clubId)) return notFound('Sticker');
+    if (!canEditCustom(actor, custom)) return denied();
+    const { archived, awardableBy, ...fields } = body;
+    custom.def = {
+      ...custom.def,
+      ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)),
+    };
+    if (awardableBy !== undefined) custom.awardableBy = awardableBy;
+    if (archived !== undefined) custom.archived = archived;
+    return studioOf(db, actor, custom);
   }),
 
   // ─── The page the QR opens ──────────────────────────────────
@@ -401,9 +630,16 @@ export const walletHandlers = [
       stampsTotal: CARD_STAMPS_TOTAL,
       points: show ? facts.points : null,
       stampsEarned: show ? stampsForPoints(facts.points) : null,
+      stampsHalf: show ? stampIsHalf(facts.points) : null,
       thisMonth: show ? (byMonth.get(months[5] ?? '') ?? 0) : null,
       monthly: show ? months.map((month) => ({ month, points: byMonth.get(month) ?? 0 })) : null,
-      stickers: stickersOf(db, membership).map(({ key, placement }) => ({ key, placement })),
+      stickers: stickersOf(db, membership).map(({ key, placement, earnedAt, reason, custom }) => ({
+        key,
+        placement,
+        earnedAt,
+        reason: state.share.showActivity ? reason : null,
+        custom,
+      })),
       activity:
         show && state.share.showActivity
           ? [...facts.active]

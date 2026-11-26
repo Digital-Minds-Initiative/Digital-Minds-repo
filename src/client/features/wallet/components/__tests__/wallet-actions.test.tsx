@@ -21,6 +21,7 @@ const card: MemberCard = {
   tone: 'paper',
   tonePreference: null,
   stickers: [],
+  lockedStickers: [],
   share: {
     enabled: true,
     showPoints: true,
@@ -34,6 +35,7 @@ const card: MemberCard = {
   gregorianYear: 2026,
   points: 0,
   stampsEarned: 0,
+  stampsHalf: false,
   stampsTotal: 6,
   wallet: { apple: true, google: true },
 };

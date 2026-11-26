@@ -202,9 +202,13 @@ function ActorGate({ children }: { children: ReactNode }) {
       />
     );
   }
-  // The home page is everyone's: someone who manages nothing sees their own memberships there.
-  // The management screens stay closed to them.
-  if (!me.data.access.canAccessDashboard && pathname !== '/dashboard') {
+  // The home page and the profile (their own card and QR page) are everyone's: someone who
+  // manages nothing sees their own memberships there. The management screens stay closed to them.
+  if (
+    !me.data.access.canAccessDashboard &&
+    pathname !== '/dashboard' &&
+    pathname !== '/dashboard/profile'
+  ) {
     return (
       <EmptyState icon={ShieldOff} title={t('noAccess.title')} description={t('noAccess.body')} />
     );

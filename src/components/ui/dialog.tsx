@@ -32,12 +32,17 @@ export function DialogContent({
   className,
   children,
   hideCloseButton = false,
+  overlayClassName,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & { hideCloseButton?: boolean }) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  hideCloseButton?: boolean;
+  /** Extra classes for the dimmed backdrop, for a dialog that wants the page behind it blurred. */
+  overlayClassName?: string;
+}) {
   const t = useTranslations('ui.dialog');
   return (
     <DialogPrimitive.Portal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

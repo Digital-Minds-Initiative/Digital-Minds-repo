@@ -7,6 +7,7 @@ import {
   memberRemovedFromClub,
   NotFoundError,
   RateLimitedError,
+  stickerArchived,
 } from '@/server/errors';
 import { getPointsForCardLink } from '@/server/modules/points';
 import { consumeFixedWindow } from '@/server/modules/rate-limit';
@@ -19,20 +20,26 @@ import {
   cardToneFor,
   cardYears,
   lastSixMonths,
+  stampIsHalf,
   stampsForPoints,
 } from '@/shared/lib/member-card';
 import {
   AWARDABLE_STICKER_KEYS,
+  canAwardCustomSticker,
   canAwardSticker,
+  customStickerId,
   derivedStickers,
+  isCustomStickerKey,
   STICKER_KEYS,
   STICKER_RULES,
+  type CustomStickerDef,
   type StickerKey,
   type StickerPlacement,
+  type StickerRef,
 } from '@/shared/lib/stickers';
 import { cardRoleLabel } from '@/shared/lib/wallet-pass';
 
-import { assertCanAward, awarderStanding } from './policies';
+import { assertCanAward, assertCanAwardCustom, awarderStanding } from './policies';
 import {
   createAward,
   createMissingCards,
@@ -41,17 +48,42 @@ import {
   findAwards,
   findAwardsOfMembership,
   findCardByTokenHash,
+  findClubCustomStickersForAwards,
   findCards,
+  findCustomStickersByIds,
   findMemberAwards,
+  findVisibleCustomStickers,
   replaceCardToken,
   replacePlacements,
   updateCardChoices,
   type CardRow,
+  type CustomStickerRow,
 } from './repository';
 import { cardLinkUrl, cardTokenHash, decryptCardToken, newCardToken } from './token';
 
-const isStickerKey = (value: string): value is StickerKey =>
-  (STICKER_KEYS as readonly string[]).includes(value);
+const isStickerKey = (value: string): value is StickerRef =>
+  (STICKER_KEYS as readonly string[]).includes(value) || isCustomStickerKey(value);
+
+/** A stored custom sticker as the screens draw it. */
+function toCustomDef(row: CustomStickerRow): CustomStickerDef {
+  return {
+    key: `custom:${row.id}`,
+    name: row.name,
+    howTo: row.howTo,
+    label: row.label,
+    icon: row.icon as CustomStickerDef['icon'],
+    shape: row.shape as CustomStickerDef['shape'],
+    background: row.background as CustomStickerDef['background'],
+    ink: row.ink as CustomStickerDef['ink'],
+    hidden: row.hidden,
+  };
+}
+
+/** One award as the card needs it: when, and what for. */
+interface AwardFact {
+  awardedAt: Date;
+  reason: string | null;
+}
 
 /** What the card needs to know about each membership the actor holds to work out its stickers and colour. */
 export interface CardFacts {
@@ -67,6 +99,8 @@ export interface CardExtras {
   tone: 'paper' | 'matte';
   tonePreference: 'paper' | 'matte' | null;
   stickers: EarnedSticker[];
+  /** Custom stickers of the member's clubs that anyone may see and earn, shown locked in the tray. */
+  lockedStickers: CustomStickerDef[];
   share: {
     enabled: boolean;
     showPoints: boolean;
@@ -81,13 +115,19 @@ function toPlacement(row: CardRow['placements'][number]): StickerPlacement | nul
     : null;
 }
 
-/** The stickers a member holds, from the rules and from the awards, each with where it lies. */
+/**
+ * The stickers a member holds, from the rules and from the awards, each with where it lies, and for
+ * an awarded one when it was given, what for and, for a custom one, its design. A custom sticker
+ * whose design cannot be found (another club's, or deleted) is not shown.
+ */
 function earnedStickers(
   facts: CardFacts,
-  awarded: ReadonlySet<string>,
+  awarded: ReadonlyMap<string, AwardFact>,
   placements: readonly StickerPlacement[],
+  customs: ReadonlyMap<string, CustomStickerDef>,
+  showReasons = true,
 ): EarnedSticker[] {
-  const byKey = new Map(placements.map((placement) => [placement.key, placement]));
+  const byKey = new Map(placements.map((placement) => [placement.key as string, placement]));
   const keys = new Set<StickerKey>(
     derivedStickers({
       clubRole: facts.clubRole,
@@ -97,11 +137,42 @@ function earnedStickers(
     }),
   );
   for (const key of AWARDABLE_STICKER_KEYS) if (awarded.has(key)) keys.add(key);
-  return STICKER_KEYS.filter((key) => keys.has(key)).map((key) => ({
-    key,
+
+  const detail = (key: string) => {
+    const award = awarded.get(key);
+    return {
+      earnedAt: award ? award.awardedAt.toISOString() : null,
+      reason: award && showReasons ? award.reason : null,
+    };
+  };
+  const builtin = STICKER_KEYS.filter((key) => keys.has(key)).map((key) => ({
+    key: key as StickerRef,
     source: STICKER_RULES[key].source,
     placement: byKey.get(key) ?? null,
+    ...detail(key),
+    custom: null,
   }));
+  const custom = [...awarded.entries()]
+    .filter(([key]) => isCustomStickerKey(key) && customs.has(key))
+    .sort((a, b) => a[1].awardedAt.getTime() - b[1].awardedAt.getTime())
+    .map(([key]) => ({
+      key: key as StickerRef,
+      source: 'awarded' as const,
+      placement: byKey.get(key) ?? null,
+      ...detail(key),
+      custom: customs.get(key) ?? null,
+    }));
+  return [...builtin, ...custom];
+}
+
+/** The designs of the custom stickers named in some awards, only those that belong to `clubIds`. */
+async function customDefsFor(
+  awardKeys: readonly string[],
+  clubIds: readonly string[],
+): Promise<Map<string, CustomStickerDef>> {
+  const ids = awardKeys.filter(isCustomStickerKey).map((key) => customStickerId(key));
+  const rows = await findCustomStickersByIds(ids, clubIds);
+  return new Map(rows.map((row) => [`custom:${row.id}`, toCustomDef(row)]));
 }
 
 /**
@@ -135,6 +206,14 @@ export async function getMyCardExtras(
     cards = await findCards(scope);
   }
   const awards = await findAwards(scope);
+  const clubIds = [...new Set(actor.memberships.map((m) => m.clubId))];
+  const [customs, visible] = await Promise.all([
+    customDefsFor(
+      awards.map((award) => award.badgeKey),
+      clubIds,
+    ),
+    findVisibleCustomStickers(clubIds),
+  ]);
 
   const out = new Map<string, CardExtras>();
   for (const fact of facts) {
@@ -146,8 +225,10 @@ export async function getMyCardExtras(
       await replaceCardToken(scope, card.membershipId, fresh);
       token = fresh.token;
     }
-    const awarded = new Set(
-      awards.filter((award) => award.membershipId === card.membershipId).map((a) => a.badgeKey),
+    const awarded = new Map<string, AwardFact>(
+      awards
+        .filter((award) => award.membershipId === card.membershipId)
+        .map((award) => [award.badgeKey, { awardedAt: award.awardedAt, reason: award.reason }]),
     );
     const placements = card.placements.flatMap((row) => toPlacement(row) ?? []);
     const preference = card.tone === null ? null : card.tone === 'MATTE' ? 'matte' : 'paper';
@@ -155,7 +236,10 @@ export async function getMyCardExtras(
       tone:
         preference ?? cardToneFor({ clubRole: fact.clubRole, ledCommittees: fact.ledCommittees }),
       tonePreference: preference,
-      stickers: earnedStickers(fact, awarded, placements),
+      stickers: earnedStickers(fact, awarded, placements, customs),
+      lockedStickers: visible
+        .filter((row) => row.clubId === card.clubId && !awarded.has(`custom:${row.id}`))
+        .map(toCustomDef),
       share: {
         enabled: card.shareEnabled,
         showPoints: card.showPoints,
@@ -243,6 +327,12 @@ async function loadAwardTarget(actor: Actor, membershipId: string) {
   };
 }
 
+/** The custom stickers of a member's club, by key, with who may give each. */
+async function clubCustomStickers(clubId: string): Promise<Map<string, CustomStickerRow>> {
+  const rows = await findClubCustomStickersForAwards(clubId);
+  return new Map(rows.map((row) => [`custom:${row.id}`, row]));
+}
+
 /** What a member was awarded, and which awardable stickers the caller may still give them. */
 export async function listMemberStickers(actor: Actor, membershipId: string) {
   const target = await loadAwardTarget(actor, membershipId);
@@ -250,47 +340,99 @@ export async function listMemberStickers(actor: Actor, membershipId: string) {
   const held = new Set(awarded.map((award) => award.badgeKey));
   const standing = awarderStanding(actor, target);
   const mayAward = actor.isFullAdmin || actor.userId !== target.userId;
+  const customs = await clubCustomStickers(target.clubId);
+
+  const awardedOut = awarded.flatMap((award) => {
+    const builtin = AWARDABLE_STICKER_KEYS.find((candidate) => candidate === award.badgeKey);
+    if (builtin !== undefined) {
+      return [
+        {
+          key: builtin as StickerRef,
+          awardedAt: award.awardedAt.toISOString(),
+          reason: award.reason,
+          revocable: mayAward && canAwardSticker(standing, builtin),
+        },
+      ];
+    }
+    const row = customs.get(award.badgeKey);
+    return row
+      ? [
+          {
+            key: award.badgeKey as StickerRef,
+            awardedAt: award.awardedAt.toISOString(),
+            reason: award.reason,
+            revocable: mayAward && canAwardCustomSticker(standing, row.awardableBy),
+          },
+        ]
+      : [];
+  });
+  const awardableCustom = mayAward
+    ? [...customs.entries()].filter(
+        ([key, row]) =>
+          row.archivedAt === null &&
+          !held.has(key) &&
+          canAwardCustomSticker(standing, row.awardableBy),
+      )
+    : [];
+  const shown = new Set<string>([
+    ...awardableCustom.map(([key]) => key),
+    ...awardedOut.map((award) => award.key as string),
+  ]);
   return {
-    awarded: awarded.flatMap((award) => {
-      const key = AWARDABLE_STICKER_KEYS.find((candidate) => candidate === award.badgeKey);
-      return key === undefined
-        ? []
-        : [
-            {
-              key,
-              awardedAt: award.awardedAt.toISOString(),
-              revocable: mayAward && canAwardSticker(standing, key),
-            },
-          ];
-    }),
-    awardable: mayAward
-      ? AWARDABLE_STICKER_KEYS.filter((key) => !held.has(key) && canAwardSticker(standing, key))
-      : [],
+    awarded: awardedOut,
+    awardable: [
+      ...(mayAward
+        ? AWARDABLE_STICKER_KEYS.filter((key) => !held.has(key) && canAwardSticker(standing, key))
+        : []),
+      ...awardableCustom.map(([key]) => key as StickerRef),
+    ],
+    custom: [...customs.entries()]
+      .filter(([key]) => shown.has(key))
+      .map(([, row]) => toCustomDef(row)),
   };
 }
 
 export async function awardSticker(
   actor: Actor,
   membershipId: string,
-  key: (typeof AWARDABLE_STICKER_KEYS)[number],
+  key: StickerRef,
+  reason: string | null = null,
   now = new Date(),
 ) {
   const target = await loadAwardTarget(actor, membershipId);
-  assertCanAward(actor, target, key);
+  if (isCustomStickerKey(key)) {
+    const row = (await clubCustomStickers(target.clubId)).get(key);
+    if (!row) throw new NotFoundError('Sticker');
+    assertCanAwardCustom(actor, target, row.awardableBy);
+    if (row.archivedAt !== null) throw stickerArchived();
+  } else {
+    assertCanAward(actor, target, key);
+  }
   if (target.clubArchived) throw clubArchived();
   if (target.removed) throw memberRemovedFromClub();
-  const award = await createAward(membersScope(actor), target, key, actor.userId, now);
+  const award = await createAward(membersScope(actor), target, key, actor.userId, now, reason);
   if (!award) throw new NotFoundError('Member');
-  return { key, awardedAt: award.awardedAt.toISOString(), revocable: true };
+  return {
+    key,
+    awardedAt: award.awardedAt.toISOString(),
+    reason: award.reason,
+    revocable: true,
+  };
 }
 
 export async function revokeSticker(
   actor: Actor,
   membershipId: string,
-  key: (typeof AWARDABLE_STICKER_KEYS)[number],
+  key: StickerRef,
 ): Promise<void> {
   const target = await loadAwardTarget(actor, membershipId);
-  assertCanAward(actor, target, key);
+  if (isCustomStickerKey(key)) {
+    const row = (await clubCustomStickers(target.clubId)).get(key);
+    if (!row) throw new NotFoundError('Sticker');
+    assertCanAwardCustom(actor, target, row.awardableBy);
+  } else {
+    assertCanAward(actor, target, key);
+  }
   const count = await deleteAward(membersScope(actor), membershipId, key);
   if (count === 0) throw new NotFoundError('Sticker');
 }
@@ -372,9 +514,28 @@ export async function getPublicCard(
     transactions: points.transactions,
   };
   const placements = card.placements.flatMap((row) => toPlacement(row) ?? []);
-  const stickers = earnedStickers(facts, new Set(awardKeys), placements).map((sticker) => ({
+  const customs = await customDefsFor(
+    awardKeys.map((award) => award.badgeKey),
+    [membership.clubId],
+  );
+  // What a sticker was given for is the giver's note about the member: shown only with the activity.
+  const stickers = earnedStickers(
+    facts,
+    new Map(
+      awardKeys.map((award) => [
+        award.badgeKey,
+        { awardedAt: award.awardedAt, reason: award.reason },
+      ]),
+    ),
+    placements,
+    customs,
+    card.showActivity,
+  ).map((sticker) => ({
     key: sticker.key,
     placement: sticker.placement,
+    earnedAt: sticker.earnedAt,
+    reason: sticker.reason,
+    custom: sticker.custom,
   }));
   const preference = card.tone === null ? null : card.tone === 'MATTE' ? 'matte' : 'paper';
 
@@ -399,6 +560,7 @@ export async function getPublicCard(
     stampsTotal: CARD_STAMPS_TOTAL,
     points: showPoints ? points.balance : null,
     stampsEarned: showPoints ? stampsForPoints(points.balance) : null,
+    stampsHalf: showPoints ? stampIsHalf(points.balance) : null,
     thisMonth: showPoints ? (byMonth.get(thisMonth) ?? 0) : null,
     monthly: showPoints
       ? months.map((month) => ({ month, points: byMonth.get(month) ?? 0 }))

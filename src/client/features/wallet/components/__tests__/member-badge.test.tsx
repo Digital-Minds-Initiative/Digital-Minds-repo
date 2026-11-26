@@ -20,6 +20,7 @@ const base: MemberCard = {
   tone: 'paper',
   tonePreference: null,
   stickers: [],
+  lockedStickers: [],
   share: {
     enabled: true,
     showPoints: true,
@@ -33,6 +34,7 @@ const base: MemberCard = {
   gregorianYear: 2026,
   points: 107,
   stampsEarned: 2,
+  stampsHalf: false,
   stampsTotal: 6,
   wallet: { apple: false, google: false },
 };
@@ -179,13 +181,14 @@ describe('MemberBadge', () => {
     expect(screen.getAllByText('DM-0000ABCD').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('keeps a very long name on one line by shrinking it, never by wrapping', () => {
+  it('never cuts a long name off: it stays whole in the name box, in the name font', () => {
     const long = 'عبدالرحمن بن محمد بن عبدالله بن سعود الغامدي';
     renderWithProviders(<MemberBadge card={{ ...base, fullName: long }} />);
     const name = screen.getByLabelText(long);
-    expect(name.className).toContain('whitespace-nowrap');
-    expect(name.style.fontSize).toBe('24px');
-    expect(within(name).getByText(long)).toBeTruthy();
+    const display = within(name).getByText((text) => text.replaceAll('ـ', '') === long);
+    expect(display.className).not.toContain('truncate');
+    expect(display.className).not.toContain('text-ellipsis');
+    expect(display.style.fontFamily).toContain('Thmanyah Serif Display');
   });
 
   it('says on the back that the QR opens the page, or that the page is private', async () => {
@@ -224,8 +227,18 @@ describe('MemberBadge', () => {
           key: 'star',
           source: 'awarded',
           placement: { key: 'star', x: 0.3, y: 0.4, rotation: -8, scale: 1, z: 0 },
+          earnedAt: '2026-11-01T10:00:00.000Z',
+          reason: null,
+          custom: null,
         },
-        { key: 'first', source: 'activity', placement: null },
+        {
+          key: 'first',
+          source: 'activity',
+          placement: null,
+          earnedAt: null,
+          reason: null,
+          custom: null,
+        },
       ],
     };
     renderWithProviders(<MemberBadge card={stuck} />);

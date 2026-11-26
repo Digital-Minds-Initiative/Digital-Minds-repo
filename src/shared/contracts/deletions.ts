@@ -45,6 +45,8 @@ export const clubDeletionCountsSchema = z.object({
   committees: count,
   membershipTypes: count,
   memberExports: count,
+  /** Stickers the club's leaders designed (docs/adr/0033-custom-stickers.md). */
+  customStickers: count,
   /** Empty bulk-points batches; a club without transactions should have none. */
   pointBatches: count,
 });

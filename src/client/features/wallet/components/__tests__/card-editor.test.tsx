@@ -84,13 +84,20 @@ async function openEditor() {
   return user;
 }
 
+/** The QR page's choices live in the editor's second section. */
+async function openEditorOnQr() {
+  const user = await openEditor();
+  await user.click(screen.getByRole('tab', { name: 'صفحة الـQR' }));
+  return user;
+}
+
 describe('the card editor', () => {
   it('opens on the back of the card, with the stickers the member holds and the ones still to earn', async () => {
     await openEditor();
     const tray = screen.getByRole('group', { name: 'تخصيص البطاقة' });
     // Earned by her role: pressable. Not earned: shown, grey, disabled, with how to earn them.
     expect(within(tray).getByRole('button', { name: /ألصق «قائد لجنة»/ })).toBeTruthy();
-    const locked = within(tray).getByRole('button', { name: /نجم الشهر/ }) as HTMLButtonElement;
+    const locked = within(tray).getByRole('button', { name: /^نجم الشهر —/ }) as HTMLButtonElement;
     expect(locked.disabled).toBe(true);
     expect(within(tray).getByText(/^لصقت 0 من [0-9]+\./)).toBeTruthy();
   });
@@ -136,15 +143,30 @@ describe('the card editor', () => {
   it('changes the size and the turn of the picked sticker, within their limits', async () => {
     const user = await openEditor();
     await user.click(screen.getByRole('button', { name: /ألصق «قائد لجنة»/ }));
-    const size = screen.getByLabelText('الحجم') as HTMLInputElement;
-    expect([size.min, size.max]).toEqual(['0.6', '1.6']);
-    fireEvent.change(size, { target: { value: '1.5' } });
-    const turn = screen.getByLabelText('التدوير') as HTMLInputElement;
-    expect([turn.min, turn.max]).toEqual(['-45', '45']);
-    fireEvent.change(turn, { target: { value: '20' } });
+    // The controls sit on the card itself, under the picked sticker.
+    const tools = screen.getByRole('toolbar', { name: 'أدوات الملصق' });
     const sticker = screen.getByRole('button', { name: /قائد لجنة: اسحبه/ });
-    expect(sticker.style.transform).toBe('rotate(20deg)');
-    expect(Number.parseFloat(sticker.style.width)).toBeCloseTo(96 * 1.5, 1);
+    const press = (name: string, times: number) => {
+      for (let i = 0; i < times; i += 1) {
+        fireEvent.pointerDown(within(tools).getByRole('button', { name }), { button: 0 });
+        fireEvent.pointerUp(within(tools).getByRole('button', { name }));
+      }
+    };
+    // Drawn at one size and scaled, so the size can ease instead of jumping.
+    const before = sticker.style.transform;
+    press('كبّره', 3);
+    await waitFor(() => expect(sticker.style.transform).not.toBe(before));
+    expect(sticker.style.transform).toMatch(/scale\(1\.24\)/);
+    press('دوّره لليمين', 2);
+    await waitFor(() => expect(sticker.style.transform).toMatch(/rotate\(\-?[0-9.]+deg\) scale/));
+    // Never past the limits, however long it is held: the button is switched off at the end.
+    press('كبّره', 30);
+    await waitFor(() => expect(sticker.style.transform).toMatch(/scale\(1\.6\)/));
+    expect(
+      (within(tools).getByRole('button', { name: 'كبّره' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    press('دوّره لليمين', 30);
+    await waitFor(() => expect(sticker.style.transform).toMatch(/rotate\(45deg\)/));
   });
 
   it('saves nothing until asked, then keeps the layout on the server', async () => {
@@ -182,7 +204,7 @@ describe('the card editor', () => {
   });
 
   it('turns the QR page off and keeps the dependent switches off with it', async () => {
-    const user = await openEditor();
+    const user = await openEditorOnQr();
     const open = screen.getByRole('switch', { name: 'افتح صفحتي لمن يمسح الرمز' });
     const points = screen.getByRole('switch', { name: 'أظهر نقاطي وأختامي' }) as HTMLButtonElement;
     expect(points.disabled).toBe(false);
@@ -199,7 +221,7 @@ describe('the card editor', () => {
   });
 
   it('keeps the activity switch off while the points are hidden', async () => {
-    const user = await openEditor();
+    const user = await openEditorOnQr();
     await user.click(screen.getByRole('switch', { name: 'أظهر نقاطي وأختامي' }));
     expect(
       (screen.getByRole('switch', { name: 'أظهر آخر نشاطي' }) as HTMLButtonElement).disabled,
@@ -207,7 +229,7 @@ describe('the card editor', () => {
   });
 
   it('makes a new link on request and says the old one is dead', async () => {
-    const user = await openEditor();
+    const user = await openEditorOnQr();
     const before = (await savedCard()).share.url;
     await user.click(screen.getByRole('button', { name: 'رابط جديد' }));
     expect(await screen.findByText('تم. الرابط القديم ما عاد يفتح.')).toBeTruthy();
