@@ -19,7 +19,12 @@ import { myCardsQueryKey } from './use-my-cards';
  */
 export function useCardActions(membershipId: string) {
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: myCardsQueryKey });
+  // The QR page shown on the dashboard follows what the member just changed.
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: myCardsQueryKey }),
+      queryClient.invalidateQueries({ queryKey: ['public-card'] }),
+    ]);
 
   const update = useMutation({
     mutationFn: (body: UpdateMyCardBody) =>

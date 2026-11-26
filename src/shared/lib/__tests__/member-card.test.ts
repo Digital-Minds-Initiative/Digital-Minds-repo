@@ -52,10 +52,24 @@ describe('kashida', () => {
   it('stretches a short name after a joining letter, never before the article', () => {
     const stretched = withKashida('نورة خالد الحربي');
     expect(stretched).toContain(`ن${tatweel}`);
-    expect(stretched).toContain(`خ${tatweel}`);
     expect(stretched).toContain(`الح${tatweel}`);
     expect(stretched).not.toContain(`ال${tatweel}`);
     expect(stretched.replaceAll(tatweel, '')).toBe('نورة خالد الحربي');
+  });
+
+  it('never stretches into an alef or inside a lam-alef, and leaves such a word as it is', () => {
+    // خ would stretch before the alef (خـالد), ل would stretch before the د: neither is set.
+    expect(withKashida('خالد')).toBe('خالد');
+    expect(withKashida('جلال')).not.toContain(`ل${tatweel}`);
+    const stretched = withKashida('سعد');
+    expect(stretched).toContain(`سع${tatweel}`);
+    expect(stretched).not.toMatch(new RegExp(`${tatweel}[اأإآ]`, 'u'));
+  });
+
+  it('prefers the middle of a word, and caps one stretch', () => {
+    // The ح in the middle of «محمد» beats the م that starts it.
+    expect(withKashida('محمد')).toMatch(new RegExp(`^مح${tatweel}+مد$`, 'u'));
+    expect(withKashida('سعد').match(new RegExp(tatweel, 'gu'))?.length ?? 0).toBeLessThanOrEqual(4);
   });
 
   it('leaves a long name alone so it still fits on one line', () => {

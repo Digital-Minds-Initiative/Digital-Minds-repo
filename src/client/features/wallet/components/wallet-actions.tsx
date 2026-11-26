@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import { Smartphone, Wallet } from 'lucide-react';
+import { Apple } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useSyncExternalStore } from 'react';
 
@@ -19,6 +19,32 @@ export function detectDevice(userAgent: string, maxTouchPoints = 0): Device {
   if (/Android/i.test(userAgent)) return 'android';
   return 'other';
 }
+
+/** Google's «G», drawn as one stroke so it takes the button's colour like the Apple mark does. */
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M19 7.2A8 8 0 1 0 20 12h-7.5" />
+    </svg>
+  );
+}
+
+/** One wallet as an icon: square, side by side with the other, named for a screen reader and on hover. */
+const walletButton = (variant: 'primary' | 'outline', className?: string) =>
+  buttonVariants({
+    variant,
+    size: 'lg',
+    className: `h-12 flex-1 justify-center transition-transform duration-150 active:scale-95 motion-reduce:transition-none ${className ?? ''}`,
+  });
 
 const subscribe = () => () => undefined;
 const serverDevice = (): Device => 'other';
@@ -52,19 +78,21 @@ export function WalletActions({
     <a
       key="apple"
       href={`/api/v1/me/cards/${card.membershipId}/wallet-pass`}
-      className={buttonVariants({ variant: 'primary', size: 'lg' })}
+      title={t('apple')}
+      className={walletButton('primary')}
     >
-      <Wallet aria-hidden />
-      {t('apple')}
+      <Apple aria-hidden className="size-6" />
+      <span className="sr-only">{t('apple')}</span>
     </a>
   ) : (
     <span
       key="apple"
       aria-disabled
-      className={buttonVariants({ variant: 'outline', size: 'lg', className: 'opacity-60' })}
+      title={t('apple')}
+      className={walletButton('outline', 'opacity-60')}
     >
-      <Wallet aria-hidden />
-      {t('apple')}
+      <Apple aria-hidden className="size-6" />
+      <span className="sr-only">{t('apple')}</span>
     </span>
   );
 
@@ -75,19 +103,21 @@ export function WalletActions({
       onClick={() => google.mutate()}
       aria-busy={google.isPending}
       disabled={google.isPending}
-      className={buttonVariants({ variant: 'primary', size: 'lg' })}
+      title={google.isPending ? t('preparing') : t('google')}
+      className={walletButton('primary')}
     >
-      <Smartphone aria-hidden />
-      {google.isPending ? t('preparing') : t('google')}
+      <GoogleIcon className={`size-6 ${google.isPending ? 'motion-safe:animate-spin' : ''}`} />
+      <span className="sr-only">{google.isPending ? t('preparing') : t('google')}</span>
     </button>
   ) : (
     <span
       key="google"
       aria-disabled
-      className={buttonVariants({ variant: 'outline', size: 'lg', className: 'opacity-60' })}
+      title={t('google')}
+      className={walletButton('outline', 'opacity-60')}
     >
-      <Smartphone aria-hidden />
-      {t('google')}
+      <GoogleIcon className="size-6" />
+      <span className="sr-only">{t('google')}</span>
     </span>
   );
 
@@ -96,7 +126,7 @@ export function WalletActions({
 
   return (
     <div className="grid gap-2">
-      {buttons}
+      <div className="flex gap-2">{buttons}</div>
       {google.isError ? (
         <p role="alert" className="text-sm text-danger">
           {t('failed')}

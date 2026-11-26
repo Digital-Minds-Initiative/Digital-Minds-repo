@@ -1,10 +1,14 @@
 'use client';
 
-import { RotateCw } from 'lucide-react';
+import { Minus, MoveDiagonal2, Plus, RotateCcw, RotateCw, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import {
+  useCallback,
+  useEffect,
+  useId,
   useRef,
   useState,
+  type AnimationEvent,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
@@ -17,15 +21,23 @@ import { MARK_MASK_STYLE } from '@/components/shell/logo';
 import walletPassAr from '@/i18n/messages/ar/walletPass.json';
 import type { MemberCard } from '@/shared/contracts/wallet';
 import { withKashida } from '@/shared/lib/member-card';
-import type { StickerKey, StickerPlacement } from '@/shared/lib/stickers';
+import { PLACEMENT_LIMITS, type StickerKey, type StickerPlacement } from '@/shared/lib/stickers';
 import { cardRoleLabel } from '@/shared/lib/wallet-pass';
 
 import { CellMosaic } from './cell-mosaic';
+import { FitFigure } from './fit-figure';
 import { PanelArt } from './panel-art';
 import { PassQr } from './pass-qr';
 import { Sticker } from './sticker';
-import { useCountUp, useFitScale, usePointerDepth, useSeenOnce } from '../hooks/use-badge-motion';
+import {
+  prefersReducedMotion,
+  useCountUp,
+  useFitScale,
+  usePointerDepth,
+  useSeenOnce,
+} from '../hooks/use-badge-motion';
 import { BADGE_MOSAIC_ROWS, badgeThemeFor, type BadgeTheme } from '../lib/badge-theme';
+import { formatFigure } from '../lib/number-fit';
 
 /** The badge is drawn at this size and scaled as a whole, so it is the same card on every screen. */
 const WIDTH = 358;
@@ -37,6 +49,182 @@ const FACE: CSSProperties = {
   backfaceVisibility: 'hidden',
   WebkitBackfaceVisibility: 'hidden',
 };
+
+/** A colourway change in flight: the theme it leaves and the screen point the wave starts from. */
+interface Ink {
+  from: BadgeTheme;
+  /** Where the press happened, in viewport pixels; the card's own upper middle when there was none. */
+  client: { x: number; y: number } | null;
+}
+
+/**
+ * How far the wave travels, in the card's own pixels: past the farthest corner and out of the
+ * band, so at the end nothing of it is left on the card.
+ */
+const WAVE_REACH = 860;
+/** The band of swirling colour that rides the front of the wave. */
+const BAND = 190;
+/** Where the new dress comes in behind the band's leading half. */
+const SEAM = 95;
+
+const WAVE_R = `calc(var(--wave) * ${WAVE_REACH}px)`;
+/** The new dress shows inside the wave, its edge hidden under the band. */
+const DRESS_MASK = `radial-gradient(circle at var(--ix) var(--iy), #000 calc(${WAVE_R} - ${SEAM}px), transparent calc(${WAVE_R} - ${SEAM - 55}px))`;
+/** The band: nothing, then colour, then nothing again, as a ring around the wave's front. */
+const BAND_MASK = `radial-gradient(circle at var(--ix) var(--iy), transparent calc(${WAVE_R} - ${BAND}px), #000 calc(${WAVE_R} - ${BAND * 0.55}px), #000 calc(${WAVE_R} - ${BAND * 0.2}px), transparent ${WAVE_R})`;
+
+/**
+ * The colours the band swirls through: the new dress's own light (the blobs of its panel and its
+ * accent), so a white badge turning matte is washed by indigo and lilac and not by a generic blue.
+ */
+function bandBackground(theme: BadgeTheme): string {
+  const [a, b, c] = theme.panelBlobs;
+  return [
+    `radial-gradient(55% 55% at 18% 28%, ${a}, transparent 70%)`,
+    `radial-gradient(60% 60% at 82% 22%, ${theme.accent}, transparent 70%)`,
+    `radial-gradient(60% 60% at 70% 85%, ${b}, transparent 72%)`,
+    `radial-gradient(50% 50% at 25% 80%, ${c}, transparent 70%)`,
+    `linear-gradient(135deg, ${theme.panelBase}, ${a})`,
+  ].join(', ');
+}
+
+/** Film grain over the band, the way ReactBits' Grainient dusts its gradient. */
+function BandGrain({ id }: { id: string }) {
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute inset-0 size-full"
+      style={{ mixBlendMode: 'overlay', opacity: 0.85 }}
+    >
+      <filter id={id}>
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.85"
+          numOctaves="3"
+          stitchTiles="stitch"
+        />
+        <feColorMatrix
+          type="matrix"
+          values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0"
+        />
+      </filter>
+      <rect width="100%" height="100%" filter={`url(#${id})`} />
+    </svg>
+  );
+}
+
+/**
+ * One face of the badge dressed in `theme`. While the colourway changes it keeps the old dress
+ * underneath and lets the new one come in behind a wave that starts at the point that was pressed:
+ * a wide band of drifting, grainy gradient in the new colours, its edge rippling like liquid (an
+ * SVG displacement), in the spirit of ReactBits' Grainient background. Both dresses are the same
+ * content drawn twice for a second and a half, so every detail changes colour in the same wave.
+ */
+function InkFace({
+  theme,
+  ink,
+  mirror,
+  onDone,
+  children,
+}: {
+  theme: BadgeTheme;
+  ink: Ink | null;
+  /** The face is seen from behind (the card is turned the other way), so left and right swap. */
+  mirror: boolean;
+  onDone: () => void;
+  /** `underlay` is true for the old dress, which is only to be looked at. */
+  children: (theme: BadgeTheme, underlay: boolean) => ReactNode;
+}) {
+  const warpId = useId();
+  const grainId = useId();
+  const place = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node || !ink) return;
+      const box = node.getBoundingClientRect();
+      const fx = ink.client && box.width > 0 ? (ink.client.x - box.left) / box.width : 0.5;
+      const fy = ink.client && box.height > 0 ? (ink.client.y - box.top) / box.height : 0.3;
+      // Drawn a third of the way toward the middle, so no corner of the card is left for last.
+      const toward = (v: number) => v + (0.5 - v) * 0.33;
+      const x = toward(Math.min(1.05, Math.max(-0.05, mirror ? 1 - fx : fx)));
+      const y = toward(Math.min(1.05, Math.max(-0.05, fy)));
+      node.style.setProperty('--ix', `${(x * WIDTH).toFixed(1)}px`);
+      node.style.setProperty('--iy', `${(y * HEIGHT).toFixed(1)}px`);
+    },
+    [ink, mirror],
+  );
+
+  const dress = (t: BadgeTheme): CSSProperties => ({ background: t.ground, color: t.text });
+  const wave = 'motion-safe:animate-[badge-ink_1700ms_cubic-bezier(0.45,0.1,0.25,1)_both]';
+
+  return (
+    <>
+      {ink ? (
+        <div aria-hidden inert className="absolute inset-0 isolate" style={dress(ink.from)}>
+          {children(ink.from, true)}
+        </div>
+      ) : null}
+      <div
+        ref={ink ? place : undefined}
+        className={cn('absolute inset-0 isolate', ink && wave)}
+        style={{
+          ...dress(theme),
+          ...(ink ? { maskImage: DRESS_MASK, WebkitMaskImage: DRESS_MASK } : null),
+        }}
+        onAnimationEnd={(event: AnimationEvent<HTMLDivElement>) => {
+          if (ink && event.target === event.currentTarget) onDone();
+        }}
+      >
+        {children(theme, false)}
+      </div>
+      {ink ? (
+        <>
+          <svg aria-hidden width="0" height="0" className="absolute">
+            <filter id={warpId} x="-15%" y="-15%" width="130%" height="130%">
+              <feTurbulence
+                type="fractalNoise"
+                baseFrequency="0.009 0.014"
+                numOctaves="2"
+                seed="7"
+                result="noise"
+              >
+                <animate
+                  attributeName="baseFrequency"
+                  dur="2.4s"
+                  values="0.009 0.014;0.016 0.01;0.009 0.014"
+                  repeatCount="indefinite"
+                />
+              </feTurbulence>
+              <feDisplacementMap
+                in="SourceGraphic"
+                in2="noise"
+                scale="78"
+                xChannelSelector="R"
+                yChannelSelector="G"
+              />
+            </filter>
+          </svg>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 motion-reduce:hidden"
+            style={{ filter: `url(#${warpId})` }}
+          >
+            <div
+              ref={place}
+              className={cn('absolute inset-0', wave)}
+              style={{ maskImage: BAND_MASK, WebkitMaskImage: BAND_MASK }}
+            >
+              <div
+                className="absolute inset-0 motion-safe:animate-[badge-flow_2.6s_ease-in-out_infinite_alternate]"
+                style={{ background: bandBackground(theme), backgroundSize: '220% 220%' }}
+              />
+              <BandGrain id={grainId} />
+            </div>
+          </div>
+        </>
+      ) : null}
+    </>
+  );
+}
 
 function Slot({ theme }: { theme: BadgeTheme }) {
   return (
@@ -111,10 +299,7 @@ function Front({
   return (
     <>
       <Slot theme={theme} />
-      <div
-        className="absolute top-0"
-        style={{ right: 0, translate: 'calc(var(--px, 0) * -7px) calc(var(--py, 0) * -7px)' }}
-      >
+      <div className="absolute top-0" style={{ right: 0 }}>
         <CellMosaic
           rows={BADGE_MOSAIC_ROWS}
           palette={theme.mosaic}
@@ -155,21 +340,16 @@ function Front({
         <PanelArt theme={theme} />
 
         <div className="absolute inset-x-[18px] top-4 flex items-start justify-between">
-          <div className="grid justify-items-end">
+          <div className="grid min-w-0 flex-1 justify-items-end">
             <div className="text-xs font-semibold opacity-90">{t('points')}</div>
-            <div
-              className="font-mono text-[44px] leading-[1.05] font-medium [font-variant-numeric:lining-nums_tabular-nums]"
-              dir="ltr"
-            >
-              {points.toLocaleString('en')}
-            </div>
+            <FitFigure shown={formatFigure(points)} final={formatFigure(card.points)} base={44} />
           </div>
           {/* The club's own logo, as the design system supplies it for this ground. */}
           {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size brand mark */}
           <img
             src={theme.logo.src}
             alt={theme.logo.alt}
-            className="block w-auto"
+            className="ms-3 block w-auto shrink-0"
             style={{ height: theme.logo.height, marginTop: -2 }}
           />
         </div>
@@ -205,6 +385,9 @@ function Front({
   );
 }
 
+/** A change of size and/or turn to one sticker. */
+export type StickerAdjust = Partial<Pick<StickerPlacement, 'rotation' | 'scale'>>;
+
 /** What the sticker editor changes on the card: where each sticker lies, which is picked, and the colour. */
 export interface BadgeEditor {
   placements: readonly StickerPlacement[];
@@ -213,14 +396,32 @@ export interface BadgeEditor {
   /** A sticker was dragged: its new centre, as a fraction of the card. */
   onMove: (key: StickerKey, x: number, y: number) => void;
   onRemove: (key: StickerKey) => void;
+  /** A sticker was resized or turned from its handle on the card, or from the keyboard. */
+  onAdjust: (key: StickerKey, change: StickerAdjust) => void;
   /** The colour being tried, before it is saved. */
   tone?: 'paper' | 'matte';
+  /** Where the colour was pressed (viewport pixels): the ink drops from there when it changes. */
+  inkOrigin?: { x: number; y: number };
 }
 
 /** The sticker's diameter on the card at scale 1, in the card's own 358 x 448 pixels. */
 const STICKER_SIZE = 96;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+/** The round controls on a picked sticker, in card pixels: big enough for a finger. */
+const HANDLE_SIZE = 38;
+
+/** Keeps a drag with the element it began on; a pointer that has already ended cannot be held, and that is no error. */
+function holdPointer(element: Element, pointerId: number) {
+  try {
+    element.setPointerCapture(pointerId);
+  } catch {
+    // A tap that ended before this ran: there is nothing left to follow.
+  }
+}
+
+const roundTo = (value: number, step: number) => Math.round(value / step) * step;
 
 /** One sticker on the back: still, or — when the card is being edited — one to pick up and move. */
 function PlacedSticker({
@@ -235,23 +436,35 @@ function PlacedSticker({
 }) {
   const t = useTranslations('wallet.editor');
   const tName = useTranslations('walletPass.sticker');
-  const size = STICKER_SIZE * placement.scale;
   const selected = editor?.selected === placement.key;
   const drag = useRef<{ dx: number; dy: number } | null>(null);
+  const grip = useRef<{ cx: number; cy: number; k: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const { rotation, scale } = PLACEMENT_LIMITS;
 
+  // Drawn at one size and scaled, so the size slider eases instead of jumping, and the position
+  // and turn ease too (never while a finger or the pointer is dragging it: that must follow 1:1).
   const style: CSSProperties = {
-    left: `${placement.x * WIDTH - size / 2}px`,
-    top: `${placement.y * HEIGHT - size / 2}px`,
-    width: size,
-    height: size,
-    transform: `rotate(${placement.rotation}deg)`,
+    left: `${placement.x * WIDTH - STICKER_SIZE / 2}px`,
+    top: `${placement.y * HEIGHT - STICKER_SIZE / 2}px`,
+    width: STICKER_SIZE,
+    height: STICKER_SIZE,
+    transform: `rotate(${placement.rotation}deg) scale(${placement.scale})`,
     zIndex: placement.z + 1,
   };
+  const settle =
+    'transition-[left,top,transform] duration-200 ease-[var(--ease-out)] motion-reduce:transition-none data-[dragging=true]:transition-none';
+  // The controls stay one size on the card however big or small the sticker is made.
+  const counter = (origin: string): CSSProperties => ({
+    width: HANDLE_SIZE,
+    height: HANDLE_SIZE,
+    transform: `translate(${origin}) scale(${1 / placement.scale})`,
+  });
 
   if (!editor) {
     return (
       <div className="absolute" style={style}>
-        <Sticker stickerKey={placement.key} size={size} peel={placement.key === 'lead'} />
+        <Sticker stickerKey={placement.key} size={STICKER_SIZE} peel={placement.key === 'lead'} />
       </div>
     );
   }
@@ -265,6 +478,47 @@ function PlacedSticker({
       clamp01((event.clientY - box.top - drag.current.dy) / box.height),
     );
   };
+  const drop = (event: PointerEvent<HTMLElement>) => {
+    drag.current = null;
+    grip.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  // The corner handle: how far it is from the sticker's middle is the size, and which way it
+  // points is the turn, so one drag does both, as on any photo editor.
+  const gripDown = (event: PointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+    event.preventDefault();
+    const box = stage.current?.getBoundingClientRect();
+    if (!box) return;
+    holdPointer(event.currentTarget, event.pointerId);
+    grip.current = {
+      cx: box.left + placement.x * box.width,
+      cy: box.top + placement.y * box.height,
+      k: box.width / WIDTH,
+    };
+    setDragging(true);
+    editor.onSelect(placement.key);
+  };
+  const gripMove = (event: PointerEvent<HTMLElement>) => {
+    const g = grip.current;
+    if (!g) return;
+    const dx = event.clientX - g.cx;
+    const dy = event.clientY - g.cy;
+    const reach = Math.hypot(dx, dy) / g.k;
+    // The handle sits on the bottom-right corner, 45 degrees from straight right.
+    const turn = (((Math.atan2(dy, dx) * 180) / Math.PI - 45 + 540) % 360) - 180;
+    editor.onAdjust(placement.key, {
+      scale: Math.min(
+        scale.max,
+        Math.max(scale.min, roundTo(reach / (STICKER_SIZE * Math.SQRT1_2), 0.02)),
+      ),
+      rotation: Math.min(rotation.max, Math.max(rotation.min, Math.round(turn))),
+    });
+  };
 
   return (
     <div
@@ -272,11 +526,16 @@ function PlacedSticker({
       tabIndex={0}
       aria-pressed={selected}
       aria-label={t('pick', { name: tName(placement.key) })}
-      className="absolute cursor-grab touch-none rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:cursor-grabbing"
+      data-dragging={dragging}
+      className={cn(
+        // The whole square is the grip, corners included: no rounding, or the corners would not catch a press.
+        'absolute cursor-grab touch-none rounded-[14px] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:cursor-grabbing',
+        settle,
+      )}
       style={style}
       onPointerDown={(event) => {
         event.stopPropagation();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        holdPointer(event.currentTarget, event.pointerId);
         const box = stage.current?.getBoundingClientRect();
         if (!box) return;
         // Where inside the sticker it was grabbed, so it does not jump to centre on its pointer.
@@ -284,13 +543,12 @@ function PlacedSticker({
           dx: event.clientX - box.left - placement.x * box.width,
           dy: event.clientY - box.top - placement.y * box.height,
         };
+        setDragging(true);
         editor.onSelect(placement.key);
       }}
       onPointerMove={move}
-      onPointerUp={(event) => {
-        drag.current = null;
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }}
+      onPointerUp={drop}
+      onPointerCancel={drop}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         event.stopPropagation();
@@ -315,32 +573,258 @@ function PlacedSticker({
         } else if (event.key === 'Delete' || event.key === 'Backspace') {
           event.preventDefault();
           editor.onRemove(placement.key);
+        } else if (event.key === '+' || event.key === '=' || event.key === '-') {
+          event.preventDefault();
+          editor.onAdjust(placement.key, {
+            scale: Math.min(
+              scale.max,
+              Math.max(scale.min, placement.scale + (event.key === '-' ? -0.05 : 0.05)),
+            ),
+          });
+        } else if (event.key === '[' || event.key === ']') {
+          event.preventDefault();
+          editor.onAdjust(placement.key, {
+            rotation: Math.min(
+              rotation.max,
+              Math.max(rotation.min, placement.rotation + (event.key === '[' ? -3 : 3)),
+            ),
+          });
         }
       }}
     >
-      <Sticker stickerKey={placement.key} size={size} />
+      {/* It drops onto the card when stuck, and lifts off it while it is being carried. */}
+      <div
+        className={cn(
+          'size-full motion-safe:animate-[sticker-stick_420ms_var(--ease-out)_backwards]',
+          'transition-[scale,filter] duration-150 ease-[var(--ease-out)] motion-reduce:transition-none',
+          dragging &&
+            'scale-110 [filter:drop-shadow(0_8px_6px_color-mix(in_oklab,black_35%,transparent))]',
+        )}
+      >
+        <Sticker stickerKey={placement.key} size={STICKER_SIZE} />
+      </div>
       {selected ? (
         <>
-          <span
+          <svg
             aria-hidden
-            className="pointer-events-none absolute -inset-1.5 rounded-[10px] border-[1.5px] border-dashed"
-            style={{ borderColor: 'var(--tuwaiq-lilac)' }}
-          />
+            viewBox="0 0 108 108"
+            className="pointer-events-none absolute -inset-1.5 size-[calc(100%+12px)] motion-safe:animate-[selection-pop_180ms_var(--ease-out)_both]"
+          >
+            <rect
+              x="1"
+              y="1"
+              width="106"
+              height="106"
+              rx="14"
+              fill="none"
+              stroke="var(--tuwaiq-lilac)"
+              strokeWidth="1.6"
+              strokeDasharray="5 3"
+              className="motion-safe:animate-[selection-march_900ms_linear_infinite]"
+            />
+          </svg>
+          {/* Size and turn: the bottom-right corner. */}
           <button
             type="button"
-            aria-label={t('remove')}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
+            aria-label={t('resize')}
+            onPointerDown={gripDown}
+            onPointerMove={gripMove}
+            onPointerUp={drop}
+            onPointerCancel={drop}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              const keys: Record<string, StickerAdjust> = {
+                ArrowUp: { scale: Math.min(scale.max, placement.scale + 0.05) },
+                ArrowDown: { scale: Math.max(scale.min, placement.scale - 0.05) },
+                ArrowRight: { rotation: Math.min(rotation.max, placement.rotation + 3) },
+                ArrowLeft: { rotation: Math.max(rotation.min, placement.rotation - 3) },
+              };
+              const change = keys[event.key];
+              if (!change) return;
+              event.preventDefault();
               event.stopPropagation();
-              editor.onRemove(placement.key);
+              editor.onAdjust(placement.key, change);
             }}
-            className="absolute -end-3 -top-3 grid size-6 place-items-center rounded-full text-sm leading-none font-bold outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            style={{ background: 'var(--color-danger)', color: 'var(--color-danger-fg)' }}
+            className="absolute grid cursor-nwse-resize touch-none place-items-center rounded-full shadow-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-safe:animate-[selection-pop_220ms_var(--ease-out)_90ms_both]"
+            style={{
+              ...counter('50%, 50%'),
+              right: 0,
+              bottom: 0,
+              border: '2px solid var(--badge-white)',
+              background: 'var(--tuwaiq-lilac)',
+              color: 'var(--badge-ink)',
+            }}
           >
-            ×
+            <MoveDiagonal2 aria-hidden className="size-5" strokeWidth={2.6} />
           </button>
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** How far one press of a toolbar button changes the picked sticker. */
+const TOOLBAR_WIDTH = 214;
+const TOOLBAR_HEIGHT = 44;
+
+const TOOL_STEP = { scale: 0.08, rotation: 6 } as const;
+
+/**
+ * A toolbar button that does its thing once when pressed and keeps doing it while it is held, so a
+ * sticker can be eased bigger or turned a long way without a hundred presses.
+ */
+function HoldButton({
+  label,
+  disabled,
+  onStep,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  onStep: () => void;
+  children: ReactNode;
+}) {
+  const latest = useRef(onStep);
+  const timer = useRef<number | null>(null);
+  useEffect(() => {
+    latest.current = onStep;
+  });
+  const stop = useCallback(() => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      window.clearInterval(timer.current);
+      timer.current = null;
+    }
+  }, []);
+  useEffect(() => stop, [stop]);
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (event.button !== 0 || disabled) return;
+        latest.current();
+        stop();
+        timer.current = window.setTimeout(() => {
+          timer.current = window.setInterval(() => latest.current(), 60);
+        }, 340);
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      // A key press arrives as a click with no pointer: the press above already covered the mouse.
+      onClick={(event) => {
+        event.stopPropagation();
+        if (event.detail === 0) onStep();
+      }}
+      className="grid size-9 cursor-pointer place-items-center rounded-full transition-[background-color,transform] duration-150 outline-none hover:[background-color:color-mix(in_oklab,var(--badge-canvas)_16%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring active:scale-90 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transition-none"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The controls of the picked sticker, on the card itself, right under it (above it when it is low
+ * on the card): turn it either way, make it smaller or bigger, take it off. The corner handle
+ * does the same by dragging; this is for exact, repeatable steps and for a keyboard or a finger.
+ */
+function StickerToolbar({
+  placement,
+  editor,
+}: {
+  placement: StickerPlacement;
+  editor: BadgeEditor;
+}) {
+  const t = useTranslations('wallet.editor');
+  const { rotation, scale } = PLACEMENT_LIMITS;
+  const reach = (STICKER_SIZE * placement.scale) / 2 + 22;
+  const below = placement.y * HEIGHT + reach + 6;
+  const top =
+    below + TOOLBAR_HEIGHT > HEIGHT - 8 ? placement.y * HEIGHT - reach - TOOLBAR_HEIGHT - 6 : below;
+  const left = Math.min(
+    WIDTH - TOOLBAR_WIDTH / 2 - 6,
+    Math.max(TOOLBAR_WIDTH / 2 + 6, placement.x * WIDTH),
+  );
+  const clampRotation = (value: number) => Math.min(rotation.max, Math.max(rotation.min, value));
+  const clampScale = (value: number) =>
+    Math.min(scale.max, Math.max(scale.min, Math.round(value * 100) / 100));
+
+  return (
+    <div
+      role="toolbar"
+      aria-label={t('toolbar.label')}
+      dir="ltr"
+      className="absolute flex items-center gap-0.5 rounded-full p-1 shadow-lg motion-safe:animate-[selection-pop_180ms_var(--ease-out)_both]"
+      style={{
+        zIndex: 300,
+        top,
+        left,
+        width: TOOLBAR_WIDTH,
+        height: TOOLBAR_HEIGHT,
+        translate: '-50% 0',
+        background: 'var(--badge-ink)',
+        color: 'var(--badge-canvas)',
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <HoldButton
+        label={t('toolbar.turnLeft')}
+        disabled={placement.rotation <= rotation.min}
+        onStep={() =>
+          editor.onAdjust(placement.key, {
+            rotation: clampRotation(placement.rotation - TOOL_STEP.rotation),
+          })
+        }
+      >
+        <RotateCcw aria-hidden className="size-4" />
+      </HoldButton>
+      <HoldButton
+        label={t('toolbar.turnRight')}
+        disabled={placement.rotation >= rotation.max}
+        onStep={() =>
+          editor.onAdjust(placement.key, {
+            rotation: clampRotation(placement.rotation + TOOL_STEP.rotation),
+          })
+        }
+      >
+        <RotateCw aria-hidden className="size-4" />
+      </HoldButton>
+      <span
+        aria-hidden
+        className="mx-0.5 h-5 w-px"
+        style={{ background: 'color-mix(in oklab, var(--badge-canvas) 25%, transparent)' }}
+      />
+      <HoldButton
+        label={t('toolbar.smaller')}
+        disabled={placement.scale <= scale.min}
+        onStep={() =>
+          editor.onAdjust(placement.key, { scale: clampScale(placement.scale - TOOL_STEP.scale) })
+        }
+      >
+        <Minus aria-hidden className="size-4" />
+      </HoldButton>
+      <HoldButton
+        label={t('toolbar.larger')}
+        disabled={placement.scale >= scale.max}
+        onStep={() =>
+          editor.onAdjust(placement.key, { scale: clampScale(placement.scale + TOOL_STEP.scale) })
+        }
+      >
+        <Plus aria-hidden className="size-4" />
+      </HoldButton>
+      <span
+        aria-hidden
+        className="mx-0.5 h-5 w-px"
+        style={{ background: 'color-mix(in oklab, var(--badge-canvas) 25%, transparent)' }}
+      />
+      <HoldButton label={t('remove')} onStep={() => editor.onRemove(placement.key)}>
+        <Trash2 aria-hidden className="size-4" />
+      </HoldButton>
     </div>
   );
 }
@@ -361,14 +845,12 @@ function Back({
 }) {
   const tWallet = useTranslations('wallet');
   const empty = placements.length === 0;
+  const picked = placements.find((placement) => placement.key === editor?.selected) ?? null;
 
   return (
     <div ref={stageRef} className="absolute inset-0" onPointerDown={() => editor?.onSelect(null)}>
       <Slot theme={theme} />
-      <div
-        className="absolute top-0"
-        style={{ right: 0, translate: 'calc(var(--px, 0) * -7px) calc(var(--py, 0) * -7px)' }}
-      >
+      <div className="absolute top-0" style={{ right: 0 }}>
         <CellMosaic
           rows={BADGE_MOSAIC_ROWS}
           palette={theme.mosaic}
@@ -388,10 +870,11 @@ function Back({
       {placements.map((placement) => (
         <PlacedSticker key={placement.key} placement={placement} editor={editor} stage={stageRef} />
       ))}
+      {editor && picked ? <StickerToolbar placement={picked} editor={editor} /> : null}
 
       <div className="absolute inset-x-6 bottom-6 flex items-end justify-between gap-4">
         <div
-          className="grid justify-items-center gap-1 rounded-[10px] p-2"
+          className="pointer-events-none grid justify-items-center gap-1 rounded-[10px] p-2"
           style={{ background: theme.chip, color: theme.chipInk, zIndex: 200 }}
         >
           <div className="size-[76px]">
@@ -402,7 +885,7 @@ function Back({
           </span>
         </div>
         <div
-          className="grid min-w-0 flex-1 justify-items-end gap-1 text-end"
+          className="pointer-events-none grid min-w-0 flex-1 justify-items-end gap-1 text-end"
           style={{ zIndex: 200 }}
         >
           <div
@@ -424,10 +907,12 @@ function Back({
 
 /**
  * One member's badge, front and back. It unfolds from its top edge when it comes into view,
- * hangs with a slow sway, leans toward the pointer with its layers at different depths, and turns
- * over like a leaf (ReactBits' Page Flip: 180 degrees, 0.55 s, ease in-out, perspective 1200).
- * Tap, click, Enter or Space turns it. Every motion is off under `prefers-reduced-motion`; the
- * badge is then just two faces you switch between.
+ * floats a few pixels on a slow breath (it never tilts by itself, so it always sits square on the
+ * page), leans toward the pointer with its layers at different depths, and turns over like a leaf
+ * (ReactBits' Page Flip: 180 degrees, ease in-out) from far enough back that it stays flat.
+ * Changing between the white and the matte colourway spreads the new colour over the old as a drop
+ * of ink. Tap, click, Enter or Space turns it. Every motion is off under `prefers-reduced-motion`;
+ * the badge is then just two faces you switch between.
  */
 export function MemberBadge({
   card,
@@ -447,11 +932,24 @@ export function MemberBadge({
   const t = useTranslations('wallet');
   const theme = badgeThemeFor({ mood: card.mood, tone: editor?.tone ?? card.tone });
   const backRef = useRef<HTMLDivElement | null>(null);
+  /** Where the old dress's copy of the back keeps its ref, so it never steals the live one. */
+  const ghostRef = useRef<HTMLDivElement | null>(null);
   const [fitRef, scale] = useFitScale(WIDTH);
-  const [stageRef, seen] = useSeenOnce<HTMLDivElement>();
+  const [stageRef, seenInView] = useSeenOnce<HTMLDivElement>();
+  // In the editor the badge is the whole point of the window: it is there at once, not when scrolled to.
+  const seen = seenInView || editor !== undefined;
   const { ref: depthRef, onPointerMove, onPointerLeave } = usePointerDepth<HTMLDivElement>(6);
   const [ownFlipped, setOwnFlipped] = useState(false);
   const flipped = controlledFlipped ?? ownFlipped;
+  // The colourway in view, and the one it is changing from while the ink spreads. Derived while
+  // rendering, so the old dress is already underneath on the very frame the new one arrives.
+  const [shown, setShown] = useState(theme);
+  const [ink, setInk] = useState<Ink | null>(null);
+  if (shown !== theme) {
+    setShown(theme);
+    setInk(prefersReducedMotion() ? null : { from: shown, client: editor?.inkOrigin ?? null });
+  }
+  const endInk = useCallback(() => setInk(null), []);
   const points = useCountUp(card.points, seen);
   const s = scale ?? 1;
   const placements: readonly StickerPlacement[] =
@@ -473,13 +971,20 @@ export function MemberBadge({
       <div
         ref={stageRef}
         style={{
+          position: 'relative',
           width: WIDTH * s,
           height: HEIGHT * s,
           visibility: scale === null ? 'hidden' : 'visible',
         }}
       >
+        {/* Pinned to the stage's left edge, whatever the text direction: in a right-to-left page a
+            box wider than its stage hangs off the left, and scaling it from there pushed the card
+            out of its frame on every phone. */}
         <div
           style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
             width: WIDTH,
             height: HEIGHT,
             transform: `scale(${s})`,
@@ -488,12 +993,12 @@ export function MemberBadge({
         >
           <div
             ref={depthRef}
-            onPointerMove={onPointerMove}
-            onPointerLeave={onPointerLeave}
+            onPointerMove={editor ? undefined : onPointerMove}
+            onPointerLeave={editor ? undefined : onPointerLeave}
             className="size-full"
             style={
               {
-                perspective: 1200,
+                perspective: 2600,
                 '--px': 0,
                 '--py': 0,
                 '--rx': '0deg',
@@ -512,7 +1017,11 @@ export function MemberBadge({
               style={{ transformStyle: 'preserve-3d' }}
             >
               <div
-                className="size-full [transform-origin:50%_0] motion-safe:animate-[badge-sway_7s_ease-in-out_infinite] motion-safe:hover:[animation-play-state:paused]"
+                className={cn(
+                  'size-full',
+                  !editor &&
+                    'motion-safe:animate-[badge-float_6s_ease-in-out_infinite] motion-safe:hover:[animation-play-state:paused]',
+                )}
                 style={{ transformStyle: 'preserve-3d' }}
               >
                 <div
@@ -520,7 +1029,7 @@ export function MemberBadge({
                   style={{
                     transformStyle: 'preserve-3d',
                     transform: 'rotateX(var(--rx)) rotateY(var(--ry))',
-                    transition: 'transform 180ms linear',
+                    transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)',
                   }}
                 >
                   <div
@@ -530,7 +1039,7 @@ export function MemberBadge({
                     aria-label={flipped ? t('flipToFront') : t('flipToBack')}
                     onClick={editor ? undefined : flip}
                     onKeyDown={editor ? undefined : onKey}
-                    className="relative size-full cursor-pointer rounded-[16px] outline-none [transition:transform_650ms_cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:[transition:none]"
+                    className="relative size-full cursor-pointer rounded-[16px] outline-none [transition:transform_700ms_cubic-bezier(0.45,0,0.15,1)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:[transition:none]"
                     style={{
                       transformStyle: 'preserve-3d',
                       transform: `rotateY(${flipped ? 180 : 0}deg)`,
@@ -542,23 +1051,28 @@ export function MemberBadge({
                       className="absolute inset-0 overflow-hidden rounded-[16px]"
                       style={{
                         ...FACE,
-                        background: theme.ground,
-                        color: theme.text,
                         boxShadow: `inset 0 0 0 1px ${theme.ring}`,
+                        transition: 'box-shadow 600ms ease-out',
                       }}
                     >
-                      <Front card={card} theme={theme} seen={seen} points={points} />
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute inset-0"
-                        style={{
-                          opacity: 'var(--lit)',
-                          mixBlendMode: 'soft-light',
-                          transition: 'opacity 200ms linear',
-                          background:
-                            'radial-gradient(circle at var(--mx, 50%) var(--my, 30%), color-mix(in oklab, white 55%, transparent), transparent 55%)',
-                        }}
-                      />
+                      <InkFace theme={theme} ink={ink} mirror={flipped} onDone={endInk}>
+                        {(dress) => (
+                          <>
+                            <Front card={card} theme={dress} seen={seen} points={points} />
+                            <div
+                              aria-hidden
+                              className="pointer-events-none absolute inset-0"
+                              style={{
+                                opacity: 'var(--lit)',
+                                mixBlendMode: 'soft-light',
+                                transition: 'opacity 200ms linear',
+                                background:
+                                  'radial-gradient(circle at var(--mx, 50%) var(--my, 30%), color-mix(in oklab, white 55%, transparent), transparent 55%)',
+                              }}
+                            />
+                          </>
+                        )}
+                      </InkFace>
                     </div>
                     <div
                       aria-hidden={!flipped}
@@ -568,17 +1082,20 @@ export function MemberBadge({
                         ...FACE,
                         transform: 'rotateY(180deg)',
                         boxShadow: `inset 0 0 0 1px ${theme.ring}`,
-                        background: theme.ground,
-                        color: theme.text,
+                        transition: 'box-shadow 600ms ease-out',
                       }}
                     >
-                      <Back
-                        card={card}
-                        theme={theme}
-                        placements={placements}
-                        editor={editor}
-                        stageRef={backRef}
-                      />
+                      <InkFace theme={theme} ink={ink} mirror={!flipped} onDone={endInk}>
+                        {(dress, underlay) => (
+                          <Back
+                            card={card}
+                            theme={dress}
+                            placements={placements}
+                            editor={underlay ? undefined : editor}
+                            stageRef={underlay ? ghostRef : backRef}
+                          />
+                        )}
+                      </InkFace>
                     </div>
                   </div>
                 </div>

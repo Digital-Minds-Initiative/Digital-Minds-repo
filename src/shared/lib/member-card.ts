@@ -67,39 +67,62 @@ export function cardToneFor(card: {
   return card.clubRole === 'CLUB_OFFICER' || card.ledCommittees.length > 0 ? 'matte' : 'paper';
 }
 
-const TATWEEL = '\u0640';
-/** Arabic letters that join to the letter after them (the others stop the word's line). */
-const JOINS_FORWARD = /[بتثجحخسشصضطظعغفقكلمنهيئ]/u;
+const TATWEEL = 'ـ';
+/** Letters a calligrapher will stretch after: they join forward and have a body that carries it. */
+const STRETCHES = /[بتثنيئجحخسشصضطظعغفقم]/u;
+/** The strongest places: the long bodies of seen, sad, ha, ain, and the teeth of ba and its sisters. */
+const BEST_STRETCH = /[سشصضحجخعغبتثنيئ]/u;
+/** After a tatweel the next letter must be able to take the join: never an alef or a hamza. */
+const CANNOT_FOLLOW = /[اأإآٱء]/u;
 const ARABIC_LETTER = /[ء-ي]/u;
+/** One stretch never grows past this many tatweels, however short the name is. */
+const MAX_PER_WORD = 4;
+
+/**
+ * Where a word can take a kashida, or -1. A stretch goes after a joining letter that is followed
+ * by a letter that can take the join: never before an alef (خـالد), never inside a lam-alef, and
+ * never on the article (the ال of «الحربي» stays tight). The middle of a word beats its first
+ * letter, and the long-bodied letters beat the rest. A word with no good place is left as it is.
+ */
+function kashidaPoint(word: string): number {
+  const chars = [...word];
+  const from = word.startsWith('ال') ? 2 : 0;
+  let best = -1;
+  let bestScore = -1;
+  chars.forEach((ch, i) => {
+    const next = chars[i + 1];
+    if (i < from || next === undefined) return;
+    if (!STRETCHES.test(ch) || !ARABIC_LETTER.test(next) || CANNOT_FOLLOW.test(next)) return;
+    const score = (i > 0 ? 2 : 0) + (BEST_STRETCH.test(ch) ? 1 : 0);
+    if (score > bestScore) {
+      best = i;
+      bestScore = score;
+    }
+  });
+  return best;
+}
 
 /**
  * The name as the badge sets it, with a kashida: the stretch (tatweel) that Arabic lettering puts
  * after a joining letter. How much depends on the name's length, so a short name gets a long
- * stretch and a long name gets none and still fits on one line. Only the display copy is
- * stretched; the person's name is never stored this way.
+ * stretch and a long name gets none and still fits on one line. The stretch is shared between the
+ * words that can take one, so a word that cannot (خالد) hands its share to the others. Only the
+ * display copy is stretched; the person's name is never stored this way.
  */
 export function withKashida(name: string, maxChars = 26): string {
   const words = name.split(/\s+/u).filter(Boolean);
-  const budget = Math.max(0, Math.min(12, Math.round((maxChars - name.length) * 1.1)));
-  if (budget === 0 || words.length === 0) return name;
-  const share = Math.max(1, Math.floor(budget / Math.min(words.length, 3)));
-  let used = 0;
+  let left = Math.max(0, Math.min(12, Math.round((maxChars - name.length) * 1.1)));
+  if (left === 0 || words.length === 0) return name;
+  const points = words.map((word, index) => (index < 3 ? kashidaPoint(word) : -1));
+  let takers = points.filter((point) => point !== -1).length;
   return words
     .map((word, index) => {
-      if (index >= 3 || used >= budget) return word;
+      const at = points[index] ?? -1;
+      if (at === -1 || left === 0) return word;
+      const count = Math.min(MAX_PER_WORD, Math.max(1, Math.ceil(left / takers)), left);
+      left -= count;
+      takers -= 1;
       const chars = [...word];
-      // Past the article: «الحربي» stretches after the ح, not after the ل.
-      const from = word.startsWith('ال') ? 2 : 0;
-      const at = chars.findIndex(
-        (ch, i) =>
-          i >= from &&
-          JOINS_FORWARD.test(ch) &&
-          i < chars.length - 1 &&
-          ARABIC_LETTER.test(chars[i + 1] ?? ''),
-      );
-      if (at === -1) return word;
-      const count = Math.min(share, budget - used);
-      used += count;
       chars.splice(at + 1, 0, TATWEEL.repeat(count));
       return chars.join('');
     })

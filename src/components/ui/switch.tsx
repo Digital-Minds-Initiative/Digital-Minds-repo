@@ -15,7 +15,7 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-border-strong transition-colors',
+        'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-border-strong transition-colors duration-200',
         'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
         'disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary',
         className,
@@ -25,7 +25,7 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Swit
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
         className={cn(
-          'pointer-events-none block size-5 rounded-full bg-fg shadow-sm transition-transform',
+          'pointer-events-none block size-5 rounded-full bg-fg shadow-sm transition-[transform,width] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none',
           // Logical offsets: off sits at the start edge, on moves to the end edge.
           'ms-0.5 data-[state=checked]:translate-x-0 ltr:data-[state=checked]:translate-x-5 rtl:data-[state=checked]:-translate-x-5',
         )}

@@ -479,3 +479,101 @@
     scale: 1.25;
   }
 }
+
+/*
+ * Ink drop: when a card changes between its white and matte colourway the new colour blooms out of
+ * the point that was pressed, as a drop of ink spreading on paper (the idea of ReactBits' Gradient
+ * ASCII and Grainient backgrounds, kept to one mask). `--wave` runs 0 → 1; the badge draws the
+ * circle, three satellite drops and the bleeding edge from it. Registered so it can be animated.
+ */
+@property --wave {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+@keyframes badge-ink {
+  from {
+    --wave: 0;
+  }
+  to {
+    --wave: 1;
+  }
+}
+/* The card hangs and breathes: a slow rise and fall that never tilts it off the page's grid. */
+@keyframes badge-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -4px;
+  }
+}
+/* While it turns over, the card lifts toward the viewer and lands again. */
+@keyframes badge-lift {
+  0%,
+  100% {
+    scale: 1;
+  }
+  45% {
+    scale: 1.05;
+  }
+}
+/* A sticker is stuck down: it drops from above, a little too big, and settles. */
+@keyframes sticker-stick {
+  0% {
+    opacity: 0;
+    scale: 1.45;
+    filter: drop-shadow(0 10px 8px color-mix(in oklab, black 40%, transparent));
+  }
+  60% {
+    opacity: 1;
+    scale: 0.94;
+  }
+  100% {
+    scale: 1;
+  }
+}
+@keyframes selection-pop {
+  from {
+    opacity: 0;
+    scale: 0.82;
+  }
+}
+@keyframes selection-march {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+/* The gradient inside the colour-change wave drifts slowly, so the band is never a still picture. */
+@keyframes badge-flow {
+  from {
+    background-position: 0% 10%;
+  }
+  to {
+    background-position: 100% 90%;
+  }
+}
+/* The QR page's month chart: each cell grows in from nothing, column after column. */
+@keyframes chart-cell {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+/* The colour switch's icon turns up when it is picked. */
+@keyframes tone-icon {
+  from {
+    opacity: 0;
+    rotate: -110deg;
+    scale: 0.4;
+  }
+}
+/* The colour switch's icon turns up when it is picked. */
+@keyframes tone-icon {
+  from {
+    opacity: 0;
+    rotate: -110deg;
+    scale: 0.4;
+  }
+}
