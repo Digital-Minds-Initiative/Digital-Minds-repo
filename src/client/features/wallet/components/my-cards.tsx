@@ -1,6 +1,6 @@
 'use client';
 
-import { IdCard, Palette } from 'lucide-react';
+import { IdCard, Palette, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/patterns/empty-state';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -27,7 +28,7 @@ import { useMyCards } from '../hooks/use-my-cards';
  * will sit in Apple Wallet, and can add it from here. Only the caller's own memberships come back
  * from `/me/cards`, so this is safe on every dashboard home, managers' included.
  */
-export function MyCards() {
+export function MyCards({ withQrPage = false }: { withQrPage?: boolean } = {}) {
   const t = useTranslations('wallet');
   const { data, isPending, isError } = useMyCards();
 
@@ -49,6 +50,27 @@ export function MyCards() {
     );
   }
   if (data.cards.length === 0) return null;
+
+  // The profile page: each card on one side and the QR page it opens on the other, so the two read
+  // as one thing. On a phone they stack, the card first.
+  if (withQrPage) {
+    return (
+      <div className="grid gap-14">
+        {data.cards.map((card) => (
+          <section
+            key={card.membershipId}
+            aria-label={t('cardFor', { club: card.club.name })}
+            className="grid items-start gap-8 lg:grid-cols-[22.4rem_minmax(0,1fr)]"
+          >
+            <div className="grid justify-items-center lg:sticky lg:top-6">
+              <CardWorkspace card={card} />
+            </div>
+            <QrPageSection cards={[card]} />
+          </section>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-10">
@@ -72,7 +94,6 @@ export function MyCards() {
           ))}
         </ul>
       </section>
-      <QrPageSection cards={data.cards} />
     </div>
   );
 }
@@ -106,11 +127,19 @@ function CardWorkspace({ card }: { card: MemberCard }) {
           overlayClassName="backdrop-blur-md"
           className="top-[4vh] max-h-[92vh] max-w-5xl translate-y-0 grid-cols-[minmax(0,1fr)] content-start overflow-y-auto p-5 sm:p-6"
         >
-          <DialogHeader className="pe-0">
-            <DialogTitle>{t('title')}</DialogTitle>
-            <DialogDescription>{t('description')}</DialogDescription>
-          </DialogHeader>
-          <CardEditor card={card} onClose={() => setEditing(false)} />
+          {/* The way out stays at the top of the window, in view however far the editor is scrolled. */}
+          <div className="sticky -top-5 z-20 -mx-5 -mt-5 flex items-start justify-between gap-3 border-b border-border bg-overlay px-5 py-3 sm:-top-6 sm:-mx-6 sm:-mt-6 sm:px-6">
+            <DialogHeader className="pe-0">
+              <DialogTitle>{t('title')}</DialogTitle>
+              <DialogDescription>{t('description')}</DialogDescription>
+            </DialogHeader>
+            <DialogClose asChild>
+              <Button variant="outline" size="icon" aria-label={t('close')} title={t('close')}>
+                <X aria-hidden />
+              </Button>
+            </DialogClose>
+          </div>
+          <CardEditor card={card} />
         </DialogContent>
       </Dialog>
     </div>

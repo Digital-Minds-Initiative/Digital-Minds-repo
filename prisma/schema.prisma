@@ -46,6 +46,12 @@ enum CardTone {
   MATTE
 }
 
+/// Who may give a custom sticker: any lead of a committee the member is in, or officers only.
+enum StickerAwardBy {
+  LEAD
+  OFFICER
+}
+
 enum PointTransactionStatus {
   ACTIVE
   CANCELLED
@@ -103,6 +109,7 @@ model User {
   pointRevisions             PointTransactionRevision[]
   roleChangesMade            RoleChange[]
   badgesAwarded              BadgeAward[]               @relation("BadgeAwardedBy")
+  customStickersCreated      CustomSticker[]            @relation("CustomStickerCreatedBy")
   roleInvitationsSent        RoleInvitation[]
   memberExports              MemberExport[]
   deletionsMade              DeletionRecord[]
@@ -126,6 +133,7 @@ model Club {
   roleChanges     RoleChange[]
   roleInvitations RoleInvitation[]
   memberExports   MemberExport[]
+  customStickers  CustomSticker[]
 }
 
 model Committee {
@@ -501,6 +509,8 @@ model BadgeAward {
   badgeKey     String
   awardedById  String   @db.Uuid
   awardedAt    DateTime @default(now())
+  /// What it was given for, in the giver's words (CHECK: at most 120 characters). Optional.
+  reason       String?
 
   membership Membership @relation(fields: [membershipId, clubId], references: [id, clubId], onDelete: Restrict)
   awardedBy  User       @relation("BadgeAwardedBy", fields: [awardedById], references: [id], onDelete: Restrict)
@@ -525,4 +535,33 @@ model BadgePlacement {
   card MemberCard @relation(fields: [cardId], references: [id], onDelete: Restrict)
 
   @@unique([cardId, badgeKey])
+}
+
+/// A sticker a club's leaders designed themselves (docs/adr/0033-custom-stickers.md). Its key on a
+/// card or an award is `custom:<id>`. Colours and the icon are names from fixed lists in
+/// src/shared/lib/stickers.ts, never free CSS. Archived stickers cannot be given any more, and stay
+/// on the cards that hold them.
+model CustomSticker {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  clubId      String         @db.Uuid
+  name        String
+  /// How to get it, in words a member reads on the sticker's page.
+  howTo       String
+  /// The short text printed on the sticker itself.
+  label       String
+  icon        String
+  shape       String
+  background  String
+  ink         String
+  /// Hidden stickers are not listed to members until they hold one.
+  hidden      Boolean        @default(false)
+  awardableBy StickerAwardBy @default(LEAD)
+  createdById String         @db.Uuid
+  createdAt   DateTime       @default(now())
+  archivedAt  DateTime?
+
+  club      Club @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  createdBy User @relation("CustomStickerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([clubId])
 }

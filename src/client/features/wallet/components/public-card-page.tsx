@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Lock } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
+import { useState } from 'react';
 
 import { ApiError, apiClient } from '@/client/lib/api-client';
 import { cn } from '@/client/lib/utils';
@@ -10,20 +11,25 @@ import { EmptyState } from '@/components/patterns/empty-state';
 import { MARK_MASK_STYLE } from '@/components/shell/logo';
 import { Skeleton } from '@/components/ui/skeleton';
 import { publicCardEndpoint, type PublicCard } from '@/shared/contracts/cards';
-import { withKashida } from '@/shared/lib/member-card';
+import { chartCellValue } from '@/shared/lib/member-card';
 
 import { FitFigure } from './fit-figure';
+import { FitName } from './fit-name';
 import { PanelArt } from './panel-art';
 import { Sticker } from './sticker';
+import { StickerDetail, type StickerFacts } from './sticker-detail';
 import { useCountUp, useSeenOnce } from '../hooks/use-badge-motion';
+import { useStickerText } from '../hooks/use-sticker-text';
 import { badgeThemeFor } from '../lib/badge-theme';
 import { formatFigure } from '../lib/number-fit';
 
 const MONTH_CELLS = 8;
-/** Points a month it takes to fill every cell of the chart: a bar is relative to the best month shown. */
-const MIN_FULL_SCALE = 40;
 
-/** The last months of points as columns of cells, like the system's other counters. */
+/**
+ * The last months of points as columns of cells. One cell is a fixed number of points (10, 25, 50
+ * or 100, the smallest that lets the best month fit), said in words under the chart; a cell that is
+ * half earned is drawn half filled.
+ */
 function MonthChart({
   monthly,
   ink,
@@ -35,49 +41,71 @@ function MonthChart({
   seen: boolean;
 }) {
   const format = useFormatter();
-  const best = Math.max(MIN_FULL_SCALE, ...monthly.map((entry) => Math.max(0, entry.points)));
+  const t = useTranslations('wallet.public');
+  const best = Math.max(0, ...monthly.map((entry) => entry.points));
+  const unit = chartCellValue(best, MONTH_CELLS);
   return (
-    <div
-      className="flex items-end gap-1.5"
-      dir="ltr"
-      role="img"
-      aria-label={monthly.map((e) => `${e.month}: ${e.points}`).join(', ')}
-    >
-      {monthly.map((entry, index) => {
-        const filled = Math.round((Math.max(0, entry.points) / best) * MONTH_CELLS);
-        const last = index === monthly.length - 1;
-        const [year, month] = entry.month.split('-').map(Number) as [number, number];
-        return (
-          <div key={entry.month} className="grid justify-items-center gap-1">
-            <div className="flex flex-col-reverse gap-[3px]">
-              {Array.from({ length: MONTH_CELLS }, (_, cell) => (
-                <span
-                  key={cell}
-                  className={cn(
-                    'block size-[11px] rounded-[2px]',
-                    seen
-                      ? 'motion-safe:animate-[chart-cell_420ms_var(--ease-out)_backwards]'
-                      : 'motion-safe:opacity-0',
-                  )}
-                  style={{
-                    ...(cell < filled
-                      ? { background: ink, opacity: last ? 1 : 0.55 }
-                      : { boxShadow: `inset 0 0 0 1px ${ink}`, opacity: 0.2 }),
-                    // Each column rises from its floor, a little after the one before it.
-                    animationDelay: `${index * 70 + cell * 22}ms`,
-                  }}
-                />
-              ))}
+    <div className="grid justify-items-start gap-1.5">
+      <div
+        className="flex items-end gap-1.5"
+        dir="ltr"
+        role="img"
+        aria-label={`${t('chartUnit', { points: unit })}: ${monthly
+          .map((e) => `${e.month}: ${e.points}`)
+          .join(', ')}`}
+      >
+        {monthly.map((entry, index) => {
+          // Whole cells, and one more half filled when at least half of the next is earned.
+          const cells = Math.min(MONTH_CELLS, Math.max(0, entry.points) / unit);
+          const whole = Math.floor(cells);
+          const half = cells - whole >= 0.5 && whole < MONTH_CELLS;
+          const last = index === monthly.length - 1;
+          const [year, month] = entry.month.split('-').map(Number) as [number, number];
+          return (
+            <div key={entry.month} className="grid justify-items-center gap-1">
+              <div className="flex flex-col-reverse gap-[3px]">
+                {Array.from({ length: MONTH_CELLS }, (_, cell) => {
+                  const full = cell < whole;
+                  const partial = half && cell === whole;
+                  return (
+                    <span
+                      key={cell}
+                      className={cn(
+                        'block size-[11px] rounded-[2px]',
+                        seen
+                          ? 'motion-safe:animate-[chart-cell_420ms_var(--ease-out)_backwards]'
+                          : 'motion-safe:opacity-0',
+                      )}
+                      style={{
+                        ...(full
+                          ? { background: ink, opacity: last ? 1 : 0.55 }
+                          : partial
+                            ? {
+                                background: `linear-gradient(to top, ${ink} 50%, transparent 50%)`,
+                                boxShadow: `inset 0 0 0 1px ${ink}`,
+                                opacity: last ? 1 : 0.55,
+                              }
+                            : { boxShadow: `inset 0 0 0 1px ${ink}`, opacity: 0.2 }),
+                        // Each column rises from its floor, a little after the one before it.
+                        animationDelay: `${index * 70 + cell * 22}ms`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <span className="font-mono text-[8px] uppercase opacity-70" style={{ color: ink }}>
+                {format.dateTime(new Date(Date.UTC(year, month - 1, 1)), {
+                  month: 'short',
+                  timeZone: 'UTC',
+                })}
+              </span>
             </div>
-            <span className="font-mono text-[8px] uppercase opacity-70" style={{ color: ink }}>
-              {format.dateTime(new Date(Date.UTC(year, month - 1, 1)), {
-                month: 'short',
-                timeZone: 'UTC',
-              })}
-            </span>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+      <span className="text-[10px] opacity-75" style={{ color: ink }}>
+        {t('chartUnit', { points: unit })}
+      </span>
     </div>
   );
 }
@@ -131,11 +159,13 @@ export function PublicCardPage({ token }: { token: string }) {
  */
 export function PublicCardView({ card }: { card: PublicCard }) {
   const t = useTranslations('wallet.public');
-  const tSticker = useTranslations('walletPass.sticker');
+  const tDetail = useTranslations('wallet.detail');
+  const { name } = useStickerText();
   const [pageRef, seen] = useSeenOnce<HTMLElement>();
   const theme = badgeThemeFor({ mood: card.mood, tone: card.tone });
   const points = useCountUp(card.points ?? 0, seen, 1100);
   const month = useCountUp(Math.abs(card.thisMonth ?? 0), seen, 900);
+  const [detail, setDetail] = useState<StickerFacts | null>(null);
 
   return (
     <div className="@container w-full">
@@ -172,12 +202,8 @@ export function PublicCardView({ card }: { card: PublicCard }) {
                 >
                   {card.club.name} · {card.hijriYear}
                 </p>
-                <h1
-                  aria-label={card.fullName}
-                  className="m-0 max-w-full text-[30px] leading-[1.3] font-medium text-balance [overflow-wrap:anywhere]"
-                  style={{ fontSize: card.fullName.length > 24 ? 24 : 30 }}
-                >
-                  <span aria-hidden>{withKashida(card.fullName)}</span>
+                <h1 className="m-0 max-w-full">
+                  <FitName name={card.fullName} size={30} min={22} />
                 </h1>
                 <p className="m-0 text-xl font-semibold" style={{ color: theme.accent }}>
                   {card.role}
@@ -197,15 +223,20 @@ export function PublicCardView({ card }: { card: PublicCard }) {
                     ) : (
                       <span />
                     )}
-                    <div className="grid min-w-0 flex-1 justify-items-end">
-                      <span className="text-xs font-semibold opacity-90">{t('points')}</span>
+                    <div className="grid min-w-0 flex-1">
+                      <span
+                        className="text-xs font-semibold opacity-90"
+                        style={{ textAlign: 'right' }}
+                      >
+                        {t('points')}
+                      </span>
                       <FitFigure
                         shown={formatFigure(points)}
                         final={formatFigure(card.points)}
                         base={56}
                       />
                       {card.thisMonth !== null ? (
-                        <span className="mt-1 text-sm opacity-90">
+                        <span className="mt-1 text-sm opacity-90" style={{ textAlign: 'right' }}>
                           {t('thisMonth')}{' '}
                           <b className="font-mono whitespace-nowrap" dir="ltr">
                             {card.thisMonth >= 0 ? '+' : '−'}
@@ -243,15 +274,32 @@ export function PublicCardView({ card }: { card: PublicCard }) {
                     {card.stickers.map((sticker, index) => (
                       <li
                         key={sticker.key}
-                        title={tSticker(sticker.key)}
                         className="motion-safe:animate-[sticker-stick_480ms_var(--ease-out)_backwards]"
                         style={{ animationDelay: `${index * 80}ms` }}
                       >
-                        <Sticker
-                          stickerKey={sticker.key}
-                          size={60}
-                          className={cn(index % 2 === 0 ? '-rotate-6' : 'rotate-5')}
-                        />
+                        <button
+                          type="button"
+                          title={name(sticker.key, sticker.custom)}
+                          aria-label={tDetail('open', { name: name(sticker.key, sticker.custom) })}
+                          onClick={() =>
+                            setDetail({
+                              key: sticker.key,
+                              custom: sticker.custom,
+                              held: true,
+                              source: sticker.custom ? 'awarded' : null,
+                              earnedAt: sticker.earnedAt,
+                              reason: sticker.reason,
+                            })
+                          }
+                          className="cursor-pointer rounded-full transition-transform duration-200 outline-none hover:scale-110 hover:-rotate-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-95 motion-reduce:transition-none"
+                        >
+                          <Sticker
+                            stickerKey={sticker.key}
+                            custom={sticker.custom}
+                            size={60}
+                            className={cn(index % 2 === 0 ? '-rotate-6' : 'rotate-5')}
+                          />
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -295,6 +343,7 @@ export function PublicCardView({ card }: { card: PublicCard }) {
           <p className="m-0 text-center text-xs leading-6" style={{ color: theme.textMuted }}>
             {t('footer')}
           </p>
+          <StickerDetail facts={detail} viewer="visitor" onClose={() => setDetail(null)} />
         </article>
       </div>
     </div>

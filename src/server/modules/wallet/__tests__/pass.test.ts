@@ -30,6 +30,7 @@ const member: MemberCard = {
   tone: 'paper',
   tonePreference: null,
   stickers: [],
+  lockedStickers: [],
   share: {
     enabled: true,
     showPoints: true,
@@ -43,6 +44,7 @@ const member: MemberCard = {
   gregorianYear: 2026,
   points: 140,
   stampsEarned: 2,
+  stampsHalf: false,
   stampsTotal: 6,
   wallet: { apple: true, google: true },
 };
@@ -106,8 +108,22 @@ describe('pass definition', () => {
     const earned = {
       ...member,
       stickers: [
-        { key: 'star' as const, source: 'awarded' as const, placement: null },
-        { key: 'lead' as const, source: 'role' as const, placement: null },
+        {
+          key: 'star' as const,
+          source: 'awarded' as const,
+          placement: null,
+          earnedAt: '2026-11-01T10:00:00.000Z',
+          reason: null,
+          custom: null,
+        },
+        {
+          key: 'lead' as const,
+          source: 'role' as const,
+          placement: null,
+          earnedAt: null,
+          reason: null,
+          custom: null,
+        },
       ],
     };
     const back = buildPassDefinition(earned, '', walletPassAr).back;
@@ -174,6 +190,12 @@ describe('the four colourways', () => {
 });
 
 describe('pass images', () => {
+  it('serves Google a square logo of at least 660 px', async () => {
+    const { getWalletArt } = await import('../service');
+    const logo = decode(getWalletArt('logo-matte-gem'));
+    expect([logo.width, logo.height]).toEqual([660, 660]);
+  });
+
   it('are Apple sizes: strip 375 x 144 pt, the icon 38 pt at @2x', () => {
     const strip = decode(
       stripArt('paper-tech', STRIP_SIZE.width, STRIP_SIZE.height).toPng({ alpha: false }),
@@ -272,6 +294,17 @@ describe.skipIf(!hasOpenssl())('signed .pkpass', () => {
   });
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('ships the strip at three densities: 375 x 144 pt is 1125 x 432 px at @3x', () => {
+    const files = unzipSync(new Uint8Array(buildPkpass(member, signing, 'http://localhost:3000')));
+    const sizes = (name: string) => {
+      const png = decode(Buffer.from(files[name] as Uint8Array));
+      return [png.width, png.height];
+    };
+    expect(sizes('strip.png')).toEqual([375, 144]);
+    expect(sizes('strip@2x.png')).toEqual([750, 288]);
+    expect(sizes('strip@3x.png')).toEqual([1125, 432]);
+  });
 
   const build = (card: MemberCard) =>
     unzipSync(new Uint8Array(buildPkpass(card, signing, 'http://localhost:3000')));

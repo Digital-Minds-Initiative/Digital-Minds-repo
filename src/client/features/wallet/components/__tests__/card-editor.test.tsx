@@ -97,7 +97,7 @@ describe('the card editor', () => {
     const tray = screen.getByRole('group', { name: 'تخصيص البطاقة' });
     // Earned by her role: pressable. Not earned: shown, grey, disabled, with how to earn them.
     expect(within(tray).getByRole('button', { name: /ألصق «قائد لجنة»/ })).toBeTruthy();
-    const locked = within(tray).getByRole('button', { name: /نجم الشهر/ }) as HTMLButtonElement;
+    const locked = within(tray).getByRole('button', { name: /^نجم الشهر —/ }) as HTMLButtonElement;
     expect(locked.disabled).toBe(true);
     expect(within(tray).getByText(/^لصقت 0 من [0-9]+\./)).toBeTruthy();
   });

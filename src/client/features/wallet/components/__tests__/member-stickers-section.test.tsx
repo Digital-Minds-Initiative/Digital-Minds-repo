@@ -52,8 +52,11 @@ describe('awarding from a member’s file', () => {
       expect(screen.getByRole('button', { name: `امنح «${name}»` })).toBeTruthy();
     }
     await user.click(screen.getByRole('button', { name: 'امنح «نجم الشهر»' }));
+    await user.type(await screen.findByLabelText(/لأجل ماذا/), 'قاد الفريق');
+    await user.click(await screen.findByRole('button', { name: 'منح «نجم الشهر»' }));
     const awarded = await screen.findByRole('list', { name: 'الممنوحة' });
     expect(within(awarded).getByRole('img', { name: 'نجم الشهر' })).toBeTruthy();
+    expect(within(awarded).getByText('قاد الفريق')).toBeTruthy();
     // Given once, so it is no longer on offer.
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'امنح «نجم الشهر»' })).toBeNull(),
@@ -72,6 +75,7 @@ describe('awarding from a member’s file', () => {
     const user = userEvent.setup();
     renderWithProviders(<MemberStickersSection memberId={await membershipOf('lama')} />);
     await user.click(await screen.findByRole('button', { name: 'امنح «قدّمت ورشة»' }));
+    await user.click(await screen.findByRole('button', { name: 'منح «قدّمت ورشة»' }));
     await user.click(await screen.findByRole('button', { name: 'سحب «قدّمت ورشة»' }));
     await waitFor(() => expect(screen.queryByRole('list', { name: 'الممنوحة' })).toBeNull());
     expect(await screen.findByRole('button', { name: 'امنح «قدّمت ورشة»' })).toBeTruthy();
@@ -83,6 +87,7 @@ describe('awarding from a member’s file', () => {
     const memberId = await membershipOf('lama');
     const first = renderWithProviders(<MemberStickersSection memberId={memberId} />);
     await user.click(await screen.findByRole('button', { name: 'امنح «عضو مؤسس»' }));
+    await user.click(await screen.findByRole('button', { name: 'منح «عضو مؤسس»' }));
     await screen.findByRole('list', { name: 'الممنوحة' });
     first.unmount();
 

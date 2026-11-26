@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type AnimationEvent,
@@ -20,12 +21,13 @@ import { cn } from '@/client/lib/utils';
 import { MARK_MASK_STYLE } from '@/components/shell/logo';
 import walletPassAr from '@/i18n/messages/ar/walletPass.json';
 import type { MemberCard } from '@/shared/contracts/wallet';
-import { withKashida } from '@/shared/lib/member-card';
-import { PLACEMENT_LIMITS, type StickerKey, type StickerPlacement } from '@/shared/lib/stickers';
+import { POINTS_PER_STAMP } from '@/shared/lib/member-card';
+import { PLACEMENT_LIMITS, type StickerRef, type StickerPlacement } from '@/shared/lib/stickers';
 import { cardRoleLabel } from '@/shared/lib/wallet-pass';
 
 import { CellMosaic } from './cell-mosaic';
 import { FitFigure } from './fit-figure';
+import { FitName } from './fit-name';
 import { PanelArt } from './panel-art';
 import { PassQr } from './pass-qr';
 import { Sticker } from './sticker';
@@ -36,6 +38,7 @@ import {
   usePointerDepth,
   useSeenOnce,
 } from '../hooks/use-badge-motion';
+import { StickerDefsContext, useStickerDef, useStickerText } from '../hooks/use-sticker-text';
 import { BADGE_MOSAIC_ROWS, badgeThemeFor, type BadgeTheme } from '../lib/badge-theme';
 import { formatFigure } from '../lib/number-fit';
 
@@ -226,24 +229,9 @@ function InkFace({
   );
 }
 
-function Slot({ theme }: { theme: BadgeTheme }) {
-  return (
-    <div
-      aria-hidden
-      className="absolute top-[13px] h-2.5 w-[30px] rounded-full"
-      style={{
-        insetInlineStart: '50%',
-        marginInlineStart: -15,
-        background: theme.slot,
-        boxShadow: 'inset 0 1px 2px color-mix(in oklab, black 45%, transparent)',
-      }}
-    />
-  );
-}
-
 function Brand({ theme }: { theme: BadgeTheme }) {
   return (
-    <div className="absolute inset-x-6 top-10 flex items-center gap-2.5" dir="ltr">
+    <div className="absolute inset-x-6 top-6 flex items-center gap-2.5" dir="ltr">
       <span
         aria-hidden
         className="block h-[30px] w-auto shrink-0"
@@ -255,10 +243,18 @@ function Brand({ theme }: { theme: BadgeTheme }) {
 }
 
 function Stamps({ card, theme, seen }: { card: MemberCard; theme: BadgeTheme; seen: boolean }) {
+  const t = useTranslations('walletPass');
   return (
-    <div className="flex gap-1.5" dir="ltr">
+    <div
+      className="flex gap-1.5"
+      dir="ltr"
+      role="img"
+      aria-label={t('stampsAria', { earned: card.stampsEarned, total: card.stampsTotal })}
+      title={t('stampsUnit', { points: POINTS_PER_STAMP })}
+    >
       {Array.from({ length: card.stampsTotal }, (_, index) => {
         const earned = index < card.stampsEarned;
+        const half = !earned && card.stampsHalf && index === card.stampsEarned;
         const newest = earned && index === card.stampsEarned - 1;
         return (
           <span
@@ -270,7 +266,15 @@ function Stamps({ card, theme, seen }: { card: MemberCard; theme: BadgeTheme; se
                 'motion-safe:animate-[badge-stamp_220ms_var(--ease-out)_1.1s_backwards]',
             )}
             style={
-              earned ? { background: theme.stamp } : { border: `1.5px solid ${theme.stampOff}` }
+              earned
+                ? { background: theme.stamp }
+                : half
+                  ? {
+                      border: `1.5px solid ${theme.stampOff}`,
+                      // The box is half filled: the points toward the next one are half of what it takes.
+                      background: `linear-gradient(to right, ${theme.stamp} 50%, transparent 50%)`,
+                    }
+                  : { border: `1.5px solid ${theme.stampOff}` }
             }
           />
         );
@@ -292,13 +296,11 @@ function Front({
   points: number;
 }) {
   const t = useTranslations('walletPass');
-  const nameSize = card.fullName.length > 24 ? 24 : 30;
   const role = cardRoleLabel(card, walletPassAr);
   const latin = CLUB_LATIN[card.club.slug] ?? card.club.name;
 
   return (
     <>
-      <Slot theme={theme} />
       <div className="absolute top-0" style={{ right: 0 }}>
         <CellMosaic
           rows={BADGE_MOSAIC_ROWS}
@@ -308,14 +310,8 @@ function Front({
       </div>
       <Brand theme={theme} />
 
-      <div className="absolute inset-x-6 top-[100px]">
-        <div
-          aria-label={card.fullName}
-          className="max-w-full overflow-hidden tracking-[-0.005em] text-ellipsis whitespace-nowrap"
-          style={{ fontSize: nameSize, lineHeight: 1.3, fontWeight: 500 }}
-        >
-          <span aria-hidden>{withKashida(card.fullName)}</span>
-        </div>
+      <div className="absolute inset-x-6 top-[72px]">
+        <FitName name={card.fullName} size={30} min={22} />
         <div
           className="mt-2.5 text-[21px] leading-[1.3] font-semibold"
           style={{ color: theme.accent }}
@@ -334,14 +330,20 @@ function Front({
       </div>
 
       <div
-        className="absolute inset-x-4 bottom-4 h-[214px] overflow-hidden rounded-[10px]"
+        className="absolute inset-x-4 bottom-4 h-[236px] overflow-hidden rounded-[10px]"
         style={{ background: theme.panelBase, color: theme.panelText }}
       >
         <PanelArt theme={theme} />
 
         <div className="absolute inset-x-[18px] top-4 flex items-start justify-between">
-          <div className="grid min-w-0 flex-1 justify-items-end">
-            <div className="text-xs font-semibold opacity-90">{t('points')}</div>
+          {/* The label and the figure share one edge, so 7, 70 and 7,000 all sit flush with it. */}
+          <div className="grid min-w-0 flex-1">
+            <div
+              className="text-end text-xs font-semibold opacity-90"
+              style={{ textAlign: 'right' }}
+            >
+              {t('points')}
+            </div>
             <FitFigure shown={formatFigure(points)} final={formatFigure(card.points)} base={44} />
           </div>
           {/* The club's own logo, as the design system supplies it for this ground. */}
@@ -386,18 +388,18 @@ function Front({
 }
 
 /** A change of size and/or turn to one sticker. */
-export type StickerAdjust = Partial<Pick<StickerPlacement, 'rotation' | 'scale'>>;
+type StickerAdjust = Partial<Pick<StickerPlacement, 'rotation' | 'scale'>>;
 
 /** What the sticker editor changes on the card: where each sticker lies, which is picked, and the colour. */
 export interface BadgeEditor {
   placements: readonly StickerPlacement[];
-  selected: StickerKey | null;
-  onSelect: (key: StickerKey | null) => void;
+  selected: StickerRef | null;
+  onSelect: (key: StickerRef | null) => void;
   /** A sticker was dragged: its new centre, as a fraction of the card. */
-  onMove: (key: StickerKey, x: number, y: number) => void;
-  onRemove: (key: StickerKey) => void;
+  onMove: (key: StickerRef, x: number, y: number) => void;
+  onRemove: (key: StickerRef) => void;
   /** A sticker was resized or turned from its handle on the card, or from the keyboard. */
-  onAdjust: (key: StickerKey, change: StickerAdjust) => void;
+  onAdjust: (key: StickerRef, change: StickerAdjust) => void;
   /** The colour being tried, before it is saved. */
   tone?: 'paper' | 'matte';
   /** Where the colour was pressed (viewport pixels): the ink drops from there when it changes. */
@@ -408,6 +410,23 @@ export interface BadgeEditor {
 const STICKER_SIZE = 96;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+/**
+ * The sticker lane on the back, in the card's own pixels: under the logo and above the QR and the
+ * name. A sticker lives wholly inside it, so none can cover what the card itself says.
+ */
+const LANE = { top: 74, bottom: 316 } as const;
+
+/** Where a sticker is really drawn: its centre pulled in so the whole sticker stays in the lane. */
+function inLane(placement: Pick<StickerPlacement, 'x' | 'y' | 'scale'>): { x: number; y: number } {
+  const reach = (STICKER_SIZE * placement.scale) / 2 + 4;
+  const clampTo = (value: number, low: number, high: number) =>
+    low > high ? (low + high) / 2 : Math.min(high, Math.max(low, value));
+  return {
+    x: clampTo(placement.x * WIDTH, reach, WIDTH - reach) / WIDTH,
+    y: clampTo(placement.y * HEIGHT, LANE.top + reach, LANE.bottom - reach) / HEIGHT,
+  };
+}
 
 /** The round controls on a picked sticker, in card pixels: big enough for a finger. */
 const HANDLE_SIZE = 38;
@@ -435,8 +454,10 @@ function PlacedSticker({
   stage: RefObject<HTMLDivElement | null>;
 }) {
   const t = useTranslations('wallet.editor');
-  const tName = useTranslations('walletPass.sticker');
+  const text = useStickerText();
+  const custom = useStickerDef(placement.key);
   const selected = editor?.selected === placement.key;
+  const at = inLane(placement);
   const drag = useRef<{ dx: number; dy: number } | null>(null);
   const grip = useRef<{ cx: number; cy: number; k: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -445,8 +466,8 @@ function PlacedSticker({
   // Drawn at one size and scaled, so the size slider eases instead of jumping, and the position
   // and turn ease too (never while a finger or the pointer is dragging it: that must follow 1:1).
   const style: CSSProperties = {
-    left: `${placement.x * WIDTH - STICKER_SIZE / 2}px`,
-    top: `${placement.y * HEIGHT - STICKER_SIZE / 2}px`,
+    left: `${at.x * WIDTH - STICKER_SIZE / 2}px`,
+    top: `${at.y * HEIGHT - STICKER_SIZE / 2}px`,
     width: STICKER_SIZE,
     height: STICKER_SIZE,
     transform: `rotate(${placement.rotation}deg) scale(${placement.scale})`,
@@ -464,7 +485,12 @@ function PlacedSticker({
   if (!editor) {
     return (
       <div className="absolute" style={style}>
-        <Sticker stickerKey={placement.key} size={STICKER_SIZE} peel={placement.key === 'lead'} />
+        <Sticker
+          stickerKey={placement.key}
+          custom={custom}
+          size={STICKER_SIZE}
+          peel={placement.key === 'lead'}
+        />
       </div>
     );
   }
@@ -472,11 +498,12 @@ function PlacedSticker({
   const move = (event: PointerEvent<HTMLElement>) => {
     const box = stage.current?.getBoundingClientRect();
     if (!drag.current || !box) return;
-    editor.onMove(
-      placement.key,
-      clamp01((event.clientX - box.left - drag.current.dx) / box.width),
-      clamp01((event.clientY - box.top - drag.current.dy) / box.height),
-    );
+    const next = inLane({
+      x: clamp01((event.clientX - box.left - drag.current.dx) / box.width),
+      y: clamp01((event.clientY - box.top - drag.current.dy) / box.height),
+      scale: placement.scale,
+    });
+    editor.onMove(placement.key, next.x, next.y);
   };
   const drop = (event: PointerEvent<HTMLElement>) => {
     drag.current = null;
@@ -496,8 +523,8 @@ function PlacedSticker({
     if (!box) return;
     holdPointer(event.currentTarget, event.pointerId);
     grip.current = {
-      cx: box.left + placement.x * box.width,
-      cy: box.top + placement.y * box.height,
+      cx: box.left + at.x * box.width,
+      cy: box.top + at.y * box.height,
       k: box.width / WIDTH,
     };
     setDragging(true);
@@ -525,7 +552,7 @@ function PlacedSticker({
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={t('pick', { name: tName(placement.key) })}
+      aria-label={t('pick', { name: text.name(placement.key, custom) })}
       data-dragging={dragging}
       className={cn(
         // The whole square is the grip, corners included: no rounding, or the corners would not catch a press.
@@ -540,8 +567,8 @@ function PlacedSticker({
         if (!box) return;
         // Where inside the sticker it was grabbed, so it does not jump to centre on its pointer.
         drag.current = {
-          dx: event.clientX - box.left - placement.x * box.width,
-          dy: event.clientY - box.top - placement.y * box.height,
+          dx: event.clientX - box.left - at.x * box.width,
+          dy: event.clientY - box.top - at.y * box.height,
         };
         setDragging(true);
         editor.onSelect(placement.key);
@@ -562,11 +589,12 @@ function PlacedSticker({
         const delta = moves[event.key];
         if (delta) {
           event.preventDefault();
-          editor.onMove(
-            placement.key,
-            clamp01(placement.x + delta[0]),
-            clamp01(placement.y + delta[1]),
-          );
+          const next = inLane({
+            x: clamp01(at.x + delta[0]),
+            y: clamp01(at.y + delta[1]),
+            scale: placement.scale,
+          });
+          editor.onMove(placement.key, next.x, next.y);
         } else if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           editor.onSelect(placement.key);
@@ -601,7 +629,7 @@ function PlacedSticker({
             'scale-110 [filter:drop-shadow(0_8px_6px_color-mix(in_oklab,black_35%,transparent))]',
         )}
       >
-        <Sticker stickerKey={placement.key} size={STICKER_SIZE} />
+        <Sticker stickerKey={placement.key} custom={custom} size={STICKER_SIZE} />
       </div>
       {selected ? (
         <>
@@ -742,13 +770,14 @@ function StickerToolbar({
 }) {
   const t = useTranslations('wallet.editor');
   const { rotation, scale } = PLACEMENT_LIMITS;
+  const at = inLane(placement);
   const reach = (STICKER_SIZE * placement.scale) / 2 + 22;
-  const below = placement.y * HEIGHT + reach + 6;
+  const below = at.y * HEIGHT + reach + 6;
   const top =
-    below + TOOLBAR_HEIGHT > HEIGHT - 8 ? placement.y * HEIGHT - reach - TOOLBAR_HEIGHT - 6 : below;
+    below + TOOLBAR_HEIGHT > HEIGHT - 8 ? at.y * HEIGHT - reach - TOOLBAR_HEIGHT - 6 : below;
   const left = Math.min(
     WIDTH - TOOLBAR_WIDTH / 2 - 6,
-    Math.max(TOOLBAR_WIDTH / 2 + 6, placement.x * WIDTH),
+    Math.max(TOOLBAR_WIDTH / 2 + 6, at.x * WIDTH),
   );
   const clampRotation = (value: number) => Math.min(rotation.max, Math.max(rotation.min, value));
   const clampScale = (value: number) =>
@@ -849,7 +878,6 @@ function Back({
 
   return (
     <div ref={stageRef} className="absolute inset-0" onPointerDown={() => editor?.onSelect(null)}>
-      <Slot theme={theme} />
       <div className="absolute top-0" style={{ right: 0 }}>
         <CellMosaic
           rows={BADGE_MOSAIC_ROWS}
@@ -895,7 +923,14 @@ function Back({
           >
             {placements.length} / {card.stickers.length} · {card.hijriYear}
           </div>
-          <div className="max-w-full truncate text-[17px] font-semibold">{card.fullName}</div>
+          <FitName
+            name={card.fullName}
+            size={17}
+            min={13}
+            weight={600}
+            stretch={false}
+            labelled={false}
+          />
           <div className="text-xs" style={{ color: theme.textMuted }}>
             {card.share.enabled ? tWallet('back.scan') : tWallet('back.private')}
           </div>
@@ -952,6 +987,15 @@ export function MemberBadge({
   const endInk = useCallback(() => setInk(null), []);
   const points = useCountUp(card.points, seen);
   const s = scale ?? 1;
+  const defs = useMemo(
+    () =>
+      new Map(
+        card.stickers.flatMap((sticker) =>
+          sticker.custom ? [[sticker.key, sticker.custom] as const] : [],
+        ),
+      ),
+    [card.stickers],
+  );
   const placements: readonly StickerPlacement[] =
     editor?.placements ?? card.stickers.flatMap((sticker) => sticker.placement ?? []);
 
@@ -967,135 +1011,137 @@ export function MemberBadge({
   };
 
   return (
-    <div ref={fitRef} className="grid w-full max-w-[358px] gap-3">
-      <div
-        ref={stageRef}
-        style={{
-          position: 'relative',
-          width: WIDTH * s,
-          height: HEIGHT * s,
-          visibility: scale === null ? 'hidden' : 'visible',
-        }}
-      >
-        {/* Pinned to the stage's left edge, whatever the text direction: in a right-to-left page a
-            box wider than its stage hangs off the left, and scaling it from there pushed the card
-            out of its frame on every phone. */}
+    <StickerDefsContext.Provider value={defs}>
+      <div ref={fitRef} className="grid w-full max-w-[358px] gap-3">
         <div
+          ref={stageRef}
           style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: WIDTH,
-            height: HEIGHT,
-            transform: `scale(${s})`,
-            transformOrigin: 'top left',
+            position: 'relative',
+            width: WIDTH * s,
+            height: HEIGHT * s,
+            visibility: scale === null ? 'hidden' : 'visible',
           }}
         >
+          {/* Pinned to the stage's left edge, whatever the text direction: in a right-to-left page a
+            box wider than its stage hangs off the left, and scaling it from there pushed the card
+            out of its frame on every phone. */}
           <div
-            ref={depthRef}
-            onPointerMove={editor ? undefined : onPointerMove}
-            onPointerLeave={editor ? undefined : onPointerLeave}
-            className="size-full"
-            style={
-              {
-                perspective: 2600,
-                '--px': 0,
-                '--py': 0,
-                '--rx': '0deg',
-                '--ry': '0deg',
-                '--lit': 0,
-              } as CSSProperties
-            }
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: WIDTH,
+              height: HEIGHT,
+              transform: `scale(${s})`,
+              transformOrigin: 'top left',
+            }}
           >
             <div
-              className={cn(
-                'size-full [transform-origin:50%_0]',
-                seen
-                  ? 'motion-safe:animate-[badge-unfold_900ms_cubic-bezier(0.2,0.8,0.2,1)_both]'
-                  : 'opacity-0 motion-reduce:opacity-100',
-              )}
-              style={{ transformStyle: 'preserve-3d' }}
+              ref={depthRef}
+              onPointerMove={editor ? undefined : onPointerMove}
+              onPointerLeave={editor ? undefined : onPointerLeave}
+              className="size-full"
+              style={
+                {
+                  perspective: 2600,
+                  '--px': 0,
+                  '--py': 0,
+                  '--rx': '0deg',
+                  '--ry': '0deg',
+                  '--lit': 0,
+                } as CSSProperties
+              }
             >
               <div
                 className={cn(
-                  'size-full',
-                  !editor &&
-                    'motion-safe:animate-[badge-float_6s_ease-in-out_infinite] motion-safe:hover:[animation-play-state:paused]',
+                  'size-full [transform-origin:50%_0]',
+                  seen
+                    ? 'motion-safe:animate-[badge-unfold_900ms_cubic-bezier(0.2,0.8,0.2,1)_both]'
+                    : 'opacity-0 motion-reduce:opacity-100',
                 )}
                 style={{ transformStyle: 'preserve-3d' }}
               >
                 <div
-                  className="size-full"
-                  style={{
-                    transformStyle: 'preserve-3d',
-                    transform: 'rotateX(var(--rx)) rotateY(var(--ry))',
-                    transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)',
-                  }}
+                  className={cn(
+                    'size-full',
+                    !editor &&
+                      'motion-safe:animate-[badge-float_6s_ease-in-out_infinite] motion-safe:hover:[animation-play-state:paused]',
+                  )}
+                  style={{ transformStyle: 'preserve-3d' }}
                 >
                   <div
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={flipped}
-                    aria-label={flipped ? t('flipToFront') : t('flipToBack')}
-                    onClick={editor ? undefined : flip}
-                    onKeyDown={editor ? undefined : onKey}
-                    className="relative size-full cursor-pointer rounded-[16px] outline-none [transition:transform_700ms_cubic-bezier(0.45,0,0.15,1)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:[transition:none]"
+                    className="size-full"
                     style={{
                       transformStyle: 'preserve-3d',
-                      transform: `rotateY(${flipped ? 180 : 0}deg)`,
+                      transform: 'rotateX(var(--rx)) rotateY(var(--ry))',
+                      transition: 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)',
                     }}
                   >
                     <div
-                      aria-hidden={flipped}
-                      inert={flipped}
-                      className="absolute inset-0 overflow-hidden rounded-[16px]"
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={flipped}
+                      aria-label={flipped ? t('flipToFront') : t('flipToBack')}
+                      onClick={editor ? undefined : flip}
+                      onKeyDown={editor ? undefined : onKey}
+                      className="relative size-full cursor-pointer rounded-[16px] outline-none [transition:transform_700ms_cubic-bezier(0.45,0,0.15,1)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:[transition:none]"
                       style={{
-                        ...FACE,
-                        boxShadow: `inset 0 0 0 1px ${theme.ring}`,
-                        transition: 'box-shadow 600ms ease-out',
+                        transformStyle: 'preserve-3d',
+                        transform: `rotateY(${flipped ? 180 : 0}deg)`,
                       }}
                     >
-                      <InkFace theme={theme} ink={ink} mirror={flipped} onDone={endInk}>
-                        {(dress) => (
-                          <>
-                            <Front card={card} theme={dress} seen={seen} points={points} />
-                            <div
-                              aria-hidden
-                              className="pointer-events-none absolute inset-0"
-                              style={{
-                                opacity: 'var(--lit)',
-                                mixBlendMode: 'soft-light',
-                                transition: 'opacity 200ms linear',
-                                background:
-                                  'radial-gradient(circle at var(--mx, 50%) var(--my, 30%), color-mix(in oklab, white 55%, transparent), transparent 55%)',
-                              }}
+                      <div
+                        aria-hidden={flipped}
+                        inert={flipped}
+                        className="absolute inset-0 overflow-hidden rounded-[16px]"
+                        style={{
+                          ...FACE,
+                          boxShadow: `inset 0 0 0 1px ${theme.ring}`,
+                          transition: 'box-shadow 600ms ease-out',
+                        }}
+                      >
+                        <InkFace theme={theme} ink={ink} mirror={flipped} onDone={endInk}>
+                          {(dress) => (
+                            <>
+                              <Front card={card} theme={dress} seen={seen} points={points} />
+                              <div
+                                aria-hidden
+                                className="pointer-events-none absolute inset-0"
+                                style={{
+                                  opacity: 'var(--lit)',
+                                  mixBlendMode: 'soft-light',
+                                  transition: 'opacity 200ms linear',
+                                  background:
+                                    'radial-gradient(circle at var(--mx, 50%) var(--my, 30%), color-mix(in oklab, white 55%, transparent), transparent 55%)',
+                                }}
+                              />
+                            </>
+                          )}
+                        </InkFace>
+                      </div>
+                      <div
+                        aria-hidden={!flipped}
+                        inert={!flipped}
+                        className="absolute inset-0 overflow-hidden rounded-[16px]"
+                        style={{
+                          ...FACE,
+                          transform: 'rotateY(180deg)',
+                          boxShadow: `inset 0 0 0 1px ${theme.ring}`,
+                          transition: 'box-shadow 600ms ease-out',
+                        }}
+                      >
+                        <InkFace theme={theme} ink={ink} mirror={!flipped} onDone={endInk}>
+                          {(dress, underlay) => (
+                            <Back
+                              card={card}
+                              theme={dress}
+                              placements={placements}
+                              editor={underlay ? undefined : editor}
+                              stageRef={underlay ? ghostRef : backRef}
                             />
-                          </>
-                        )}
-                      </InkFace>
-                    </div>
-                    <div
-                      aria-hidden={!flipped}
-                      inert={!flipped}
-                      className="absolute inset-0 overflow-hidden rounded-[16px]"
-                      style={{
-                        ...FACE,
-                        transform: 'rotateY(180deg)',
-                        boxShadow: `inset 0 0 0 1px ${theme.ring}`,
-                        transition: 'box-shadow 600ms ease-out',
-                      }}
-                    >
-                      <InkFace theme={theme} ink={ink} mirror={!flipped} onDone={endInk}>
-                        {(dress, underlay) => (
-                          <Back
-                            card={card}
-                            theme={dress}
-                            placements={placements}
-                            editor={underlay ? undefined : editor}
-                            stageRef={underlay ? ghostRef : backRef}
-                          />
-                        )}
-                      </InkFace>
+                          )}
+                        </InkFace>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1103,17 +1149,17 @@ export function MemberBadge({
             </div>
           </div>
         </div>
-      </div>
 
-      <button
-        type="button"
-        onClick={flip}
-        className="inline-flex items-center justify-center gap-2 rounded-control border border-control-border px-3 py-2 text-sm text-fg outline-none hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        <RotateCw aria-hidden className="size-4" />
-        {flipped ? t('flipToFront') : t('flipToBack')}
-      </button>
-      {extra}
-    </div>
+        <button
+          type="button"
+          onClick={flip}
+          className="inline-flex items-center justify-center gap-2 rounded-control border border-control-border px-3 py-2 text-sm text-fg outline-none hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <RotateCw aria-hidden className="size-4" />
+          {flipped ? t('flipToFront') : t('flipToBack')}
+        </button>
+        {extra}
+      </div>
+    </StickerDefsContext.Provider>
   );
 }

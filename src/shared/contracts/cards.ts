@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
-import { AWARDABLE_STICKER_KEYS, MAX_PLACED_STICKERS } from '@/shared/lib/stickers';
+import {
+  AWARDABLE_STICKER_KEYS,
+  CUSTOM_STICKER_LIMITS,
+  isCustomStickerKey,
+  MAX_PLACED_STICKERS,
+} from '@/shared/lib/stickers';
 
 import { defineEndpoint, idSchema, isoDateSchema, isoDateTimeSchema } from './core';
 import {
   cardToneSchema,
+  customStickerDefSchema,
   memberCardSchema,
   stickerKeySchema,
   stickerPlacementSchema,
@@ -82,12 +88,22 @@ export const renewCardLinkEndpoint = defineEndpoint({
 
 // ─── Awards ───────────────────────────────────────────────────
 
-export const awardableStickerSchema = z.enum(AWARDABLE_STICKER_KEYS);
+/** A sticker someone can give: a built-in one that is given by a person, or one a club designed. */
+export const awardableStickerSchema = z.union([
+  z.enum(AWARDABLE_STICKER_KEYS),
+  z.string().refine(isCustomStickerKey, { message: 'invalid_sticker_key' }),
+]);
 const memberParams = z.object({ memberId: idSchema });
+
+export type AwardableSticker = z.infer<typeof awardableStickerSchema>;
+
+/** What it was given for: a short line in the giver's words. */
+export const awardReasonSchema = z.string().trim().min(1).max(CUSTOM_STICKER_LIMITS.reason);
 
 export const awardedStickerSchema = z.object({
   key: awardableStickerSchema,
   awardedAt: isoDateTimeSchema,
+  reason: z.string().nullable(),
   /** Whether the caller may take it back: the same standing that lets them give it. */
   revocable: z.boolean(),
 });
@@ -105,6 +121,8 @@ export const listMemberStickersEndpoint = defineEndpoint({
   response: z.object({
     awarded: z.array(awardedStickerSchema),
     awardable: z.array(awardableStickerSchema),
+    /** The designs of every custom sticker named above, so the screen can draw them. */
+    custom: z.array(customStickerDefSchema),
   }),
 });
 
@@ -119,7 +137,7 @@ export const awardStickerEndpoint = defineEndpoint({
   path: '/api/v1/members/:memberId/stickers',
   access: 'actor',
   params: memberParams,
-  body: z.strictObject({ key: awardableStickerSchema }),
+  body: z.strictObject({ key: awardableStickerSchema, reason: awardReasonSchema.optional() }),
   response: awardedStickerSchema,
 });
 
@@ -149,15 +167,22 @@ export const publicCardSchema = z.object({
   role: z.string(),
   hijriYear: z.number().int(),
   stampsTotal: z.number().int(),
-  /** The next four are null when the member keeps their points to themselves. */
+  /** The next five are null when the member keeps their points to themselves. */
   points: z.number().int().nullable(),
   stampsEarned: z.number().int().nullable(),
+  stampsHalf: z.boolean().nullable(),
   thisMonth: z.number().int().nullable(),
   /** The last six months, oldest first, as `YYYY-MM`. */
   monthly: z.array(z.object({ month: z.string(), points: z.number().int() })).nullable(),
   /** Every earned sticker, with where it lies if the member placed it. */
   stickers: z.array(
-    z.object({ key: stickerKeySchema, placement: stickerPlacementSchema.nullable() }),
+    z.object({
+      key: stickerKeySchema,
+      placement: stickerPlacementSchema.nullable(),
+      earnedAt: isoDateTimeSchema.nullable(),
+      reason: z.string().nullable(),
+      custom: customStickerDefSchema.nullable(),
+    }),
   ),
   /** The last few transactions, only if the member turned that on. */
   activity: z

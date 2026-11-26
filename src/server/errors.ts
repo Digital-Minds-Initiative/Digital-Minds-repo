@@ -121,6 +121,10 @@ export function clubArchived(): ConflictError {
   return new ConflictError('The club is archived.', 'club_archived');
 }
 
+export function stickerArchived(): ConflictError {
+  return new ConflictError('The sticker is archived, so it cannot be given.', 'sticker_archived');
+}
+
 export function committeeArchived(): ConflictError {
   return new ConflictError('The committee is archived.', 'committee_archived');
 }

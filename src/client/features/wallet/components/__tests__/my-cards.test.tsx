@@ -91,8 +91,8 @@ describe('MyCards on the demo dataset', () => {
     actor.email = person('sara').uniEmail;
     renderWithProviders(<MyCards />);
     await screen.findByRole('listitem');
-    expect(screen.getAllByText('إضافة إلى Apple Wallet').length).toBe(1);
-    expect(screen.getAllByText('إضافة إلى Google Wallet').length).toBe(1);
+    expect(screen.getAllByLabelText('إضافة إلى Apple Wallet').length).toBe(1);
+    expect(screen.getAllByLabelText('إضافة إلى Google Wallet').length).toBe(1);
     expect(screen.queryByRole('link', { name: /Wallet/ })).toBeNull();
     expect(screen.getByText('الإضافة إلى المحفظة قريباً. بطاقتك جاهزة هنا الآن.')).toBeTruthy();
   });

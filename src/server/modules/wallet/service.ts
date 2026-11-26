@@ -17,6 +17,7 @@ import {
   cardMoodForClub,
   cardYears,
   memberCodeForMembership,
+  stampIsHalf,
   stampsForPoints,
 } from '@/shared/lib/member-card';
 import type { StickerPlacement } from '@/shared/lib/stickers';
@@ -25,6 +26,9 @@ import { buildGoogleSaveUrl } from './google-wallet';
 import { buildPkpass } from './pass/build';
 import { HERO_SIZE, markSquare, stripArt } from './pass/images';
 import { findCardRows } from './repository';
+
+/** Google asks for a logo of at least 660 x 660 px, square and full bleed (it masks it to a circle itself). */
+const GOOGLE_LOGO_SIZE = 660;
 
 /** The caller's own cards: one per active club membership, with their own points, stickers and QR. */
 export async function listMyCards(
@@ -79,10 +83,12 @@ export async function listMyCards(
           ...years,
           points,
           stampsEarned: stampsForPoints(points),
+          stampsHalf: stampIsHalf(points),
           stampsTotal: CARD_STAMPS_TOTAL,
           tone: extra.tone,
           tonePreference: extra.tonePreference,
           stickers: extra.stickers,
+          lockedStickers: extra.lockedStickers,
           share: extra.share,
           qr: extra.share.url ?? memberCode,
           wallet: { apple: env.WALLET !== null, google: env.GOOGLE_WALLET !== null },
@@ -206,5 +212,5 @@ export function getWalletArt(name: WalletArtName): Buffer {
   const variant = `${tone}-${mood}` as const;
   return kind === 'hero'
     ? stripArt(variant, HERO_SIZE.width, HERO_SIZE.height).toPng({ alpha: false })
-    : markSquare(variant, 300).toPng({ alpha: false });
+    : markSquare(variant, GOOGLE_LOGO_SIZE).toPng({ alpha: false });
 }

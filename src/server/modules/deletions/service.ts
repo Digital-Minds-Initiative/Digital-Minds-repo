@@ -14,7 +14,7 @@ import {
 } from '@/server/authz';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
 import { endPersonSignIn } from '@/server/modules/auth';
-import { deletePersonCardData } from '@/server/modules/cards';
+import { deleteClubCustomStickers, deletePersonCardData } from '@/server/modules/cards';
 import {
   deleteClubTree,
   deleteCommitteeRow,
@@ -118,6 +118,7 @@ export async function deleteClub(actor: Actor, clubId: string): Promise<ClubDele
 
       const memberExports = await deleteClubMemberExports(tx, clubsScope(actor), club.id);
       const pointBatches = await deleteClubPointBatches(tx, clubsScope(actor), club.id);
+      const customStickers = await deleteClubCustomStickers(tx, clubsScope(actor), club.id);
       const tree = await deleteClubTree(
         tx,
         {
@@ -127,7 +128,7 @@ export async function deleteClub(actor: Actor, clubId: string): Promise<ClubDele
         },
         club.id,
       );
-      return { ...tree, memberExports, pointBatches };
+      return { ...tree, memberExports, customStickers, pointBatches };
     },
   );
 }

@@ -519,6 +519,16 @@
     scale: 1.05;
   }
 }
+/* A sticker on its own page drifts and tilts a little, as if it hung in the air. */
+@keyframes sticker-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(4deg);
+  }
+}
 /* A sticker is stuck down: it drops from above, a little too big, and settles. */
 @keyframes sticker-stick {
   0% {

@@ -1,11 +1,38 @@
 import { z } from 'zod';
 
-import { defineEndpoint, idSchema } from '@/shared/contracts/core';
-import { STICKER_KEYS, type StickerKey } from '@/shared/lib/stickers';
+import { defineEndpoint, idSchema, isoDateTimeSchema } from '@/shared/contracts/core';
+import {
+  CUSTOM_STICKER_LIMITS,
+  isCustomStickerKey,
+  STICKER_COLORS,
+  STICKER_ICONS,
+  STICKER_KEYS,
+  STICKER_SHAPES,
+  type StickerKey,
+} from '@/shared/lib/stickers';
 
 import { clubRefSchema } from './clubs';
 
-export const stickerKeySchema = z.enum(STICKER_KEYS);
+export const builtinStickerKeySchema = z.enum(STICKER_KEYS);
+
+/** A built-in sticker's key, or `custom:<id>` for one a club's leaders designed. */
+export const stickerKeySchema = z.union([
+  builtinStickerKeySchema,
+  z.string().refine(isCustomStickerKey, { message: 'invalid_sticker_key' }),
+]);
+
+/** A sticker a club's leaders designed: everything needed to draw it and say how to get it. */
+export const customStickerDefSchema = z.object({
+  key: z.string().refine(isCustomStickerKey, { message: 'invalid_sticker_key' }),
+  name: z.string().min(1).max(CUSTOM_STICKER_LIMITS.name),
+  howTo: z.string().min(1).max(CUSTOM_STICKER_LIMITS.howTo),
+  label: z.string().min(1).max(CUSTOM_STICKER_LIMITS.label),
+  icon: z.enum(STICKER_ICONS),
+  shape: z.enum(STICKER_SHAPES),
+  background: z.enum(STICKER_COLORS),
+  ink: z.enum(STICKER_COLORS),
+  hidden: z.boolean(),
+});
 export const cardToneSchema = z.enum(['paper', 'matte']);
 
 /** Where a sticker lies on the back of the card. */
@@ -23,6 +50,12 @@ export const earnedStickerSchema = z.object({
   key: stickerKeySchema,
   source: z.enum(['role', 'points', 'activity', 'awarded']),
   placement: stickerPlacementSchema.nullable(),
+  /** When it was given: only for an awarded sticker (a rule's sticker has no single moment). */
+  earnedAt: isoDateTimeSchema.nullable(),
+  /** What it was given for, in the giver's words, when they wrote one. */
+  reason: z.string().nullable(),
+  /** The design, for a sticker the club's leaders made; null for a built-in one. */
+  custom: customStickerDefSchema.nullable(),
 });
 export type EarnedSticker = z.infer<typeof earnedStickerSchema>;
 export type { StickerKey };
@@ -52,6 +85,8 @@ export const memberCardSchema = z.object({
   tonePreference: cardToneSchema.nullable(),
   /** The stickers earned, by a rule or by an award, with where each one is stuck. */
   stickers: z.array(earnedStickerSchema),
+  /** Stickers of the member's clubs they can see and have not earned yet, shown locked with how to get them. */
+  lockedStickers: z.array(customStickerDefSchema),
   share: cardShareSchema,
   /** What the QR on the card and on the passes holds: the share address, or the member code. */
   qr: z.string(),
@@ -65,6 +100,8 @@ export const memberCardSchema = z.object({
   /** The active points balance across the club's committees. */
   points: z.number().int(),
   stampsEarned: z.number().int().min(0),
+  /** The next stamp is half earned: its box is drawn half filled. */
+  stampsHalf: z.boolean(),
   stampsTotal: z.number().int().min(1),
   /**
    * Which wallets this server can issue the pass to. False for one that is not set up yet (no Apple

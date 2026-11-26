@@ -12,7 +12,7 @@ import { Link, usePathname } from '@/i18n/navigation';
 import type { Me } from '@/shared/contracts/auth';
 
 interface NavItem {
-  key: 'dashboard' | 'members' | 'points' | 'clubs' | 'permissions';
+  key: 'dashboard' | 'profile' | 'members' | 'points' | 'stickers' | 'clubs' | 'permissions';
   icon: PixelIconName;
   /** Omitted for sections that are not built yet. */
   href?: string;
@@ -21,8 +21,10 @@ interface NavItem {
 
 const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', icon: 'grid', href: '/dashboard', exact: true },
+  { key: 'profile', icon: 'card', href: '/dashboard/profile' },
   { key: 'members', icon: 'people', href: '/dashboard/members' },
   { key: 'points', icon: 'trophy', href: '/dashboard/points' },
+  { key: 'stickers', icon: 'plus', href: '/dashboard/stickers' },
   { key: 'clubs', icon: 'building', href: '/dashboard/clubs' },
   { key: 'permissions', icon: 'shield', href: '/dashboard/permissions' },
 ];
@@ -33,11 +35,26 @@ const NAV_ITEMS: readonly NavItem[] = [
  * no dashboard access at all gets only the home page, which explains why. Until /me has loaded,
  * every section is listed. The server refuses the rest regardless — this only spares a dead end.
  */
-function visibleItems(access: Me['access'] | undefined): readonly NavItem[] {
-  if (!access) return NAV_ITEMS;
-  if (!access.canAccessDashboard) return NAV_ITEMS.filter((item) => item.key === 'dashboard');
+function visibleItems(me: Me | undefined): readonly NavItem[] {
+  if (!me) return NAV_ITEMS;
+  const { access } = me;
+  // Everyone has a profile (their own card and QR page), so it stays even without dashboard access.
+  if (!access.canAccessDashboard) {
+    return NAV_ITEMS.filter((item) => item.key === 'dashboard' || item.key === 'profile');
+  }
   const managesAClub = access.clubs.some((club) => club.canManage);
-  return NAV_ITEMS.filter((item) => item.key !== 'permissions' || managesAClub);
+  // The sticker studio is for leaders: whoever manages a club or leads one of its committees.
+  const designsStickers =
+    managesAClub ||
+    me.user.isFullAdmin ||
+    me.memberships.some((membership) =>
+      membership.committees.some((committee) => committee.role === 'LEAD'),
+    );
+  return NAV_ITEMS.filter((item) => {
+    if (item.key === 'permissions') return managesAClub;
+    if (item.key === 'stickers') return designsStickers;
+    return true;
+  });
 }
 
 interface DashboardNavProps {
@@ -66,7 +83,7 @@ export function DashboardNav({ onNavigate, collapsed = false }: DashboardNavProp
   return (
     <nav aria-label={t('label')}>
       <ul className="grid gap-1">
-        {visibleItems(me.data?.access).map((item) => {
+        {visibleItems(me.data).map((item) => {
           const label = t(item.key);
           const className = cn(
             'flex h-10 items-center rounded-lg text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:outline-2 focus-visible:outline-ring',

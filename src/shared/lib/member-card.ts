@@ -25,6 +25,25 @@ export function stampsForPoints(points: number): number {
 }
 
 /**
+ * Whether the next stamp is half earned: at least half of the points it takes (25 of 50), and
+ * only while a stamp is still to come. The card draws that box half filled.
+ */
+export function stampIsHalf(points: number): boolean {
+  const earned = Math.floor(Math.max(0, points) / POINTS_PER_STAMP);
+  if (earned >= CARD_STAMPS_TOTAL) return false;
+  return Math.max(0, points) % POINTS_PER_STAMP >= POINTS_PER_STAMP / 2;
+}
+
+/**
+ * The size of one cell of the monthly chart: the smallest of 10, 25, 50 and 100 points that lets
+ * the best month fit in `cells` cells. The chart says it in words, so a cell is never a mystery.
+ */
+export function chartCellValue(best: number, cells: number): 10 | 25 | 50 | 100 {
+  for (const unit of [10, 25, 50] as const) if (best <= unit * cells) return unit;
+  return 100;
+}
+
+/**
  * The short code printed on the card and encoded in its QR: the last eight characters of the
  * membership id (the first ones are a timestamp, the same for people added together). It is read
  * by whoever scans it; it grants nothing by itself.

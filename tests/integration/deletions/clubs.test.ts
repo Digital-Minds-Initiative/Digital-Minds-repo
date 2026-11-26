@@ -138,6 +138,7 @@ describe('deleting a club', () => {
         committees: 2,
         membershipTypes: 2,
         memberExports: 1,
+        customStickers: 0,
         pointBatches: 0,
       });
 

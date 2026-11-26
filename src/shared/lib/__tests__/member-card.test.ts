@@ -5,7 +5,9 @@ import {
   cardMoodForClub,
   cardToneFor,
   cardYears,
+  chartCellValue,
   memberCodeForMembership,
+  stampIsHalf,
   stampsForPoints,
   withKashida,
 } from '../member-card';
@@ -35,6 +37,33 @@ describe('member card rules', () => {
     const { hijriYear, gregorianYear } = cardYears(new Date('2026-11-24T09:00:00Z'));
     expect(gregorianYear).toBe(2026);
     expect(hijriYear).toBe(1448);
+  });
+});
+
+describe('half stamps', () => {
+  it('fills half a box once half of the next stamp is earned, never at the top', () => {
+    expect(stampIsHalf(0)).toBe(false);
+    expect(stampIsHalf(24)).toBe(false);
+    expect(stampIsHalf(25)).toBe(true);
+    expect(stampIsHalf(49)).toBe(true);
+    expect(stampIsHalf(50)).toBe(false);
+    expect(stampIsHalf(75)).toBe(true);
+    expect(stampIsHalf(275)).toBe(true);
+    // All six stamps are earned: there is no next box to half fill.
+    expect(stampIsHalf(300)).toBe(false);
+    expect(stampIsHalf(325)).toBe(false);
+    expect(stampIsHalf(-40)).toBe(false);
+  });
+
+  it('sizes a chart cell at 10, 25, 50 or 100 points, the smallest that fits the best month', () => {
+    expect(chartCellValue(0, 8)).toBe(10);
+    expect(chartCellValue(80, 8)).toBe(10);
+    expect(chartCellValue(81, 8)).toBe(25);
+    expect(chartCellValue(200, 8)).toBe(25);
+    expect(chartCellValue(201, 8)).toBe(50);
+    expect(chartCellValue(400, 8)).toBe(50);
+    expect(chartCellValue(401, 8)).toBe(100);
+    expect(chartCellValue(5000, 8)).toBe(100);
   });
 });
 

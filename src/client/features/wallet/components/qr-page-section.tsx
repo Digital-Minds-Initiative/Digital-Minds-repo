@@ -35,7 +35,7 @@ export function QrPageSection({ cards }: { cards: readonly MemberCard[] }) {
         </h2>
         <p className="text-sm text-fg-muted">{t('subtitle')}</p>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22.4rem),1fr))] items-start gap-x-8 gap-y-12">
+      <div className="grid items-start gap-y-12">
         {cards.map((card) => {
           const token = card.share.enabled && card.share.url ? tokenOf(card.share.url) : null;
           return (

@@ -34,10 +34,14 @@ export interface PassDefinition {
   barcodeAltText: string;
 }
 
-/** `●●○○○○`: earned stamps filled, the rest hollow; read left to right on any device. */
-export function stampRow(earned: number, total: number): string {
+/**
+ * `●●◐○○○`: earned stamps filled, a half-earned one half filled, the rest hollow; read left to
+ * right on any device.
+ */
+export function stampRow(earned: number, total: number, half = false): string {
   const filled = Math.min(Math.max(earned, 0), total);
-  return '●'.repeat(filled) + '○'.repeat(total - filled);
+  const middle = half && filled < total ? '◐' : '';
+  return '●'.repeat(filled) + middle + '○'.repeat(total - filled - middle.length);
 }
 
 /** `{name}` placeholders in a message, filled in. */
@@ -114,7 +118,7 @@ export function buildPassDefinition(
       {
         key: 'stamps',
         label: t.stamps,
-        value: `\u202A${stampRow(card.stampsEarned, card.stampsTotal)}\u202C`,
+        value: `\u202A${stampRow(card.stampsEarned, card.stampsTotal, card.stampsHalf)}\u202C`,
       },
     ],
     back: [
@@ -131,7 +135,7 @@ export function buildPassDefinition(
               key: 'stickers',
               label: t.stickersLabel,
               value: card.stickers
-                .map((sticker) => t.sticker[sticker.key] ?? sticker.key)
+                .map((sticker) => sticker.custom?.name ?? t.sticker[sticker.key] ?? sticker.key)
                 .join('، '),
             },
           ]

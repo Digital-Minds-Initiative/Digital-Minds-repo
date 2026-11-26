@@ -48,9 +48,9 @@ describe('who may award which sticker', () => {
     }
   });
 
-  it('lets a lead award all but the founder sticker', () => {
+  it('lets a lead award all but the ones only officers give', () => {
     for (const key of AWARDABLE_STICKER_KEYS) {
-      expect(canAwardSticker(lead, key), key).toBe(key !== 'founder');
+      expect(canAwardSticker(lead, key), key).toBe(key !== 'founder' && key !== 'legend');
     }
   });
 
@@ -118,5 +118,41 @@ describe('the months a card page charts', () => {
       '2027-02',
     ]);
     expect(lastSixMonths('2026-01-31')[0]).toBe('2025-08');
+  });
+});
+
+describe('custom sticker keys and rules', () => {
+  it('knows a custom key by its prefix and a UUID, and nothing else', async () => {
+    const { customStickerKey, isCustomStickerKey, customStickerId } = await import('../stickers');
+    const id = '01900000-0000-7000-8000-00000000abcd';
+    expect(isCustomStickerKey(customStickerKey(id))).toBe(true);
+    expect(customStickerId(customStickerKey(id))).toBe(id);
+    for (const bad of ['star', 'custom:', 'custom:abc', `custom:${id}x`, `Custom:${id}`, '']) {
+      expect(isCustomStickerKey(bad), bad).toBe(false);
+    }
+  });
+
+  it('lets the designer decide who gives it: any lead, or officers only', async () => {
+    const { canAwardCustomSticker } = await import('../stickers');
+    const lead = { fullAdmin: false, officer: false, lead: true };
+    const officer = { fullAdmin: false, officer: true, lead: false };
+    const nobody = { fullAdmin: false, officer: false, lead: false };
+    expect(canAwardCustomSticker(lead, 'LEAD')).toBe(true);
+    expect(canAwardCustomSticker(lead, 'OFFICER')).toBe(false);
+    expect(canAwardCustomSticker(officer, 'OFFICER')).toBe(true);
+    expect(canAwardCustomSticker(nobody, 'LEAD')).toBe(false);
+  });
+
+  it('keeps the hidden built-in sticker a surprise only a person gives', async () => {
+    const { isHiddenBuiltin, derivedStickers } = await import('../stickers');
+    expect(isHiddenBuiltin('legend')).toBe(true);
+    expect(isHiddenBuiltin('star')).toBe(false);
+    const everything = derivedStickers({
+      clubRole: 'CLUB_OFFICER',
+      ledCommittees: 2,
+      points: 99_999,
+      transactions: 9,
+    });
+    expect(everything).not.toContain('legend');
   });
 });

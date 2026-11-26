@@ -86,6 +86,7 @@ describe('deletion routes', () => {
         committees: 0,
         membershipTypes: 1,
         memberExports: 0,
+        customStickers: 0,
         pointBatches: 0,
       });
     });
