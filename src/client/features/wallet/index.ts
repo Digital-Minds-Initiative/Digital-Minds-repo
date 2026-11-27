@@ -3,5 +3,6 @@
 // Mocks: ./mocks/index.ts
 export { MemberStickersSection } from './components/member-stickers-section';
 export { MyCards } from './components/my-cards';
+export { ClaimRedeem } from './components/claim-redeem';
 export { StickerStudio } from './components/sticker-studio';
 export { PublicCardPage } from './components/public-card-page';

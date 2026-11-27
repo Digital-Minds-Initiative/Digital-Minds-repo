@@ -21,9 +21,18 @@ import {
   type PublicCard,
 } from '@/shared/contracts/cards';
 import {
+  albumEndpoint,
+  claimCodeEndpoint,
+  closeClaimEndpoint,
+  createClaimEndpoint,
   createCustomStickerEndpoint,
+  listClaimsEndpoint,
   listCustomStickersEndpoint,
+  redeemClaimEndpoint,
+  stickerStatsEndpoint,
   updateCustomStickerEndpoint,
+  type AlbumEntry,
+  type StickerClaim,
   type StudioSticker,
 } from '@/shared/contracts/stickers';
 import {
@@ -45,12 +54,15 @@ import {
 } from '@/shared/lib/member-card';
 import {
   AWARDABLE_STICKER_KEYS,
+  BUILTIN_RARITY,
   canAwardCustomSticker,
   canAwardSticker,
   CUSTOM_STICKER_LIMITS,
   customStickerKey,
   derivedStickers,
   isCustomStickerKey,
+  isHiddenBuiltin,
+  isStickerOpen,
   STICKER_KEYS,
   STICKER_RULES,
   type CustomStickerDef,
@@ -88,13 +100,33 @@ interface MockCustomSticker {
   createdAt: string;
   archived: boolean;
   awardableBy: 'LEAD' | 'OFFICER';
+  maxHolders: number | null;
   def: Omit<CustomStickerDef, 'key'>;
 }
+
+/** One event code in the mocks; `redeemed` holds the memberships that scanned it. */
+interface MockClaim {
+  id: string;
+  clubId: string;
+  committeeId: string | null;
+  key: string;
+  title: string;
+  maxClaims: number;
+  expiresAt: number;
+  closedAt: number | null;
+  createdById: string;
+  createdAt: number;
+  redeemed: Set<string>;
+}
+
+/** The mac every mock code carries: a real one is an HMAC, here only its shape matters. */
+const MOCK_MAC = 'MOCKMOCKMOCKMOCK';
 
 interface MockCards {
   cards: Map<string, CardState>;
   awards: Map<string, Map<string, MockAward>>;
   customs: Map<string, MockCustomSticker>;
+  claims: Map<string, MockClaim>;
 }
 
 const stores = new WeakMap<MockDb, MockCards>();
@@ -102,7 +134,7 @@ const stores = new WeakMap<MockDb, MockCards>();
 function storeFor(db: MockDb): MockCards {
   let store = stores.get(db);
   if (!store) {
-    store = { cards: new Map(), awards: new Map(), customs: new Map() };
+    store = { cards: new Map(), awards: new Map(), customs: new Map(), claims: new Map() };
     stores.set(db, store);
   }
   return store;
@@ -309,6 +341,46 @@ function canEditCustom(actor: MockActor, custom: MockCustomSticker): boolean {
   return custom.createdById === actor.user.id && canDesign(actor, custom.clubId);
 }
 
+const claimDenied = () =>
+  mockError('FORBIDDEN', 'You cannot manage this code.', { reason: 'sticker_claim_not_allowed' });
+
+function canManageClaimMock(actor: MockActor, claim: MockClaim): boolean {
+  return (
+    actor.user.isFullAdmin ||
+    actor.officerClubIds.includes(claim.clubId) ||
+    claim.createdById === actor.user.id
+  );
+}
+
+function claimOf(db: MockDb, claim: MockClaim): StickerClaim {
+  const custom = isCustomStickerKey(claim.key)
+    ? storeFor(db).customs.get(claim.key.slice('custom:'.length))
+    : undefined;
+  const claimed = claim.redeemed.size;
+  const now = Date.now();
+  return {
+    id: claim.id,
+    clubId: claim.clubId,
+    committeeId: claim.committeeId,
+    key: claim.key as StickerRef,
+    custom: custom ? defOf(custom) : null,
+    title: claim.title,
+    maxClaims: claim.maxClaims,
+    claimed,
+    expiresAt: new Date(claim.expiresAt).toISOString(),
+    closedAt: claim.closedAt === null ? null : new Date(claim.closedAt).toISOString(),
+    status:
+      claim.closedAt !== null
+        ? 'closed'
+        : claim.expiresAt <= now
+          ? 'expired'
+          : claimed >= claim.maxClaims
+            ? 'full'
+            : 'open',
+    createdAt: new Date(claim.createdAt).toISOString(),
+  };
+}
+
 function studioOf(db: MockDb, actor: MockActor, custom: MockCustomSticker): StudioSticker {
   const key = customStickerKey(custom.id);
   const heldBy = [...storeFor(db).awards.values()].filter((held) => held.has(key)).length;
@@ -317,6 +389,7 @@ function studioOf(db: MockDb, actor: MockActor, custom: MockCustomSticker): Stud
     id: custom.id,
     clubId: custom.clubId,
     awardableBy: custom.awardableBy,
+    maxHolders: custom.maxHolders,
     archived: custom.archived,
     createdAt: custom.createdAt,
     heldBy,
@@ -470,6 +543,18 @@ export const walletHandlers = [
       if (custom.archived) {
         return mockError('CONFLICT', 'The sticker is archived.', { reason: 'sticker_archived' });
       }
+      if (!isStickerOpen(new Date(), custom.def)) {
+        return mockError('CONFLICT', 'The sticker is not open for giving now.', {
+          reason: 'sticker_not_available',
+        });
+      }
+      const heldNow = [...store.awards.values()].filter((held) => held.has(body.key)).length;
+      const mineAlready = store.awards.get(membership.id)?.has(body.key) ?? false;
+      if (custom.maxHolders !== null && !mineAlready && heldNow >= custom.maxHolders) {
+        return mockError('CONFLICT', 'The sticker has no places left.', {
+          reason: 'sticker_sold_out',
+        });
+      }
     } else if (!canAwardSticker(standing, body.key as StickerKey)) {
       return mockError('FORBIDDEN', 'This role cannot award that sticker.', {
         reason: 'sticker_award_not_allowed',
@@ -557,7 +642,7 @@ export const walletHandlers = [
     if (live.length >= CUSTOM_STICKER_LIMITS.perClub) {
       return mockError('CONFLICT', 'Too many stickers.', { reason: 'sticker_limit_reached' });
     }
-    const { awardableBy, ...def } = body;
+    const { awardableBy, maxHolders, ...def } = body;
     const custom: MockCustomSticker = {
       id: crypto.randomUUID(),
       clubId: params.clubId,
@@ -565,6 +650,7 @@ export const walletHandlers = [
       createdAt: new Date().toISOString(),
       archived: false,
       awardableBy,
+      maxHolders,
       def,
     };
     store.customs.set(custom.id, custom);
@@ -577,14 +663,266 @@ export const walletHandlers = [
     const custom = storeFor(db).customs.get(params.stickerId);
     if (!custom || !canSeeClub(actor, custom.clubId)) return notFound('Sticker');
     if (!canEditCustom(actor, custom)) return denied();
-    const { archived, awardableBy, ...fields } = body;
+    const { archived, awardableBy, maxHolders, ...fields } = body;
     custom.def = {
       ...custom.def,
       ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)),
     };
     if (awardableBy !== undefined) custom.awardableBy = awardableBy;
+    if (maxHolders !== undefined) custom.maxHolders = maxHolders;
     if (archived !== undefined) custom.archived = archived;
     return studioOf(db, actor, custom);
+  }),
+
+  // ─── The album, event codes and a sticker's numbers ─────────
+
+  mockEndpoint(albumEndpoint, ({ cookies, params }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    const membership = ownMembership(db, actor, params.membershipId);
+    if (!membership) return notFound('Membership');
+    const store = storeFor(db);
+    const heldKeys = new Set<string>(stickersOf(db, membership).map((sticker) => sticker.key));
+    const clubMembers = db.memberships.filter(
+      (member) => member.clubId === membership.clubId && member.removedAt === null,
+    );
+    const percentOf = (key: string) => {
+      const holding = clubMembers.filter((member) => store.awards.get(member.id)?.has(key)).length;
+      return clubMembers.length === 0 ? 0 : Math.round((holding * 100) / clubMembers.length);
+    };
+    const now = new Date();
+    const entries: AlbumEntry[] = [];
+    let secretCount = 0;
+    for (const key of STICKER_KEYS) {
+      const mine = heldKeys.has(key);
+      if (isHiddenBuiltin(key) && !mine) {
+        secretCount += 1;
+        continue;
+      }
+      const given = STICKER_RULES[key].source === 'awarded';
+      entries.push({
+        key,
+        custom: null,
+        rarity: BUILTIN_RARITY[key],
+        held: mine,
+        heldPercent: given ? percentOf(key) : null,
+        availableFrom: null,
+        availableUntil: null,
+        open: true,
+      });
+    }
+    for (const custom of store.customs.values()) {
+      if (custom.clubId !== membership.clubId) continue;
+      const key = customStickerKey(custom.id);
+      const mine = heldKeys.has(key);
+      if ((custom.archived || custom.def.hidden) && !mine) {
+        if (custom.def.hidden && !custom.archived) secretCount += 1;
+        continue;
+      }
+      const holding = clubMembers.filter((member) => store.awards.get(member.id)?.has(key)).length;
+      entries.push({
+        key,
+        custom: defOf(custom),
+        rarity: custom.def.rarity,
+        held: mine,
+        heldPercent: percentOf(key),
+        availableFrom: custom.def.availableFrom,
+        availableUntil: custom.def.availableUntil,
+        open:
+          !custom.archived &&
+          isStickerOpen(now, custom.def) &&
+          (custom.maxHolders === null || holding < custom.maxHolders),
+      });
+    }
+    return { entries, secretCount };
+  }),
+
+  mockEndpoint(createClaimEndpoint, ({ cookies, params, body }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    if (!canSeeClub(actor, params.clubId)) return notFound('Club');
+    const club = must(db.clubsById.get(params.clubId), 'club');
+    const isOfficer = actor.user.isFullAdmin || actor.officerClubIds.includes(params.clubId);
+    const store = storeFor(db);
+    const custom = isCustomStickerKey(body.key)
+      ? store.customs.get(body.key.slice('custom:'.length))
+      : undefined;
+    if (isCustomStickerKey(body.key) && (!custom || custom.clubId !== params.clubId)) {
+      return notFound('Sticker');
+    }
+    const leadAllowed = custom
+      ? custom.awardableBy === 'LEAD'
+      : canAwardSticker({ fullAdmin: false, officer: false, lead: true }, body.key as StickerKey);
+    const leads = body.committeeId !== null && actor.ledCommitteeIds.includes(body.committeeId);
+    if (!isOfficer && !(leads && leadAllowed)) {
+      return mockError('FORBIDDEN', 'You cannot make codes for this.', {
+        reason: 'sticker_claim_not_allowed',
+      });
+    }
+    if (club.archivedAt !== null) {
+      return mockError('CONFLICT', 'The club is archived.', { reason: 'club_archived' });
+    }
+    if (custom?.archived) {
+      return mockError('CONFLICT', 'The sticker is archived.', { reason: 'sticker_archived' });
+    }
+    const now = Date.now();
+    const claim: MockClaim = {
+      id: crypto.randomUUID(),
+      clubId: params.clubId,
+      committeeId: body.committeeId,
+      key: body.key,
+      title: body.title,
+      maxClaims: body.maxClaims,
+      expiresAt: now + body.minutes * 60_000,
+      closedAt: null,
+      createdById: actor.user.id,
+      createdAt: now,
+      redeemed: new Set(),
+    };
+    store.claims.set(claim.id, claim);
+    return claimOf(db, claim);
+  }),
+
+  mockEndpoint(listClaimsEndpoint, ({ cookies, params }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    if (!canSeeClub(actor, params.clubId)) return notFound('Club');
+    const sees = actor.user.isFullAdmin || actor.officerClubIds.includes(params.clubId);
+    return {
+      claims: [...storeFor(db).claims.values()]
+        .filter((claim) => claim.clubId === params.clubId)
+        .filter((claim) => sees || claim.createdById === actor.user.id)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((claim) => claimOf(db, claim)),
+    };
+  }),
+
+  mockEndpoint(closeClaimEndpoint, ({ cookies, params }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    const claim = storeFor(db).claims.get(params.claimId);
+    if (!claim || !canSeeClub(actor, claim.clubId)) return notFound('Claim');
+    if (!canManageClaimMock(actor, claim)) return claimDenied();
+    claim.closedAt ??= Date.now();
+    return claimOf(db, claim);
+  }),
+
+  mockEndpoint(claimCodeEndpoint, ({ cookies, params }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    const claim = storeFor(db).claims.get(params.claimId);
+    if (!claim || !canSeeClub(actor, claim.clubId)) return notFound('Claim');
+    if (!canManageClaimMock(actor, claim)) return claimDenied();
+    if (claim.closedAt !== null || claim.expiresAt <= Date.now()) {
+      return mockError('CONFLICT', 'The code is closed.', { reason: 'claim_expired' });
+    }
+    const window = Math.floor(Date.now() / 60_000);
+    return {
+      code: `${claim.id}.${window.toString(36)}.${MOCK_MAC}`,
+      refreshInSeconds: 60 - Math.floor((Date.now() % 60_000) / 1000),
+    };
+  }),
+
+  mockEndpoint(redeemClaimEndpoint, ({ cookies, body }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    const [claimId = '', windowText = '', mac = ''] = body.code.split('.');
+    const store = storeFor(db);
+    const claim = store.claims.get(claimId);
+    const window = Number.parseInt(windowText, 36);
+    const current = Math.floor(Date.now() / 60_000);
+    if (!claim || mac !== MOCK_MAC || window > current || window < current - 1) {
+      return notFound('Claim');
+    }
+    if (claim.closedAt !== null || claim.expiresAt <= Date.now()) {
+      return mockError('CONFLICT', 'The code has ended.', { reason: 'claim_expired' });
+    }
+    const membership = db.memberships.find(
+      (held) =>
+        held.userId === actor.user.id && held.clubId === claim.clubId && held.removedAt === null,
+    );
+    if (
+      !membership ||
+      (claim.committeeId !== null &&
+        !membership.committees.some(
+          (entry) => !entry.removed && entry.committeeId === claim.committeeId,
+        ))
+    ) {
+      return mockError('FORBIDDEN', 'This code is not for you.', { reason: 'claim_not_for_you' });
+    }
+    const custom = isCustomStickerKey(claim.key)
+      ? store.customs.get(claim.key.slice('custom:'.length))
+      : undefined;
+    if (custom?.archived) {
+      return mockError('CONFLICT', 'The sticker is archived.', { reason: 'sticker_archived' });
+    }
+    if (custom && !isStickerOpen(new Date(), custom.def)) {
+      return mockError('CONFLICT', 'The sticker is not open for giving now.', {
+        reason: 'sticker_not_available',
+      });
+    }
+    if (claim.redeemed.size >= claim.maxClaims) {
+      return mockError('CONFLICT', 'Everyone it was for has claimed.', { reason: 'claim_full' });
+    }
+    if (claim.redeemed.has(membership.id)) {
+      return mockError('CONFLICT', 'You already claimed this code.', { reason: 'already_claimed' });
+    }
+    const held = store.awards.get(membership.id) ?? new Map<string, MockAward>();
+    if (held.has(claim.key)) {
+      return mockError('CONFLICT', 'You already hold this sticker.', { reason: 'already_holds' });
+    }
+    if (custom && custom.maxHolders !== null) {
+      const holding = [...store.awards.values()].filter((entry) => entry.has(claim.key)).length;
+      if (holding >= custom.maxHolders) {
+        return mockError('CONFLICT', 'The sticker has no places left.', {
+          reason: 'sticker_sold_out',
+        });
+      }
+    }
+    held.set(claim.key, { awardedAt: new Date().toISOString(), reason: claim.title });
+    store.awards.set(membership.id, held);
+    claim.redeemed.add(membership.id);
+    return {
+      key: claim.key as StickerRef,
+      custom: custom ? defOf(custom) : null,
+      title: claim.title,
+      clubName: must(db.clubsById.get(claim.clubId), 'club').name,
+    };
+  }),
+
+  mockEndpoint(stickerStatsEndpoint, ({ cookies, params }) => {
+    const { db, actor } = actorOf(cookies);
+    if (!actor) return mockError('UNAUTHENTICATED');
+    const custom = storeFor(db).customs.get(params.stickerId);
+    if (!custom || !canSeeClub(actor, custom.clubId)) return notFound('Sticker');
+    if (!canDesign(actor, custom.clubId)) return denied();
+    const key = customStickerKey(custom.id);
+    const store = storeFor(db);
+    const holders = db.memberships.filter(
+      (member) => member.clubId === custom.clubId && store.awards.get(member.id)?.has(key),
+    );
+    const members = db.memberships.filter(
+      (member) => member.clubId === custom.clubId && member.removedAt === null,
+    ).length;
+    const placed = holders.filter((member) =>
+      cardStateFor(db, member.id).placements.some((placement) => placement.key === key),
+    ).length;
+    const months = lastSixMonths(todayInAppTimeZone(new Date()));
+    const byMonth = new Map(months.map((month) => [month, 0]));
+    for (const member of holders) {
+      const at = store.awards.get(member.id)?.get(key)?.awardedAt ?? '';
+      const month = new Date(new Date(at).getTime() + 3 * 3_600_000).toISOString().slice(0, 7);
+      if (byMonth.has(month)) byMonth.set(month, (byMonth.get(month) ?? 0) + 1);
+    }
+    const pct = (part: number, whole: number) =>
+      whole === 0 ? 0 : Math.min(100, Math.round((part * 100) / whole));
+    return {
+      heldBy: holders.length,
+      percentOfMembers: pct(holders.length, members),
+      placedPercent: pct(placed, holders.length),
+      byMonth: months.map((month) => ({ month, count: byMonth.get(month) ?? 0 })),
+      givers: [],
+    };
   }),
 
   // ─── The page the QR opens ──────────────────────────────────

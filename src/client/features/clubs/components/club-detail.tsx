@@ -69,8 +69,8 @@ export function ClubDetail({
 
   return (
     <Tabs defaultValue="committees" className="grid gap-0">
-      <article aria-label={club.name} className="grid">
-        <header className="grid gap-4 rounded-t-card border border-border bg-surface-1 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+      <article aria-label={club.name} className="grid grid-cols-[minmax(0,1fr)]">
+        <header className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-t-card border border-border bg-surface-1 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="flex items-start gap-4">
             <span
               aria-hidden
@@ -99,7 +99,7 @@ export function ClubDetail({
             </div>
           </div>
 
-          <div className="flex items-start gap-3 lg:items-center">
+          <div className="flex flex-wrap items-start gap-3 lg:items-center">
             <ClubStats club={club} includeArchived={includeArchived} />
             {access.canManageStructure ? (
               <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -271,11 +271,11 @@ function ClubStats({ club, includeArchived }: { club: Club; includeArchived: boo
       { key: 'types', label: t('types'), value: types.data?.items.length, icon: Tags },
     ];
   return (
-    <dl className="m-0 flex gap-2">
+    <dl className="m-0 flex flex-wrap gap-2">
       {stats.map((stat) => (
         <div
           key={stat.key}
-          className="grid min-w-20 justify-items-center gap-0.5 rounded-lg bg-surface-2 px-3 py-2"
+          className="grid min-w-20 flex-1 justify-items-center gap-0.5 rounded-lg bg-surface-2 px-3 py-2 sm:flex-none"
         >
           <dt className="flex items-center gap-1 text-xs text-fg-muted">
             <stat.icon className="size-3.5" aria-hidden />

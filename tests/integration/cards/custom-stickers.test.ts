@@ -34,6 +34,10 @@ const design = (over: Partial<CustomStickerFields> = {}): CustomStickerFields =>
   ink: 'white',
   hidden: false,
   awardableBy: 'LEAD',
+  rarity: 'COMMON',
+  availableFrom: null,
+  availableUntil: null,
+  maxHolders: null,
   ...over,
 });
 

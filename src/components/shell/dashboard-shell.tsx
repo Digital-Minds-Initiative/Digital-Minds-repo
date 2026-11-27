@@ -120,7 +120,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface-1/90 px-4 backdrop-blur-sm lg:px-8">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface-1/90 px-3 backdrop-blur-sm sm:px-4 lg:px-8">
           <DialogPrimitive.Root open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <DialogPrimitive.Trigger asChild>
               <Button
@@ -143,7 +143,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </DialogPrimitive.Root>
           <Logo showName={false} className="lg:hidden" />
 
-          <div className="ms-auto flex items-center gap-1">
+          <div className="ms-auto flex min-w-0 items-center gap-1">
             <DevActorSwitcher />
             <ThemeToggle />
             <UserMenu />
@@ -207,7 +207,8 @@ function ActorGate({ children }: { children: ReactNode }) {
   if (
     !me.data.access.canAccessDashboard &&
     pathname !== '/dashboard' &&
-    pathname !== '/dashboard/profile'
+    pathname !== '/dashboard/profile' &&
+    pathname !== '/dashboard/claim'
   ) {
     return (
       <EmptyState icon={ShieldOff} title={t('noAccess.title')} description={t('noAccess.body')} />

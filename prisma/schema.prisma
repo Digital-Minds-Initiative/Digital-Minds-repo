@@ -46,6 +46,13 @@ enum CardTone {
   MATTE
 }
 
+/// How rare a sticker is, as its designer calls it: shown on the sticker's page and in the album.
+enum StickerRarity {
+  COMMON
+  RARE
+  LEGENDARY
+}
+
 /// Who may give a custom sticker: any lead of a committee the member is in, or officers only.
 enum StickerAwardBy {
   LEAD
@@ -110,6 +117,7 @@ model User {
   roleChangesMade            RoleChange[]
   badgesAwarded              BadgeAward[]               @relation("BadgeAwardedBy")
   customStickersCreated      CustomSticker[]            @relation("CustomStickerCreatedBy")
+  stickerClaimsCreated       StickerClaim[]             @relation("StickerClaimCreatedBy")
   roleInvitationsSent        RoleInvitation[]
   memberExports              MemberExport[]
   deletionsMade              DeletionRecord[]
@@ -134,6 +142,7 @@ model Club {
   roleInvitations RoleInvitation[]
   memberExports   MemberExport[]
   customStickers  CustomSticker[]
+  stickerClaims   StickerClaim[]
 }
 
 model Committee {
@@ -542,26 +551,69 @@ model BadgePlacement {
 /// src/shared/lib/stickers.ts, never free CSS. Archived stickers cannot be given any more, and stay
 /// on the cards that hold them.
 model CustomSticker {
-  id          String         @id @default(uuid(7)) @db.Uuid
-  clubId      String         @db.Uuid
-  name        String
+  id             String         @id @default(uuid(7)) @db.Uuid
+  clubId         String         @db.Uuid
+  name           String
   /// How to get it, in words a member reads on the sticker's page.
-  howTo       String
+  howTo          String
   /// The short text printed on the sticker itself.
-  label       String
-  icon        String
-  shape       String
-  background  String
-  ink         String
+  label          String
+  icon           String
+  shape          String
+  background     String
+  ink            String
   /// Hidden stickers are not listed to members until they hold one.
-  hidden      Boolean        @default(false)
-  awardableBy StickerAwardBy @default(LEAD)
-  createdById String         @db.Uuid
-  createdAt   DateTime       @default(now())
-  archivedAt  DateTime?
+  hidden         Boolean        @default(false)
+  awardableBy    StickerAwardBy @default(LEAD)
+  rarity         StickerRarity  @default(COMMON)
+  /// A seasonal sticker can only be given between these two moments (both null: always).
+  availableFrom  DateTime?
+  availableUntil DateTime?
+  /// How many members may hold it at most (null: no limit).
+  maxHolders     Int?
+  createdById    String         @db.Uuid
+  createdAt      DateTime       @default(now())
+  archivedAt     DateTime?
 
   club      Club @relation(fields: [clubId], references: [id], onDelete: Restrict)
   createdBy User @relation("CustomStickerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([clubId])
+}
+
+/// A code a leader shows at an event: whoever scans it before it expires gets the sticker
+/// (docs/adr/0034-album-claims-and-seasons.md). The code on screen changes every minute and is an
+/// HMAC of this row's id and the minute, so nothing secret is stored. `committeeId` is a plain
+/// column, not a foreign key: a deleted committee just makes its codes refuse.
+model StickerClaim {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  clubId      String    @db.Uuid
+  /// Set when a lead made it: only active members of that committee may redeem it.
+  committeeId String?   @db.Uuid
+  /// A built-in awardable key or `custom:<id>`.
+  badgeKey    String
+  title       String
+  maxClaims   Int
+  expiresAt   DateTime
+  closedAt    DateTime?
+  createdById String    @db.Uuid
+  createdAt   DateTime  @default(now())
+
+  club        Club                     @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  createdBy   User                     @relation("StickerClaimCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  redemptions StickerClaimRedemption[]
+
+  @@index([clubId])
+}
+
+/// One member redeeming one code, once. `membershipId` is a plain column; the person delete clears it.
+model StickerClaimRedemption {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  claimId      String   @db.Uuid
+  membershipId String   @db.Uuid
+  redeemedAt   DateTime @default(now())
+
+  claim StickerClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
+
+  @@unique([claimId, membershipId])
 }

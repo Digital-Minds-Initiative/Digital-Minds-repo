@@ -24,11 +24,12 @@ export const buttonVariants = cva(
         link: 'border border-transparent text-primary underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-8 px-3 text-xs',
+        // A finger needs 40px; a pointer is fine with 32.
+        sm: 'h-10 px-3 text-xs sm:h-8',
         md: 'h-11 px-5',
         lg: 'h-12 px-6 text-base',
         icon: 'size-11',
-        'icon-sm': 'size-8',
+        'icon-sm': 'size-10 sm:size-8',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

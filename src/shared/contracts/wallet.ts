@@ -7,6 +7,7 @@ import {
   STICKER_COLORS,
   STICKER_ICONS,
   STICKER_KEYS,
+  STICKER_RARITIES,
   STICKER_SHAPES,
   type StickerKey,
 } from '@/shared/lib/stickers';
@@ -32,6 +33,9 @@ export const customStickerDefSchema = z.object({
   background: z.enum(STICKER_COLORS),
   ink: z.enum(STICKER_COLORS),
   hidden: z.boolean(),
+  rarity: z.enum(STICKER_RARITIES),
+  availableFrom: isoDateTimeSchema.nullable(),
+  availableUntil: isoDateTimeSchema.nullable(),
 });
 export const cardToneSchema = z.enum(['paper', 'matte']);
 

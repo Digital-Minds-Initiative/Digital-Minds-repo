@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, HelpCircle, Lock, Sparkles, TextQuote } from 'lucide-react';
+import { CalendarDays, Gem, HelpCircle, Lock, Sparkles, TextQuote } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 
@@ -33,6 +33,14 @@ export interface StickerFacts {
   earnedAt: string | null;
   /** What it was given for, when the giver wrote it down and the owner lets it be seen. */
   reason: string | null;
+  /** From the album: how rare it is, who holds it, its season and whether it can still be given. */
+  album?: {
+    rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
+    heldPercent: number | null;
+    availableFrom: string | null;
+    availableUntil: string | null;
+    open: boolean;
+  };
 }
 
 /** A small titled fact in the side of the sticker's page. */
@@ -121,6 +129,36 @@ export function StickerDetail({
                   text.howTo(facts.key, facts.custom)
                 )}
               </Fact>
+
+              {facts.album ? (
+                <Fact icon={<Gem />} title={t('rarityTitle')}>
+                  {t(`rarity.${facts.album.rarity}`)}
+                  {facts.album.heldPercent !== null
+                    ? ` · ${t('heldPercent', { percent: facts.album.heldPercent })}`
+                    : ''}
+                  {facts.album.availableFrom || facts.album.availableUntil ? (
+                    <span className="mt-1 block text-fg-muted">
+                      {t('season', {
+                        from: facts.album.availableFrom
+                          ? format.dateTime(new Date(facts.album.availableFrom), {
+                              dateStyle: 'medium',
+                              timeZone: 'Asia/Riyadh',
+                            })
+                          : '…',
+                        until: facts.album.availableUntil
+                          ? format.dateTime(new Date(facts.album.availableUntil), {
+                              dateStyle: 'medium',
+                              timeZone: 'Asia/Riyadh',
+                            })
+                          : '…',
+                      })}
+                    </span>
+                  ) : null}
+                  {!facts.album.open && !facts.held ? (
+                    <span className="mt-1 block text-warning">{t('notOpen')}</span>
+                  ) : null}
+                </Fact>
+              ) : null}
 
               {facts.held ? (
                 <Fact

@@ -34,6 +34,16 @@ const EMPTY_SELECTION: RowSelectionState = {};
 const EMPTY_VISIBILITY: ColumnVisibilityState = {};
 const SELECT_COLUMN_ID = '__select';
 
+/** A row on a phone: a card with the select box and the name on its first line. */
+const CARD_ROW =
+  'max-sm:relative max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-x-3 max-sm:gap-y-2 max-sm:p-3';
+
+/** A cell on a phone: «label … value», the label drawn from the column's `meta.label`. */
+const CARD_CELL = [
+  'max-sm:col-span-2 max-sm:flex max-sm:items-center max-sm:justify-between max-sm:gap-3 max-sm:p-0',
+  'max-sm:data-[label]:before:shrink-0 max-sm:data-[label]:before:text-xs max-sm:data-[label]:before:text-fg-muted max-sm:data-[label]:before:content-[attr(data-label)]',
+].join(' ');
+
 interface DataTableProps<TData extends RowData> {
   /** Stable (module-level or memoised) column definitions. Build them with createDataTableColumnHelper. */
   columns: ReadonlyArray<DataTableColumn<TData>>;
@@ -108,7 +118,11 @@ export function DataTable<TData extends RowData>({
       id: SELECT_COLUMN_ID,
       enableSorting: false,
       enableHiding: false,
-      meta: { headerClassName: 'w-10', cellClassName: 'w-10' },
+      meta: {
+        headerClassName: 'w-10',
+        cellClassName: 'w-10 max-sm:col-span-1 max-sm:w-auto',
+        plain: true,
+      },
       header: ({ table }) => (
         <Checkbox
           aria-label={t('selectAll')}
@@ -167,8 +181,10 @@ export function DataTable<TData extends RowData>({
     <div className="flex flex-col gap-3">
       {toolbar || toolbarEnd || onColumnVisibilityChange ? (
         <div className="flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-1 p-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{toolbar}</div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 basis-full flex-wrap items-center gap-2 sm:flex-1 sm:basis-0">
+            {toolbar}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             {toolbarEnd}
             {onColumnVisibilityChange ? <ColumnVisibilityMenu table={table} /> : null}
           </div>
@@ -197,10 +213,22 @@ export function DataTable<TData extends RowData>({
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <Table aria-label={label} aria-busy={isLoading || isFetching || undefined}>
-          <TableHeader>
+        {/*
+          Below the `sm` breakpoint the table is drawn as a list of cards: every row is a card,
+          every cell a «label: value» line (the label comes from the column's `meta.label`), and
+          the header row becomes the sort chips. From `sm` up it is the ordinary table.
+        */}
+        <Table
+          aria-label={label}
+          aria-busy={isLoading || isFetching || undefined}
+          className="max-sm:block"
+        >
+          <TableHeader className="max-sm:block">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
+              <TableRow
+                key={headerGroup.id}
+                className="hover:bg-transparent max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-1 max-sm:px-3 max-sm:py-2"
+              >
                 {headerGroup.headers.map((header) => {
                   const meta = header.column.columnDef.meta;
                   const canSort = header.column.getCanSort();
@@ -208,7 +236,12 @@ export function DataTable<TData extends RowData>({
                   return (
                     <TableHead
                       key={header.id}
-                      className={meta?.headerClassName}
+                      className={cn(
+                        meta?.headerClassName,
+                        'max-sm:h-auto max-sm:p-0',
+                        // On a phone only the columns that sort, and the select-all box, keep a header.
+                        !canSort && header.column.id !== SELECT_COLUMN_ID && 'max-sm:hidden',
+                      )}
                       aria-sort={
                         sorted === 'asc'
                           ? 'ascending'
@@ -224,7 +257,7 @@ export function DataTable<TData extends RowData>({
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
                           className={cn(
-                            '-mx-2 inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-surface-3 hover:text-fg',
+                            '-mx-2 inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-surface-3 hover:text-fg max-sm:mx-0 max-sm:min-h-9 max-sm:border max-sm:border-border max-sm:bg-surface-1 max-sm:px-3',
                             'outline-none focus-visible:outline-2 focus-visible:outline-ring',
                             sorted && 'text-fg',
                           )}
@@ -247,28 +280,51 @@ export function DataTable<TData extends RowData>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody className={cn(isFetching && !isLoading && 'opacity-60 transition-opacity')}>
+          <TableBody
+            className={cn(
+              'max-sm:block',
+              isFetching && !isLoading && 'opacity-60 transition-opacity',
+            )}
+          >
             {isLoading ? (
               Array.from({ length: Math.min(pagination.pageSize, 8) }, (_, index) => (
-                <TableRow key={`skeleton-${index}`} className="hover:bg-transparent">
+                <TableRow
+                  key={`skeleton-${index}`}
+                  className={cn('hover:bg-transparent', CARD_ROW)}
+                >
                   {Array.from({ length: visibleColumnCount }, (_, cellIndex) => (
-                    <TableCell key={cellIndex}>
+                    <TableCell key={cellIndex} className="max-sm:col-span-2">
                       <Skeleton className="h-4 w-full max-w-40" />
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : rows.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={visibleColumnCount} className="py-10 text-center text-fg-muted">
+              <TableRow className="hover:bg-transparent max-sm:block">
+                <TableCell
+                  colSpan={visibleColumnCount}
+                  className="py-10 text-center text-fg-muted max-sm:block"
+                >
                   {emptyState ?? t('noResults')}
                 </TableCell>
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() ? 'selected' : undefined}
+                  className={CARD_ROW}
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className={cell.column.columnDef.meta?.cellClassName}>
+                    <TableCell
+                      key={cell.id}
+                      data-label={
+                        cell.column.columnDef.meta?.plain
+                          ? undefined
+                          : cell.column.columnDef.meta?.label
+                      }
+                      className={cn(CARD_CELL, cell.column.columnDef.meta?.cellClassName)}
+                    >
                       <table.FlexRender cell={cell} />
                     </TableCell>
                   ))}

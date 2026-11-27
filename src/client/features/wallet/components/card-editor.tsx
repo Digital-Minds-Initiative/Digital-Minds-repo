@@ -374,7 +374,7 @@ export function CardEditor({ card }: { card: MemberCard }) {
                 {t('stickersHelp', { placed: placements.length, earned: earnedKeys.size })}
               </p>
             </div>
-            <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] gap-4 p-0">
+            <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(6rem,100%),1fr))] gap-4 p-0">
               {tray.map(({ key, custom }) => {
                 const earned = earnedKeys.has(key);
                 const on = placedKeys.has(key);

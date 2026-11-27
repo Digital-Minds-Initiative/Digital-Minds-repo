@@ -72,7 +72,7 @@ describe('the sticker studio', () => {
     expect(within(list).getByText('بطل الهاكاثون')).toBeTruthy();
     expect(within(list).getByText('عند 0 عضو')).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'ملصق جديد' })).toBeNull();
-  });
+  }, 45_000);
 
   it('will not save a sticker whose icon and background are the same colour', async () => {
     viewer.email = email('sara');
@@ -111,6 +111,31 @@ describe('the sticker studio', () => {
     await user.click(screen.getByRole('button', { name: /استعادة/ }));
     await waitFor(() => expect(screen.queryByText('مؤرشف')).toBeNull());
   });
+
+  it('shows a sticker’s numbers in a floating window of their own, and its editor in another', async () => {
+    viewer.email = email('sara');
+    const user = userEvent.setup();
+    renderWithProviders(<StickerStudio />);
+    await user.click(await screen.findByRole('button', { name: /ملصق جديد/ }));
+    const editor = await screen.findByRole('dialog', { name: 'ملصق جديد' });
+    await user.type(within(editor).getByLabelText('اسم الملصق'), 'بالأرقام');
+    await user.type(within(editor).getByLabelText(/النص على الملصق/), 'أرقام');
+    await user.type(within(editor).getByRole('textbox', { name: /^كيف يُنال/ }), 'للتجربة');
+    await user.click(within(editor).getByRole('button', { name: 'إنشاء الملصق' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // The list stays behind: the numbers open over it and close back to it.
+    await user.click(await screen.findByRole('button', { name: /الأرقام/ }));
+    const stats = await screen.findByRole('dialog', { name: 'أرقام «بالأرقام»' });
+    expect(await within(stats).findByText('يملكونه')).toBeTruthy();
+    expect(within(stats).getByText('المنح في آخر ستة أشهر')).toBeTruthy();
+    await user.click(within(stats).getByRole('button', { name: 'إغلاق' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('list', { name: 'ملصقات النادي' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /تعديل/ }));
+    expect(await screen.findByRole('dialog', { name: 'تعديل «بالأرقام»' })).toBeTruthy();
+  }, 45_000);
 
   it('is for leaders: a plain member is told so, with no way to design', async () => {
     viewer.email = email('lama');

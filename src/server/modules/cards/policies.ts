@@ -75,3 +75,18 @@ export function canEditSticker(
   if (actor.isFullAdmin || canManageClub(actor, sticker.clubId)) return true;
   return sticker.createdById === actor.userId && leadsInClub(actor, sticker.clubId);
 }
+
+/**
+ * Making a code for an event. Officers and full admins may for any sticker they can give; a lead
+ * only for a committee they lead and a sticker that leads may give.
+ */
+export function assertCanCreateClaim(
+  actor: Actor,
+  clubId: string,
+  committeeId: string | null,
+  sticker: { allowedForLead: boolean },
+): void {
+  if (actor.isFullAdmin || canManageClub(actor, clubId)) return;
+  const leads = committeeId !== null && ledCommitteeIds(actor).includes(committeeId);
+  if (!leads || !sticker.allowedForLead) throw new AuthzError('sticker_claim_not_allowed');
+}

@@ -193,6 +193,32 @@ export const STICKER_COLORS = [
 ] as const;
 export type StickerColor = (typeof STICKER_COLORS)[number];
 
+/** How rare a sticker is. A built-in one has its own; a designed one is whatever its designer says. */
+export const STICKER_RARITIES = ['COMMON', 'RARE', 'LEGENDARY'] as const;
+export type StickerRarity = (typeof STICKER_RARITIES)[number];
+
+export const BUILTIN_RARITY: Record<StickerKey, StickerRarity> = {
+  star: 'COMMON',
+  lead: 'RARE',
+  k: 'RARE',
+  hack: 'RARE',
+  founder: 'LEGENDARY',
+  workshop: 'COMMON',
+  kind: 'COMMON',
+  first: 'COMMON',
+  legend: 'LEGENDARY',
+};
+
+/** Whether a seasonal sticker may be given at `now`: inside its window, or always when it has none. */
+export function isStickerOpen(
+  now: Date,
+  season: { availableFrom: Date | string | null; availableUntil: Date | string | null },
+): boolean {
+  const from = season.availableFrom === null ? null : new Date(season.availableFrom);
+  const until = season.availableUntil === null ? null : new Date(season.availableUntil);
+  return (from === null || now >= from) && (until === null || now < until);
+}
+
 export const CUSTOM_STICKER_LIMITS = {
   name: 40,
   label: 14,
@@ -213,4 +239,8 @@ export interface CustomStickerDef {
   background: StickerColor;
   ink: StickerColor;
   hidden: boolean;
+  rarity: StickerRarity;
+  /** A seasonal sticker: the window it can be given in, as ISO instants, or null for both ends. */
+  availableFrom: string | null;
+  availableUntil: string | null;
 }

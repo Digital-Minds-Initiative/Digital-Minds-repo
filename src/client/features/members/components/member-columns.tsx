@@ -97,16 +97,21 @@ export function useMemberColumns({
         header: t('columns.member'),
         enableSorting: true,
         enableHiding: false,
-        meta: { label: t('columns.member') },
+        // On a phone the name is the card's first line (beside the select box), with no label.
+        meta: {
+          label: t('columns.member'),
+          plain: true,
+          cellClassName: 'max-sm:col-span-1 max-sm:pe-10',
+        },
         cell: ({ row }) => (
-          <div className="flex min-w-56 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:min-w-56">
             <Avatar name={row.original.user.fullName} />
             <div className="grid min-w-0 gap-0.5">
               <button
                 type="button"
                 aria-label={tRow('openMember', { name: row.original.user.fullName })}
                 onClick={() => onOpen(row.original)}
-                className="w-fit max-w-full cursor-pointer truncate rounded-sm text-start text-sm font-semibold text-fg outline-none hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid"
+                className="w-fit max-w-full cursor-pointer truncate rounded-sm text-start text-sm font-semibold text-fg outline-none hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid max-sm:py-1.5"
               >
                 {row.original.user.fullName}
               </button>
@@ -123,8 +128,9 @@ export function useMemberColumns({
                       .then(() => toast.success(tRow('emailCopied')))
                       .catch(() => toast.error(tRow('copyFailed')));
                   }}
-                  // Shown when the row is hovered or the button focused, so the table stays calm.
-                  className="rounded-sm p-0.5 text-fg-subtle opacity-0 transition-opacity outline-none hover:text-fg focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid [tr:hover_&]:opacity-100"
+                  // Shown when the row is hovered or the button focused, so the table stays calm; always shown
+                  // on a phone, where there is no hover, and big enough for a finger.
+                  className="rounded-sm p-0.5 text-fg-subtle opacity-0 transition-opacity outline-none hover:text-fg focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid max-sm:p-2 max-sm:opacity-100 [tr:hover_&]:opacity-100"
                 >
                   <Copy className="size-3.5" aria-hidden />
                 </button>
@@ -296,7 +302,12 @@ export function useMemberColumns({
         id: 'actions',
         header: () => <span className="sr-only">{tRow('column')}</span>,
         enableHiding: false,
-        meta: { label: tRow('column') },
+        // On a phone the menu sits in the card's corner.
+        meta: {
+          label: tRow('column'),
+          plain: true,
+          cellClassName: 'max-sm:absolute max-sm:end-2 max-sm:top-2 max-sm:col-span-1',
+        },
         cell: ({ row }) => {
           const member = row.original;
           const access = me ? memberAccess(me, member) : null;
