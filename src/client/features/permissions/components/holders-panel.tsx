@@ -119,7 +119,7 @@ export function HoldersPanel({
             {t('officers.empty')}
           </p>
         ) : (
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3 p-0">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(17rem,100%),1fr))] gap-3 p-0">
             {officers.map((officer) => (
               <li
                 key={officer.memberId}
@@ -180,7 +180,7 @@ export function HoldersPanel({
             {t('leads.noCommittees')}
           </p>
         ) : (
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(21rem,1fr))] items-start gap-3 p-0">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(21rem,100%),1fr))] items-start gap-3 p-0">
             {committees.data.items.map((committee) => {
               const committeeLeads = leads.filter((lead) => lead.committee.id === committee.id);
               return (

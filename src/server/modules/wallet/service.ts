@@ -4,6 +4,7 @@ import { ownMembershipsScope, type Actor } from '@/server/authz';
 import { env } from '@/server/env';
 import { ConflictError, NotFoundError, ValidationError } from '@/server/errors';
 import {
+  buildClubAlbum,
   getMyCardExtras,
   placeMyStickers,
   renewMyCardLink,
@@ -104,6 +105,12 @@ async function findMyCard(actor: Actor, membershipId: string, now: Date): Promis
   const card = cards.find((candidate) => candidate.membershipId === membershipId);
   if (!card) throw new NotFoundError('Membership');
   return card;
+}
+
+/** The album of one of the caller's own memberships: every sticker its club has, held or still to get. */
+export async function getMyAlbum(actor: Actor, membershipId: string, now = new Date()) {
+  const card = await findMyCard(actor, membershipId, now);
+  return buildClubAlbum(card.club.id, new Set(card.stickers.map((sticker) => sticker.key)), now);
 }
 
 /** Changes the card's colour or what its QR page shows; answers the card as it is now. */

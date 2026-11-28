@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { ClubScope, MemberScope } from '@/server/authz';
 import { db, type TransactionClient } from '@/server/db/client';
-import type { CardTone, Prisma, StickerAwardBy } from '@/server/db/generated/client';
+import type { CardTone, Prisma, StickerAwardBy, StickerRarity } from '@/server/db/generated/client';
 import type { StickerRef } from '@/shared/lib/stickers';
 
 /*
@@ -290,6 +290,7 @@ export async function deletePersonCardData(
   const ids = memberships.map((membership) => membership.id);
   if (ids.length === 0) return { cards: 0, awards: 0 };
   await tx.badgePlacement.deleteMany({ where: { card: { membershipId: { in: ids } } } });
+  await tx.stickerClaimRedemption.deleteMany({ where: { membershipId: { in: ids } } });
   const cards = await tx.memberCard.deleteMany({ where: { membershipId: { in: ids } } });
   const awards = await tx.badgeAward.deleteMany({ where: { membershipId: { in: ids } } });
   return { cards: cards.count, awards: awards.count };
@@ -309,6 +310,10 @@ const customSelect = {
   ink: true,
   hidden: true,
   awardableBy: true,
+  rarity: true,
+  availableFrom: true,
+  availableUntil: true,
+  maxHolders: true,
   createdById: true,
   createdAt: true,
   archivedAt: true,
@@ -406,6 +411,10 @@ export interface CustomStickerData {
   ink: string;
   hidden: boolean;
   awardableBy: StickerAwardBy;
+  rarity: StickerRarity;
+  availableFrom: Date | null;
+  availableUntil: Date | null;
+  maxHolders: number | null;
 }
 
 /**
@@ -458,4 +467,312 @@ export async function deleteClubCustomStickers(
     where: { AND: [{ clubId }, { club: { AND: [scope] } }] },
   });
   return count;
+}
+
+// ─── The album, seasons and caps (docs/adr/0034-album-claims-and-seasons.md) ─────────────────
+
+/** How many members of the club hold each of these stickers (awards only; a rule's sticker has none). */
+export async function countClubHolders(
+  clubId: string,
+  keys: readonly string[],
+): Promise<Map<string, number>> {
+  if (keys.length === 0) return new Map();
+  const rows = await db.badgeAward.groupBy({
+    by: ['badgeKey'],
+    where: { clubId, badgeKey: { in: [...keys] }, membership: { removedAt: null } },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.badgeKey, row._count._all]));
+}
+
+/** The club's active members: what a percentage of holders is a percentage of. */
+export async function countActiveClubMembers(clubId: string): Promise<number> {
+  return db.membership.count({ where: { clubId, removedAt: null } });
+}
+
+/** When, by whom and how many placed: the raw numbers behind a sticker's stats. */
+export async function findStickerAwards(
+  clubId: string,
+  badgeKey: string,
+): Promise<
+  Array<{
+    membershipId: string;
+    awardedAt: Date;
+    awardedBy: { id: string; fullName: string; deletedAt: Date | null };
+  }>
+> {
+  const rows = await db.badgeAward.findMany({
+    where: { clubId, badgeKey, membership: { removedAt: null } },
+    select: {
+      membershipId: true,
+      awardedAt: true,
+      awardedBy: { select: { id: true, fullName: true, deletedAt: true } },
+    },
+  });
+  return rows.map((row) => ({
+    membershipId: row.membershipId,
+    awardedAt: row.awardedAt,
+    awardedBy: row.awardedBy,
+  }));
+}
+
+/** How many of these memberships have the sticker stuck on their card. */
+export async function countPlacedOn(
+  badgeKey: string,
+  membershipIds: readonly string[],
+): Promise<number> {
+  if (membershipIds.length === 0) return 0;
+  return db.badgePlacement.count({
+    where: { badgeKey, card: { membershipId: { in: [...membershipIds] } } },
+  });
+}
+
+/**
+ * Gives a custom sticker to a member while holding the sticker's own row, so two awards cannot
+ * both take its last place. `'full'` when the cap is reached and the member does not hold it yet.
+ */
+export async function createCappedAward(
+  scope: MemberScope,
+  target: { membershipId: string; clubId: string },
+  stickerId: string,
+  maxHolders: number,
+  awardedById: string,
+  now: Date,
+  reason: string | null,
+): Promise<{ badgeKey: string; awardedAt: Date; reason: string | null } | 'full' | null> {
+  const badgeKey = `custom:${stickerId}`;
+  return db.$transaction(async (tx) => {
+    const inScope = await tx.membership.findFirst({
+      where: { AND: [scope, { id: target.membershipId, clubId: target.clubId }] },
+      select: { id: true },
+    });
+    if (!inScope) return null;
+    await tx.$queryRaw`SELECT "id" FROM "CustomSticker" WHERE "id" = ${stickerId}::uuid FOR UPDATE`;
+    const existing = await tx.badgeAward.findUnique({
+      where: { membershipId_badgeKey: { membershipId: target.membershipId, badgeKey } },
+      select: { badgeKey: true, awardedAt: true, reason: true },
+    });
+    if (existing) return existing;
+    const held = await tx.badgeAward.count({
+      where: { clubId: target.clubId, badgeKey, membership: { removedAt: null } },
+    });
+    if (held >= maxHolders) return 'full' as const;
+    return tx.badgeAward.create({
+      data: {
+        membershipId: target.membershipId,
+        clubId: target.clubId,
+        badgeKey,
+        awardedById,
+        awardedAt: now,
+        reason,
+      },
+      select: { badgeKey: true, awardedAt: true, reason: true },
+    });
+  });
+}
+
+// ─── Claim codes ──────────────────────────────────────────────
+
+const claimSelect = {
+  id: true,
+  clubId: true,
+  committeeId: true,
+  badgeKey: true,
+  title: true,
+  maxClaims: true,
+  expiresAt: true,
+  closedAt: true,
+  createdById: true,
+  createdAt: true,
+} satisfies Prisma.StickerClaimSelect;
+
+export type ClaimRow = Prisma.StickerClaimGetPayload<{ select: typeof claimSelect }>;
+
+export async function createClaimRow(
+  scope: ClubScope,
+  data: {
+    clubId: string;
+    committeeId: string | null;
+    badgeKey: string;
+    title: string;
+    maxClaims: number;
+    expiresAt: Date;
+    createdById: string;
+    createdAt: Date;
+  },
+): Promise<ClaimRow | null> {
+  return db.$transaction(async (tx) => {
+    const club = await tx.club.findFirst({
+      where: { AND: [scope, { id: data.clubId }] },
+      select: { id: true },
+    });
+    if (!club) return null;
+    return tx.stickerClaim.create({ data, select: claimSelect });
+  });
+}
+
+/** A club's codes, newest first, read through the actor's club scope. */
+export async function findClubClaims(
+  scope: ClubScope,
+  clubId: string,
+  createdById: string | null,
+): Promise<ClaimRow[]> {
+  return db.stickerClaim.findMany({
+    where: {
+      AND: [{ clubId, club: { AND: [scope] } }, createdById === null ? {} : { createdById }],
+    },
+    select: claimSelect,
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
+}
+
+/** One code in a club the actor can see. */
+export async function findClaim(scope: ClubScope, claimId: string): Promise<ClaimRow | null> {
+  return db.stickerClaim.findFirst({
+    where: { AND: [{ id: claimId }, { club: { AND: [scope] } }] },
+    select: claimSelect,
+  });
+}
+
+/** A code by id alone: only called once the code's own MAC has been checked. */
+export async function findClaimByVerifiedId(claimId: string): Promise<ClaimRow | null> {
+  return db.stickerClaim.findUnique({ where: { id: claimId }, select: claimSelect });
+}
+
+export async function countClaimRedemptions(
+  claimIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (claimIds.length === 0) return new Map();
+  const rows = await db.stickerClaimRedemption.groupBy({
+    by: ['claimId'],
+    where: { claimId: { in: [...claimIds] } },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.claimId, row._count._all]));
+}
+
+/** Stops a code. False when nothing in scope matched. Closing one already closed keeps its first time. */
+export async function closeClaimRow(
+  scope: ClubScope,
+  claimId: string,
+  now: Date,
+): Promise<boolean> {
+  const found = await db.stickerClaim.findFirst({
+    where: { AND: [{ id: claimId }, { club: { AND: [scope] } }] },
+    select: { id: true, closedAt: true },
+  });
+  if (!found) return false;
+  if (found.closedAt === null) {
+    await db.stickerClaim.updateMany({
+      where: { id: claimId, closedAt: null },
+      data: { closedAt: now },
+    });
+  }
+  return true;
+}
+
+export type RedeemOutcome =
+  'ok' | 'closed' | 'full' | 'already_claimed' | 'already_holds' | 'sold_out';
+
+/**
+ * One member redeeming one code. The code's row is locked first, so the count of redemptions and
+ * the cap on the sticker are read and written as one step: two phones scanning the last place
+ * cannot both get it.
+ */
+export async function redeemClaimRow(input: {
+  claimId: string;
+  membershipId: string;
+  clubId: string;
+  badgeKey: string;
+  awardedById: string;
+  reason: string;
+  cap: { stickerId: string; max: number } | null;
+  now: Date;
+}): Promise<RedeemOutcome> {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "StickerClaim" WHERE "id" = ${input.claimId}::uuid FOR UPDATE`;
+    const claim = await tx.stickerClaim.findUnique({
+      where: { id: input.claimId },
+      select: { maxClaims: true, expiresAt: true, closedAt: true },
+    });
+    if (!claim || claim.closedAt !== null || claim.expiresAt <= input.now) return 'closed' as const;
+    const claimed = await tx.stickerClaimRedemption.count({ where: { claimId: input.claimId } });
+    if (claimed >= claim.maxClaims) return 'full' as const;
+    const mine = await tx.stickerClaimRedemption.findUnique({
+      where: {
+        claimId_membershipId: { claimId: input.claimId, membershipId: input.membershipId },
+      },
+      select: { id: true },
+    });
+    if (mine) return 'already_claimed' as const;
+    const holds = await tx.badgeAward.findUnique({
+      where: {
+        membershipId_badgeKey: { membershipId: input.membershipId, badgeKey: input.badgeKey },
+      },
+      select: { id: true },
+    });
+    if (holds) return 'already_holds' as const;
+    if (input.cap) {
+      await tx.$queryRaw`SELECT "id" FROM "CustomSticker" WHERE "id" = ${input.cap.stickerId}::uuid FOR UPDATE`;
+      const held = await tx.badgeAward.count({
+        where: {
+          clubId: input.clubId,
+          badgeKey: input.badgeKey,
+          membership: { removedAt: null },
+        },
+      });
+      if (held >= input.cap.max) return 'sold_out' as const;
+    }
+    await tx.stickerClaimRedemption.create({
+      data: {
+        claimId: input.claimId,
+        membershipId: input.membershipId,
+        redeemedAt: input.now,
+      },
+    });
+    await tx.badgeAward.create({
+      data: {
+        membershipId: input.membershipId,
+        clubId: input.clubId,
+        badgeKey: input.badgeKey,
+        awardedById: input.awardedById,
+        awardedAt: input.now,
+        reason: input.reason,
+      },
+    });
+    return 'ok' as const;
+  });
+}
+
+/** Every code of a club, with its redemptions, for the full admin's club delete. */
+export async function deleteClubClaims(
+  tx: TransactionClient,
+  scope: ClubScope,
+  clubId: string,
+): Promise<number> {
+  const claims = await tx.stickerClaim.findMany({
+    where: { AND: [{ clubId }, { club: { AND: [scope] } }] },
+    select: { id: true },
+  });
+  const ids = claims.map((claim) => claim.id);
+  if (ids.length === 0) return 0;
+  await tx.stickerClaimRedemption.deleteMany({ where: { claimId: { in: ids } } });
+  const { count } = await tx.stickerClaim.deleteMany({ where: { id: { in: ids } } });
+  return count;
+}
+
+/** A club's name and whether it is archived, for a code read by capability (no actor scope). */
+export async function findClubName(
+  clubId: string,
+): Promise<{ name: string; archivedAt: Date | null } | null> {
+  return db.club.findUnique({ where: { id: clubId }, select: { name: true, archivedAt: true } });
+}
+
+/** Whether a committee belongs to a club. */
+export async function committeeBelongsToClub(
+  committeeId: string,
+  clubId: string,
+): Promise<boolean> {
+  return (await db.committee.count({ where: { id: committeeId, clubId } })) === 1;
 }

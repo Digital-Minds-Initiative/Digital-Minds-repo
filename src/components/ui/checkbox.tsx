@@ -15,7 +15,9 @@ export function Checkbox({
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        'peer grid size-4 shrink-0 place-content-center rounded-sm border border-border-strong bg-surface-1 shadow-sm',
+        // The box stays small; its touch area is padded out to a finger's size with a pseudo-element.
+        'peer relative grid size-5 shrink-0 place-content-center rounded-sm border border-border-strong bg-surface-1 shadow-sm sm:size-4',
+        "before:absolute before:-inset-3 before:content-[''] sm:before:-inset-2",
         'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         'disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger',
         'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-fg',

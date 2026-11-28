@@ -37,7 +37,7 @@ export function MemberOverview({ me }: { me: Me }) {
       ) : (
         <section aria-label={t('clubs')} className="grid gap-3">
           <h2 className="text-base font-semibold">{t('clubs')}</h2>
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] items-start gap-3 p-0">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(20rem,100%),1fr))] items-start gap-3 p-0">
             {memberships.map((membership) => (
               <li
                 key={membership.club.id}

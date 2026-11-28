@@ -217,7 +217,7 @@ export function PublicCardView({ card }: { card: PublicCard }) {
                   style={{ background: theme.panelBase, color: theme.panelText }}
                 >
                   <PanelArt theme={theme} />
-                  <div className="relative flex items-start justify-between gap-4">
+                  <div className="relative flex flex-col-reverse items-start gap-4 @sm:flex-row @sm:justify-between">
                     {card.monthly !== null ? (
                       <MonthChart monthly={card.monthly} ink={theme.panelText} seen={seen} />
                     ) : (

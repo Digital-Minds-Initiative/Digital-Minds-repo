@@ -8,6 +8,7 @@ import {
   NotFoundError,
   RateLimitedError,
   stickerArchived,
+  ConflictError,
 } from '@/server/errors';
 import { getPointsForCardLink } from '@/server/modules/points';
 import { consumeFixedWindow } from '@/server/modules/rate-limit';
@@ -30,9 +31,11 @@ import {
   customStickerId,
   derivedStickers,
   isCustomStickerKey,
+  isStickerOpen,
   STICKER_KEYS,
   STICKER_RULES,
   type CustomStickerDef,
+  type CustomStickerKey,
   type StickerKey,
   type StickerPlacement,
   type StickerRef,
@@ -42,6 +45,7 @@ import { cardRoleLabel } from '@/shared/lib/wallet-pass';
 import { assertCanAward, assertCanAwardCustom, awarderStanding } from './policies';
 import {
   createAward,
+  createCappedAward,
   createMissingCards,
   deleteAward,
   findAwardTarget,
@@ -65,7 +69,7 @@ const isStickerKey = (value: string): value is StickerRef =>
   (STICKER_KEYS as readonly string[]).includes(value) || isCustomStickerKey(value);
 
 /** A stored custom sticker as the screens draw it. */
-function toCustomDef(row: CustomStickerRow): CustomStickerDef {
+export function toCustomDef(row: CustomStickerRow): CustomStickerDef {
   return {
     key: `custom:${row.id}`,
     name: row.name,
@@ -76,6 +80,9 @@ function toCustomDef(row: CustomStickerRow): CustomStickerDef {
     background: row.background as CustomStickerDef['background'],
     ink: row.ink as CustomStickerDef['ink'],
     hidden: row.hidden,
+    rarity: row.rarity,
+    availableFrom: row.availableFrom?.toISOString() ?? null,
+    availableUntil: row.availableUntil?.toISOString() ?? null,
   };
 }
 
@@ -400,17 +407,36 @@ export async function awardSticker(
   now = new Date(),
 ) {
   const target = await loadAwardTarget(actor, membershipId);
+  let cap: number | null = null;
   if (isCustomStickerKey(key)) {
     const row = (await clubCustomStickers(target.clubId)).get(key);
     if (!row) throw new NotFoundError('Sticker');
     assertCanAwardCustom(actor, target, row.awardableBy);
     if (row.archivedAt !== null) throw stickerArchived();
+    if (!isStickerOpen(now, row)) {
+      throw new ConflictError('The sticker is not open for giving now.', 'sticker_not_available');
+    }
+    cap = row.maxHolders;
   } else {
     assertCanAward(actor, target, key);
   }
   if (target.clubArchived) throw clubArchived();
   if (target.removed) throw memberRemovedFromClub();
-  const award = await createAward(membersScope(actor), target, key, actor.userId, now, reason);
+  const award =
+    cap === null
+      ? await createAward(membersScope(actor), target, key, actor.userId, now, reason)
+      : await createCappedAward(
+          membersScope(actor),
+          target,
+          customStickerId(key as CustomStickerKey),
+          cap,
+          actor.userId,
+          now,
+          reason,
+        );
+  if (award === 'full') {
+    throw new ConflictError('The sticker has no places left.', 'sticker_sold_out');
+  }
   if (!award) throw new NotFoundError('Member');
   return {
     key,

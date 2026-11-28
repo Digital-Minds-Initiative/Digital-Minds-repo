@@ -30,7 +30,8 @@ const ALL = 'all';
 /** One height for the search box and every filter; a filter that narrows the list is tinted. */
 const filterClass = (active: boolean) =>
   cn(
-    'h-9 w-full gap-2 sm:w-auto',
+    // Two filters to a row on a phone, one line high enough for a finger; compact from `sm` up.
+    'h-11 w-[calc(50%-0.25rem)] gap-2 sm:h-9 sm:w-auto',
     active && 'border-primary/50 bg-primary-subtle font-medium text-primary-subtle-fg',
   );
 
@@ -88,7 +89,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
           onChange={(event) => setSearch(event.target.value)}
           placeholder={t('search')}
           aria-label={t('search')}
-          className="h-9 ps-9"
+          className="h-11 ps-9 sm:h-9"
         />
       </div>
 
@@ -214,7 +215,7 @@ export function MembersToolbar({ query, onChange, access }: MembersToolbarProps)
       {hasFilters ? (
         <Button
           variant="ghost"
-          className="h-9"
+          className="h-11 sm:h-9"
           onClick={() => {
             setSearch('');
             onChange({

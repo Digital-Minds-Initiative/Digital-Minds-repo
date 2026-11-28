@@ -17,6 +17,9 @@ const custom: CustomStickerDef = {
   background: 'indigo',
   ink: 'white',
   hidden: false,
+  rarity: 'RARE',
+  availableFrom: null,
+  availableUntil: null,
 };
 
 const held: StickerFacts = {

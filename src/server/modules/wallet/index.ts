@@ -1,6 +1,7 @@
 import 'server-only';
 
 export {
+  getMyAlbum,
   getMyGoogleWalletUrl,
   getMyWalletPass,
   getWalletArt,

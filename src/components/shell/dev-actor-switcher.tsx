@@ -106,7 +106,7 @@ export default function DevActorSwitcher() {
         <Button
           variant="outline"
           size="sm"
-          className="max-w-56 border-dashed border-warning text-fg"
+          className="max-w-24 min-w-0 border-dashed border-warning text-fg min-[400px]:max-w-40 sm:max-w-56"
           title={t('devSwitcher.hint')}
         >
           <FlaskConical aria-hidden className="text-warning" />

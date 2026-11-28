@@ -21,7 +21,7 @@ export function TabsList({ className, ...props }: React.ComponentProps<typeof Ta
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        'inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-surface-3 p-1',
+        'inline-flex h-11 w-fit max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-surface-3 p-1 sm:h-9',
         className,
       )}
       {...props}

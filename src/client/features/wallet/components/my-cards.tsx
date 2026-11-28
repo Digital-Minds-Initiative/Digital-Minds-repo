@@ -20,6 +20,7 @@ import type { MemberCard } from '@/shared/contracts/wallet';
 import { CardEditor } from './card-editor';
 import { MemberBadge } from './member-badge';
 import { QrPageSection } from './qr-page-section';
+import { StickerAlbum } from './sticker-album';
 import { WalletActions } from './wallet-actions';
 import { useMyCards } from '../hooks/use-my-cards';
 
@@ -60,12 +61,20 @@ export function MyCards({ withQrPage = false }: { withQrPage?: boolean } = {}) {
           <section
             key={card.membershipId}
             aria-label={t('cardFor', { club: card.club.name })}
-            className="grid items-start gap-8 lg:grid-cols-[22.4rem_minmax(0,1fr)]"
+            className="grid gap-10"
           >
-            <div className="grid justify-items-center lg:sticky lg:top-6">
-              <CardWorkspace card={card} />
+            {/*
+              The card sticks to the top while its QR page scrolls past. A sticky box is only held
+              inside its parent, so the two sit in a row of their own: the album below is outside
+              it, and the card can never slide down over the album.
+            */}
+            <div className="grid items-start gap-8 lg:grid-cols-[22.4rem_minmax(0,1fr)]">
+              <div className="grid grid-cols-[minmax(0,1fr)] justify-items-center lg:sticky lg:top-6">
+                <CardWorkspace card={card} />
+              </div>
+              <QrPageSection cards={[card]} />
             </div>
-            <QrPageSection cards={[card]} />
+            <StickerAlbum card={card} />
           </section>
         ))}
       </div>
@@ -87,7 +96,7 @@ export function MyCards({ withQrPage = false }: { withQrPage?: boolean } = {}) {
             <li
               key={card.membershipId}
               aria-label={t('cardFor', { club: card.club.name })}
-              className="grid w-full justify-items-center"
+              className="grid w-full grid-cols-[minmax(0,1fr)] justify-items-center"
             >
               <CardWorkspace card={card} />
             </li>

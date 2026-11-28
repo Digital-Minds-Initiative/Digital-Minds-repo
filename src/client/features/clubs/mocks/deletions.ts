@@ -105,7 +105,14 @@ export const deletionHandlers = [
     const membershipTypes = removeWhere(db.membershipTypes, (t) => t.clubId === params.clubId);
     removeWhere(db.clubs, (club) => club.id === params.clubId);
     db.clubsById.delete(params.clubId);
-    return { committees, membershipTypes, memberExports: 0, customStickers: 0, pointBatches: 0 };
+    return {
+      committees,
+      membershipTypes,
+      memberExports: 0,
+      customStickers: 0,
+      stickerClaims: 0,
+      pointBatches: 0,
+    };
   }),
 
   mockEndpoint(getCommitteeDeletionPreviewEndpoint, ({ cookies, params }) => {

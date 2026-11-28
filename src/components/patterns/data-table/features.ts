@@ -16,6 +16,11 @@ interface DataTableColumnMeta {
   label?: string;
   headerClassName?: string;
   cellClassName?: string;
+  /**
+   * On a phone each row is a card and each cell a «label: value» line. A `plain` cell (the row's
+   * name, its actions) is drawn without its label.
+   */
+  plain?: boolean;
 }
 
 /**

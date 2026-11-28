@@ -47,6 +47,8 @@ export const clubDeletionCountsSchema = z.object({
   memberExports: count,
   /** Stickers the club's leaders designed (docs/adr/0033-custom-stickers.md). */
   customStickers: count,
+  /** Event codes for stickers, with their redemptions (docs/adr/0034-album-claims-and-seasons.md). */
+  stickerClaims: count,
   /** Empty bulk-points batches; a club without transactions should have none. */
   pointBatches: count,
 });
